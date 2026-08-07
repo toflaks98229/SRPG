@@ -6,7 +6,19 @@ using UnityEngine;
 namespace SRPG.Systems.Pathfinding
 {
     /// <summary>
-    /// 타일 격자 위에서 A*로 경로를 찾습니다.
+    /// 타일 격자 위에서 A*로 경로를 찾습니다. <b>대각선을 포함한 8방향</b>입니다.
+    ///
+    /// <b>왜 8방향인가</b>
+    ///
+    /// 4방향만 쓰면 비스듬한 목적지로 갈 때 경로가 계단 모양이 됩니다.
+    /// 앵커는 그 계단을 그대로 따라가므로 분대가 눈에 띄게 지그재그로 행군합니다.
+    /// 실제로 사람이 그렇게 걷지 않고, 무엇보다 <b>거리가 최대 41% 길어집니다</b>.
+    ///
+    /// 대각선을 넣을 때 함께 따라오는 것이 세 가지입니다.
+    ///   · 대각선 비용을 √2로 둔다 — 1로 두면 대각선이 공짜라 직선 구간도 지그재그로 갑니다
+    ///   · 휴리스틱을 옥타일로 바꾼다 — 맨해튼은 8방향에서 과대평가라 최적 경로를 보장하지 않습니다
+    ///   · <b>모서리 통과를 막는다</b> — 안 막으면 병사가 절벽 모서리를 대각으로 뚫고 지나갑니다
+    ///
     /// 인스턴스가 내부 작업 배열을 재사용하므로, 매 프레임 여러 번 호출해도 힙 할당이 발생하지 않습니다.
     /// 다만 그 때문에 스레드 안전하지 않습니다. 에이전트별로 공유하되 같은 프레임 내 순차 호출을 전제로 합니다.
     ///
@@ -34,7 +46,6 @@ namespace SRPG.Systems.Pathfinding
         private readonly int[] _cameFrom;
         private readonly int[] _openHeap;
         private readonly float[] _fScore;
-        private readonly Tile[] _neighborBuffer = new Tile[4];
 
         /// <summary>
         /// 각 셀이 마지막으로 <b>초기화된</b> 탐색 번호입니다. 값이 현재 세대와 다르면 미방문으로 봅니다.
@@ -46,6 +57,9 @@ namespace SRPG.Systems.Pathfinding
 
         /// <summary>현재 탐색 번호입니다. 탐색을 시작할 때마다 하나씩 올립니다.</summary>
         private int _generation;
+
+        /// <summary>다듬기 전의 날것 경로를 담는 재사용 버퍼입니다.</summary>
+        private readonly List<GridCoord> _rawPath = new List<GridCoord>(64);
 
         private int _openCount;
 
@@ -65,9 +79,12 @@ namespace SRPG.Systems.Pathfinding
             _closedStamp = new int[cellCount];
 
             // 감소 키(decrease-key)를 쓰지 않고 같은 셀을 여러 번 밀어 넣는 방식이므로,
-            // 힙에는 셀 하나가 이웃 수(4)만큼 중복 적재될 수 있습니다.
+            // 힙에는 셀 하나가 이웃 수만큼 중복 적재될 수 있습니다.
             // 셀 수만큼만 잡으면 넓은 맵에서 힙이 넘칩니다.
-            _openHeap = new int[cellCount * 4 + 1];
+            //
+            // 8방향으로 넓히면서 이 배수도 4에서 8로 함께 올려야 했습니다.
+            // 이웃 수를 늘리면서 여기를 잊으면 넓은 맵에서만, 그것도 가끔 터집니다.
+            _openHeap = new int[cellCount * GridCoord.Neighbors8.Length + 1];
         }
 
         // ====================================================================================================
@@ -127,12 +144,15 @@ namespace SRPG.Systems.Pathfinding
                 Close(current);
 
                 var currentTile = _grid.GetTile(ToCoord(current));
-                int neighborCount = _grid.GetNeighbors4(currentTile.Coord, _neighborBuffer);
+                var currentCoord = currentTile.Coord;
 
-                for (int n = 0; n < neighborCount; n++)
+                for (int n = 0; n < GridCoord.Neighbors8.Length; n++)
                 {
-                    var neighbor = _neighborBuffer[n];
-                    if (!neighbor.IsWalkable)
+                    var offset = GridCoord.Neighbors8[n];
+                    var neighborCoord = currentCoord + offset;
+
+                    var neighbor = _grid.GetTile(neighborCoord);
+                    if (neighbor == null || !neighbor.IsWalkable)
                     {
                         continue;
                     }
@@ -143,20 +163,30 @@ namespace SRPG.Systems.Pathfinding
                         continue;
                     }
 
-                    int neighborIndex = ToIndex(neighbor.Coord);
+                    bool isDiagonal = offset.X != 0 && offset.Y != 0;
+
+                    // 모서리를 뚫고 지나가지 못하게 막습니다.
+                    if (isDiagonal && !CanPassCorner(currentTile, currentCoord, offset))
+                    {
+                        continue;
+                    }
+
+                    int neighborIndex = ToIndex(neighborCoord);
                     if (IsClosed(neighborIndex))
                     {
                         continue;
                     }
 
-                    float tentative = _gScore[current] + 1f + heightDelta * SlopeCost;
+                    float stepCost = isDiagonal ? GridCoord.DiagonalStepCost : 1f;
+                    float tentative = _gScore[current] + stepCost + heightDelta * SlopeCost;
+
                     if (tentative >= GetCost(neighborIndex))
                     {
                         continue;
                     }
 
                     Visit(neighborIndex, tentative, current);
-                    _fScore[neighborIndex] = tentative + Heuristic(neighbor.Coord, goal);
+                    _fScore[neighborIndex] = tentative + Heuristic(neighborCoord, goal);
                     HeapPush(neighborIndex);
                 }
             }
@@ -186,6 +216,51 @@ namespace SRPG.Systems.Pathfinding
             }
 
             return TryFindPath(start, resolvedGoal, result);
+        }
+
+        // ====================================================================================================
+        // 4-1. Public Methods - Smoothed
+        // ====================================================================================================
+
+        /// <summary>
+        /// 경로를 찾은 뒤 <b>시야선 기준으로 다듬어</b> 돌려줍니다.
+        ///
+        /// 격자 경로는 45도의 배수로만 꺾입니다. 열린 평지를 비스듬히 가로지를 때도 몇 번씩 각지고,
+        /// 앵커가 그 각을 그대로 따라갑니다. 보이는 곳까지는 직선으로 걷는 편이 자연스럽습니다.
+        ///
+        /// 결과는 더 이상 <b>인접한 칸의 나열이 아닙니다.</b> 경유점 사이가 여러 칸 떨어질 수 있습니다.
+        /// 칸 단위로 무언가를 하려는 소비자는 <see cref="TryFindPath"/>의 날것을 써야 합니다.
+        /// </summary>
+        public bool TryFindSmoothedPath(GridCoord start, GridCoord goal, List<GridCoord> result)
+        {
+            if (!TryFindPath(start, goal, _rawPath))
+            {
+                result.Clear();
+                return false;
+            }
+
+            PathSmoother.Smooth(_grid, _rawPath, result);
+            return true;
+        }
+
+        /// <summary>
+        /// 목적지를 보정한 뒤 경로를 찾고 시야선 기준으로 다듬습니다.
+        /// 플레이어가 물이나 절벽을 클릭했을 때의 경로입니다.
+        /// </summary>
+        public bool TryFindSmoothedPathSnapped(
+            GridCoord start,
+            GridCoord goal,
+            List<GridCoord> result,
+            out GridCoord resolvedGoal)
+        {
+            if (!TryFindPathSnapped(start, goal, _rawPath, out resolvedGoal))
+            {
+                result.Clear();
+                return false;
+            }
+
+            PathSmoother.Smooth(_grid, _rawPath, result);
+            return true;
         }
 
         // ====================================================================================================
@@ -263,11 +338,41 @@ namespace SRPG.Systems.Pathfinding
         }
 
         /// <summary>
-        /// 맨해튼 거리 휴리스틱입니다. 4방향 이동에서 허용 가능(admissible)하므로 최적 경로를 보장합니다.
+        /// 옥타일 거리 휴리스틱입니다. 8방향 이동에서 허용 가능(admissible)하므로 최적 경로를 보장합니다.
+        ///
+        /// 고도 비용은 무시합니다. 실제 비용을 <b>과소평가</b>하는 것은 허용 가능성을 해치지 않습니다.
         /// </summary>
         private static float Heuristic(GridCoord a, GridCoord b)
         {
-            return GridCoord.ManhattanDistance(a, b);
+            return GridCoord.OctileDistance(a, b);
+        }
+
+        /// <summary>
+        /// 대각선으로 모서리를 뚫고 지나갈 수 있는지 확인합니다.
+        ///
+        /// <b>왜 필요한가</b>
+        ///
+        /// 대각선 이동을 그냥 허용하면 병사가 절벽 모서리를 <b>대각으로 스쳐 통과</b>합니다.
+        /// 두 벽이 만나는 안쪽 모서리에서는 지나갈 틈이 없는데도 경로가 뚫립니다.
+        /// 눈으로는 벽을 뚫고 지나간 것처럼 보이고, 물리 이동은 그 자리에서 막혀 유닛이 멈춰 섭니다.
+        ///
+        /// 그래서 대각선의 <b>양옆 두 칸이 모두</b> 지나갈 수 있어야 통과를 허용합니다.
+        /// 한 칸만 요구하는 느슨한 규칙도 있지만, 그러면 모서리를 비스듬히 긁고 지나가는 그림이 남습니다.
+        /// </summary>
+        private bool CanPassCorner(Tile from, GridCoord fromCoord, GridCoord offset)
+        {
+            var sideX = _grid.GetTile(new GridCoord(fromCoord.X + offset.X, fromCoord.Y));
+            var sideY = _grid.GetTile(new GridCoord(fromCoord.X, fromCoord.Y + offset.Y));
+
+            return IsSideOpen(from, sideX) && IsSideOpen(from, sideY);
+        }
+
+        /// <summary>옆 칸이 열려 있는지 확인합니다. 통행 가능하고 고도 차도 넘을 수 있어야 합니다.</summary>
+        private static bool IsSideOpen(Tile from, Tile side)
+        {
+            return side != null
+                   && side.IsWalkable
+                   && Mathf.Abs(side.Height - from.Height) <= MaxTraversableHeightDelta;
         }
 
         private int ToIndex(GridCoord coord) => coord.Y * _grid.Width + coord.X;

@@ -215,7 +215,7 @@ namespace SRPG.Gameplay.Squads
                 return false;
             }
 
-            if (!_context.Pathfinder.TryFindPathSnapped(startCoord, destination, _path, out var resolved))
+            if (!_context.Pathfinder.TryFindSmoothedPathSnapped(startCoord, destination, _path, out var resolved))
             {
                 return false;
             }
@@ -224,7 +224,7 @@ namespace SRPG.Gameplay.Squads
             if (resolved != destination && _context.Occupancy.IsBlockedFor(resolved, this))
             {
                 if (!_context.Occupancy.TryResolveDestination(resolved, this, _context.Grid, out resolved) ||
-                    !_context.Pathfinder.TryFindPath(startCoord, resolved, _path))
+                    !_context.Pathfinder.TryFindSmoothedPath(startCoord, resolved, _path))
                 {
                     return false;
                 }

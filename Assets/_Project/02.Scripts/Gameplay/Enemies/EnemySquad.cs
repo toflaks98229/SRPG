@@ -274,7 +274,7 @@ namespace SRPG.Gameplay.Enemies
                 return;
             }
 
-            if (!_context.Pathfinder.TryFindPathSnapped(startCoord, destination, _path, out var resolved))
+            if (!_context.Pathfinder.TryFindSmoothedPathSnapped(startCoord, destination, _path, out var resolved))
             {
                 return;
             }

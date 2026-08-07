@@ -58,7 +58,9 @@ namespace SRPG.Tests
 
             for (int i = 1; i < path.Count; i++)
             {
-                int step = GridCoord.ManhattanDistance(path[i - 1], path[i]);
+                // 8방향이므로 체비셰프 1칸이 인접의 기준입니다.
+                // 맨해튼으로 재면 대각선 한 걸음이 2가 나와 정상 경로를 실패로 봅니다.
+                int step = GridCoord.ChebyshevDistance(path[i - 1], path[i]);
                 Assert.AreEqual(1, step, $"{path[i - 1]} → {path[i]} 구간이 인접하지 않습니다.");
 
                 var tile = grid.GetTile(path[i]);
@@ -278,6 +280,131 @@ namespace SRPG.Tests
             }
 
             Assert.Fail("이웃한 통행 가능 타일 쌍을 찾지 못했습니다.");
+        }
+
+        // ====================================================================================================
+        // 4. 대각선 (8방향)
+        // ====================================================================================================
+
+        /// <summary>
+        /// 열린 땅에서 비스듬한 목적지로 갈 때 대각선을 실제로 씁니다.
+        ///
+        /// 4방향만 쓰면 경로가 계단 모양이 되고 앵커가 그대로 지그재그로 행군합니다.
+        /// 거리도 최대 41% 길어집니다.
+        /// </summary>
+        [Test]
+        public void 비스듬한_목적지로는_대각선을_쓴다()
+        {
+            var grid = BuildOpenField(9, 9);
+            var pathfinder = new GridPathfinder(grid);
+            var path = new List<GridCoord>();
+
+            var start = new GridCoord(1, 1);
+            var goal = new GridCoord(7, 7);
+
+            Assert.IsTrue(pathfinder.TryFindPath(start, goal, path));
+
+            // 완전한 대각선이므로 7걸음(시작 포함)이면 충분합니다.
+            // 4방향이었다면 13칸이 나옵니다.
+            Assert.AreEqual(7, path.Count, "대각선을 쓰지 않고 계단으로 돌아갔습니다.");
+
+            int diagonalSteps = 0;
+            for (int i = 1; i < path.Count; i++)
+            {
+                var delta = path[i] - path[i - 1];
+                if (delta.X != 0 && delta.Y != 0)
+                {
+                    diagonalSteps++;
+                }
+            }
+
+            Assert.Greater(diagonalSteps, 0, "대각선 걸음이 하나도 없습니다.");
+        }
+
+        /// <summary>
+        /// <b>모서리를 대각으로 뚫고 지나가면 안 됩니다.</b>
+        ///
+        /// 안 막으면 병사가 절벽 모서리를 비스듬히 통과합니다.
+        /// 경로는 뚫렸는데 물리 이동은 막히므로 유닛이 그 자리에서 멈춰 섭니다.
+        /// </summary>
+        [Test]
+        public void 모서리를_대각으로_통과하지_못한다()
+        {
+            var grid = BuildOpenField(5, 5);
+
+            // (1,1) 에서 (2,2) 로 가는 대각선의 양옆을 모두 막습니다.
+            Block(grid, new GridCoord(2, 1));
+            Block(grid, new GridCoord(1, 2));
+
+            var pathfinder = new GridPathfinder(grid);
+            var path = new List<GridCoord>();
+
+            // (1,1) 은 이제 완전히 갇혔습니다. 대각선으로도 빠져나갈 수 없어야 합니다.
+            Block(grid, new GridCoord(0, 1));
+            Block(grid, new GridCoord(1, 0));
+            Block(grid, new GridCoord(0, 0));
+            Block(grid, new GridCoord(2, 0));
+            Block(grid, new GridCoord(0, 2));
+
+            bool found = pathfinder.TryFindPath(new GridCoord(1, 1), new GridCoord(3, 3), path);
+
+            Assert.IsFalse(found, "막힌 모서리를 대각으로 통과해 경로를 찾았습니다.");
+        }
+
+        [Test]
+        public void 한쪽만_막힌_모서리도_통과하지_못한다()
+        {
+            // 느슨한 규칙이라면 한 칸만 막혀도 지나갑니다. 그러면 모서리를 긁고 지나가는 그림이 남습니다.
+            var grid = BuildOpenField(5, 5);
+
+            Block(grid, new GridCoord(2, 1));
+
+            var pathfinder = new GridPathfinder(grid);
+            var path = new List<GridCoord>();
+
+            Assert.IsTrue(pathfinder.TryFindPath(new GridCoord(1, 1), new GridCoord(2, 2), path));
+
+            // (1,1) → (2,2) 직행 대각선은 막혀야 하므로 최소 3칸을 거쳐 갑니다.
+            Assert.GreaterOrEqual(path.Count, 3, "막힌 모서리를 대각으로 질러갔습니다.");
+        }
+
+        // ====================================================================================================
+        // 5. Helpers
+        // ====================================================================================================
+
+        /// <summary>
+        /// 전부 통행 가능한 평지 격자를 만듭니다.
+        ///
+        /// 절차적 섬은 모양을 통제할 수 없어 모서리 규칙을 시험하기 어렵습니다.
+        /// <c>Tile</c>의 필드가 공개되어 있어 파생 정보를 직접 채울 수 있습니다.
+        /// </summary>
+        private static IslandGrid BuildOpenField(int width, int depth)
+        {
+            var grid = new IslandGrid(width, depth, 2f, 0.9f);
+
+            for (int y = 0; y < depth; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    var tile = grid.GetTile(new GridCoord(x, y));
+                    tile.Type = TileType.Ground;
+                    tile.Height = 0;
+                    tile.IsWalkable = true;
+
+                    grid.WalkableTiles.Add(tile);
+                }
+            }
+
+            return grid;
+        }
+
+        private static void Block(IslandGrid grid, GridCoord coord)
+        {
+            var tile = grid.GetTile(coord);
+            tile.Type = TileType.Cliff;
+            tile.IsWalkable = false;
+
+            grid.WalkableTiles.Remove(tile);
         }
     }
 }

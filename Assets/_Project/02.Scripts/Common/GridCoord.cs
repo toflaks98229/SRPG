@@ -26,6 +26,14 @@ namespace SRPG.Common
         /// <summary>유효하지 않은 좌표를 나타내는 값입니다. 경로 탐색 실패 등을 표현할 때 사용합니다.</summary>
         public static readonly GridCoord Invalid = new GridCoord(int.MinValue, int.MinValue);
 
+        /// <summary>
+        /// 대각선 한 걸음의 비용입니다. √2 입니다.
+        ///
+        /// 대각선을 1로 두면 안 됩니다. 그러면 대각선이 공짜가 되어
+        /// 경로 탐색이 직선으로 갈 수 있는 곳도 지그재그로 돌아갑니다.
+        /// </summary>
+        public const float DiagonalStepCost = 1.41421356f;
+
         /// <summary>상하좌우 4방향 오프셋입니다. 이동 가능 방향의 기본 집합입니다.</summary>
         public static readonly GridCoord[] Neighbors4 =
         {
@@ -79,6 +87,23 @@ namespace SRPG.Common
         public static int ChebyshevDistance(GridCoord a, GridCoord b)
         {
             return Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
+        }
+
+        /// <summary>
+        /// 옥타일 거리입니다. 직선 1, 대각선 √2 비용으로 8방향 이동할 때의 최단 거리입니다.
+        ///
+        /// <b>8방향 A*의 휴리스틱은 반드시 이것이어야 합니다.</b>
+        /// 맨해튼 거리는 대각선으로 갈 수 있는 구간을 두 걸음으로 세므로 실제 비용보다 크게 봅니다.
+        /// 휴리스틱이 실제보다 크면(비허용적) A*는 최적 경로를 보장하지 않고,
+        /// 대각선으로 질러갈 수 있는데도 돌아가는 경로를 내놓습니다.
+        /// </summary>
+        public static float OctileDistance(GridCoord a, GridCoord b)
+        {
+            int dx = Math.Abs(a.X - b.X);
+            int dy = Math.Abs(a.Y - b.Y);
+
+            // 겹치는 구간은 대각선으로, 나머지는 직선으로 갑니다.
+            return (dx + dy) + (DiagonalStepCost - 2f) * Math.Min(dx, dy);
         }
 
         // ====================================================================================================
