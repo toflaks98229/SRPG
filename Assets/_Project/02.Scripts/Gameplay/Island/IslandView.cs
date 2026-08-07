@@ -33,6 +33,35 @@ namespace SRPG.Gameplay.Island
         private const float HouseInset = 0.34f;
 
         // ====================================================================================================
+        // 1-1. Palette
+        // ====================================================================================================
+
+        /// <summary>통행 가능한 평지입니다.</summary>
+        private static readonly Color WalkableGrassColor = new Color(0.44f, 0.62f, 0.36f);
+
+        /// <summary>통행 가능한 해변입니다. 평지와 같은 계열로 두어 구분이 정보로 읽히지 않게 합니다.</summary>
+        private static readonly Color WalkableSandColor = new Color(0.55f, 0.66f, 0.40f);
+
+        /// <summary>통행 불가입니다. 통행 가능 계열과 확실히 갈라져야 합니다.</summary>
+        private static readonly Color BlockedColor = new Color(0.42f, 0.40f, 0.43f);
+
+        /// <summary>방어 목표입니다. 유일하게 따뜻한 색이라 눈에 먼저 들어옵니다.</summary>
+        private static readonly Color ObjectiveColor = new Color(0.72f, 0.48f, 0.28f);
+
+        // ====================================================================================================
+        // 1-2. Vertex Shading
+        // ====================================================================================================
+
+        /// <summary>타일 윗면의 접지 음영 값입니다. 밝은 쪽입니다.</summary>
+        private const float TopShade = 1f;
+
+        /// <summary>측면 벽 위쪽의 음영입니다. 윗면에서 살짝 꺾입니다.</summary>
+        private const float WallTopShade = 0.72f;
+
+        /// <summary>측면 벽 아래쪽의 음영입니다. 여기가 어두워야 고도 차가 읽힙니다.</summary>
+        private const float WallBottomShade = 0.15f;
+
+        // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
 
@@ -61,10 +90,18 @@ namespace SRPG.Gameplay.Island
 
             ClearChildren();
 
-            BuildTerrainLayer("Terrain_Beach", TileType.Beach, new Color(0.85f, 0.79f, 0.6f), _materials.Beach);
-            BuildTerrainLayer("Terrain_Ground", TileType.Ground, new Color(0.44f, 0.62f, 0.36f), _materials.Ground);
-            BuildTerrainLayer("Terrain_Cliff", TileType.Cliff, new Color(0.44f, 0.42f, 0.43f), _materials.Cliff);
-            BuildTerrainLayer("Terrain_House", TileType.House, new Color(0.62f, 0.47f, 0.33f), _materials.House);
+            // 색을 셋으로 줄였습니다. 플레이어가 알아야 하는 것은 딱 그만큼입니다.
+            //   · 갈 수 있는 땅   — 해변과 평지를 같은 계열로 묶습니다
+            //   · 갈 수 없는 땅   — 절벽
+            //   · 목표            — 가옥
+            //
+            // 해변과 평지의 색을 나누면 정보가 하나 더 늘어나는데,
+            // 그 구분은 적의 상륙 판정에만 쓰이지 플레이어의 이동 판단에는 쓰이지 않습니다.
+            // 판단에 쓰이지 않는 구분은 화면에서는 잡음입니다.
+            BuildTerrainLayer("Terrain_Beach", TileType.Beach, WalkableSandColor, _materials.Beach);
+            BuildTerrainLayer("Terrain_Ground", TileType.Ground, WalkableGrassColor, _materials.Ground);
+            BuildTerrainLayer("Terrain_Cliff", TileType.Cliff, BlockedColor, _materials.Cliff);
+            BuildTerrainLayer("Terrain_House", TileType.House, ObjectiveColor, _materials.House);
             BuildWaterPlane();
         }
 
@@ -77,8 +114,7 @@ namespace SRPG.Gameplay.Island
         /// </summary>
         private void BuildTerrainLayer(string layerName, TileType type, Color fallbackColor, Material authoredMaterial)
         {
-            var vertices = new List<Vector3>(1024);
-            var triangles = new List<int>(2048);
+            var buffer = new MeshBuffer();
 
             float half = _grid.CellSize * 0.5f;
 
@@ -92,21 +128,21 @@ namespace SRPG.Gameplay.Island
 
                 Vector3 center = tile.WorldCenter;
 
-                AddTopQuad(vertices, triangles, center, half);
-                AddSideWalls(vertices, triangles, tile, center, half);
+                AddTopQuad(buffer, center, half);
+                AddSideWalls(buffer, tile, center, half);
 
                 if (type == TileType.House)
                 {
-                    AddHouseBox(vertices, triangles, center, half);
+                    AddHouseBox(buffer, center, half);
                 }
             }
 
-            if (vertices.Count == 0)
+            if (buffer.Count == 0)
             {
                 return;
             }
 
-            CreateMeshObject(layerName, vertices, triangles, fallbackColor, authoredMaterial);
+            CreateMeshObject(layerName, buffer, fallbackColor, authoredMaterial);
         }
 
         /// <summary>
@@ -126,25 +162,29 @@ namespace SRPG.Gameplay.Island
             float maxZ = _grid.Origin.z + depth + margin;
             float y = WaterLevelOffset;
 
-            var vertices = new List<Vector3>
-            {
+            var buffer = new MeshBuffer();
+
+            buffer.AddQuad(
                 new Vector3(minX, y, minZ),
                 new Vector3(minX, y, maxZ),
                 new Vector3(maxX, y, maxZ),
                 new Vector3(maxX, y, minZ),
-            };
-
-            var triangles = new List<int> { 0, 1, 2, 0, 2, 3 };
+                Vector3.up,
+                TopShade);
 
             var water = CreateMeshObject(
                 "Water",
-                vertices,
-                triangles,
+                buffer,
                 new Color(0.18f, 0.35f, 0.52f),
                 _materials.Water,
                 addCollider: false);
 
-            water.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            var renderer = water.GetComponent<MeshRenderer>();
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            // 바다는 외곽선을 두르지 않습니다. 화면 끝까지 뻗은 평면이라
+            // 껍데기를 부풀리면 화면 가장자리에 검은 띠가 생깁니다.
+            renderer.sharedMaterial = PrototypeVisuals.CreateMaterial(new Color(0.18f, 0.35f, 0.52f));
         }
 
         // ====================================================================================================
@@ -152,22 +192,93 @@ namespace SRPG.Gameplay.Island
         // ====================================================================================================
 
         /// <summary>
+        /// 메시를 쌓아 올리는 버퍼입니다.
+        ///
+        /// 정점 컬러를 함께 담습니다. 셰이더가 이 값의 R을 <b>접지 음영</b>으로 읽습니다.
+        /// 텍스처 없이 경계를 세우는 것이 이 게임 룩의 핵심이라, 그 정보가 지오메트리와 같이 만들어져야 합니다.
+        /// </summary>
+        private sealed class MeshBuffer
+        {
+            public readonly List<Vector3> Vertices = new List<Vector3>(1024);
+            public readonly List<int> Triangles = new List<int>(2048);
+            public readonly List<Color> Colors = new List<Color>(1024);
+
+            public int Count => Vertices.Count;
+
+            /// <summary>
+            /// 사각형을 추가합니다. 네 꼭짓점의 음영을 각각 받습니다.
+            ///
+            /// 방향을 일일이 계산해 감기 순서를 맞추는 대신, 만들어진 법선이 원하는 방향과 반대면 뒤집습니다.
+            /// 벽 방향마다 감기 순서를 손으로 유도하다 생기는 실수를 원천 차단하기 위한 방식입니다.
+            /// </summary>
+            public void AddQuad(
+                Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+                Vector3 desiredNormal,
+                float shadeA, float shadeB, float shadeC, float shadeD)
+            {
+                Vector3 normal = Vector3.Cross(b - a, c - a);
+                bool flip = Vector3.Dot(normal, desiredNormal) < 0f;
+
+                int baseIndex = Vertices.Count;
+
+                Vertices.Add(a);
+                Vertices.Add(b);
+                Vertices.Add(c);
+                Vertices.Add(d);
+
+                Colors.Add(new Color(shadeA, 0f, 0f, 1f));
+                Colors.Add(new Color(shadeB, 0f, 0f, 1f));
+                Colors.Add(new Color(shadeC, 0f, 0f, 1f));
+                Colors.Add(new Color(shadeD, 0f, 0f, 1f));
+
+                if (flip)
+                {
+                    Triangles.Add(baseIndex + 0);
+                    Triangles.Add(baseIndex + 3);
+                    Triangles.Add(baseIndex + 2);
+                    Triangles.Add(baseIndex + 0);
+                    Triangles.Add(baseIndex + 2);
+                    Triangles.Add(baseIndex + 1);
+                }
+                else
+                {
+                    Triangles.Add(baseIndex + 0);
+                    Triangles.Add(baseIndex + 1);
+                    Triangles.Add(baseIndex + 2);
+                    Triangles.Add(baseIndex + 0);
+                    Triangles.Add(baseIndex + 2);
+                    Triangles.Add(baseIndex + 3);
+                }
+            }
+
+            /// <summary>네 꼭짓점의 음영이 같은 사각형입니다.</summary>
+            public void AddQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 desiredNormal, float shade)
+            {
+                AddQuad(a, b, c, d, desiredNormal, shade, shade, shade, shade);
+            }
+        }
+
+        /// <summary>
         /// 타일 상단 면을 추가합니다.
         /// </summary>
-        private static void AddTopQuad(List<Vector3> vertices, List<int> triangles, Vector3 center, float half)
+        private static void AddTopQuad(MeshBuffer buffer, Vector3 center, float half)
         {
             Vector3 a = new Vector3(center.x - half, center.y, center.z - half);
             Vector3 b = new Vector3(center.x - half, center.y, center.z + half);
             Vector3 c = new Vector3(center.x + half, center.y, center.z + half);
             Vector3 d = new Vector3(center.x + half, center.y, center.z - half);
 
-            AddQuad(vertices, triangles, a, b, c, d, Vector3.up);
+            buffer.AddQuad(a, b, c, d, Vector3.up, TopShade);
         }
 
         /// <summary>
         /// 이웃보다 높은 쪽에 측면 벽을 세웁니다. 바다와 맞닿은 쪽은 수면 아래까지 내려 스커트를 만듭니다.
+        ///
+        /// <b>벽의 아래쪽을 어둡게 칠합니다.</b>
+        /// 지금까지는 벽과 윗면이 같은 색이라 계단 고도가 눈에 들어오지 않았습니다.
+        /// 텍스처를 붙이는 대신 경계에 음영을 넣는 것이 이 룩의 방식입니다.
         /// </summary>
-        private void AddSideWalls(List<Vector3> vertices, List<int> triangles, Tile tile, Vector3 center, float half)
+        private void AddSideWalls(MeshBuffer buffer, Tile tile, Vector3 center, float half)
         {
             for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
             {
@@ -199,14 +310,17 @@ namespace SRPG.Gameplay.Island
                 Vector3 bottomA = new Vector3(topA.x, bottomY, topA.z);
                 Vector3 bottomB = new Vector3(topB.x, bottomY, topB.z);
 
-                AddQuad(vertices, triangles, topA, topB, bottomB, bottomA, outward);
+                buffer.AddQuad(
+                    topA, topB, bottomB, bottomA,
+                    outward,
+                    WallTopShade, WallTopShade, WallBottomShade, WallBottomShade);
             }
         }
 
         /// <summary>
         /// 가옥 상자를 추가합니다. 방어 목표를 실루엣으로 알아볼 수 있게 하는 최소한의 표현입니다.
         /// </summary>
-        private static void AddHouseBox(List<Vector3> vertices, List<int> triangles, Vector3 center, float half)
+        private static void AddHouseBox(MeshBuffer buffer, Vector3 center, float half)
         {
             float inset = half * (1f - HouseInset);
             float baseY = center.y;
@@ -216,66 +330,35 @@ namespace SRPG.Gameplay.Island
             Vector3 max = new Vector3(center.x + inset, topY, center.z + inset);
 
             // 윗면
-            AddQuad(vertices, triangles,
+            buffer.AddQuad(
                 new Vector3(min.x, max.y, min.z),
                 new Vector3(min.x, max.y, max.z),
                 new Vector3(max.x, max.y, max.z),
                 new Vector3(max.x, max.y, min.z),
-                Vector3.up);
+                Vector3.up, TopShade);
 
-            // 옆면 4개
-            AddQuad(vertices, triangles,
+            // 옆면 4개. 가옥도 아래로 갈수록 어두워야 땅에 붙어 보입니다.
+            buffer.AddQuad(
                 new Vector3(min.x, max.y, min.z), new Vector3(max.x, max.y, min.z),
-                new Vector3(max.x, min.y, min.z), new Vector3(min.x, min.y, min.z), Vector3.back);
+                new Vector3(max.x, min.y, min.z), new Vector3(min.x, min.y, min.z), Vector3.back,
+                WallTopShade, WallTopShade, WallBottomShade, WallBottomShade);
 
-            AddQuad(vertices, triangles,
+            buffer.AddQuad(
                 new Vector3(max.x, max.y, max.z), new Vector3(min.x, max.y, max.z),
-                new Vector3(min.x, min.y, max.z), new Vector3(max.x, min.y, max.z), Vector3.forward);
+                new Vector3(min.x, min.y, max.z), new Vector3(max.x, min.y, max.z), Vector3.forward,
+                WallTopShade, WallTopShade, WallBottomShade, WallBottomShade);
 
-            AddQuad(vertices, triangles,
+            buffer.AddQuad(
                 new Vector3(min.x, max.y, max.z), new Vector3(min.x, max.y, min.z),
-                new Vector3(min.x, min.y, min.z), new Vector3(min.x, min.y, max.z), Vector3.left);
+                new Vector3(min.x, min.y, min.z), new Vector3(min.x, min.y, max.z), Vector3.left,
+                WallTopShade, WallTopShade, WallBottomShade, WallBottomShade);
 
-            AddQuad(vertices, triangles,
+            buffer.AddQuad(
                 new Vector3(max.x, max.y, min.z), new Vector3(max.x, max.y, max.z),
-                new Vector3(max.x, min.y, max.z), new Vector3(max.x, min.y, min.z), Vector3.right);
+                new Vector3(max.x, min.y, max.z), new Vector3(max.x, min.y, min.z), Vector3.right,
+                WallTopShade, WallTopShade, WallBottomShade, WallBottomShade);
         }
 
-        /// <summary>
-        /// 사각형을 추가합니다.
-        /// 방향을 일일이 계산해 감기 순서를 맞추는 대신, 만들어진 법선이 원하는 방향과 반대면 뒤집습니다.
-        /// 벽 방향마다 감기 순서를 손으로 유도하다 생기는 실수를 원천 차단하기 위한 방식입니다.
-        /// </summary>
-        private static void AddQuad(List<Vector3> vertices, List<int> triangles, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 desiredNormal)
-        {
-            Vector3 normal = Vector3.Cross(b - a, c - a);
-            bool flip = Vector3.Dot(normal, desiredNormal) < 0f;
-
-            int baseIndex = vertices.Count;
-            vertices.Add(a);
-            vertices.Add(b);
-            vertices.Add(c);
-            vertices.Add(d);
-
-            if (flip)
-            {
-                triangles.Add(baseIndex + 0);
-                triangles.Add(baseIndex + 3);
-                triangles.Add(baseIndex + 2);
-                triangles.Add(baseIndex + 0);
-                triangles.Add(baseIndex + 2);
-                triangles.Add(baseIndex + 1);
-            }
-            else
-            {
-                triangles.Add(baseIndex + 0);
-                triangles.Add(baseIndex + 1);
-                triangles.Add(baseIndex + 2);
-                triangles.Add(baseIndex + 0);
-                triangles.Add(baseIndex + 2);
-                triangles.Add(baseIndex + 3);
-            }
-        }
 
         // ====================================================================================================
         // 6. Private Methods - Object Creation
@@ -283,8 +366,7 @@ namespace SRPG.Gameplay.Island
 
         private GameObject CreateMeshObject(
             string objectName,
-            List<Vector3> vertices,
-            List<int> triangles,
+            MeshBuffer buffer,
             Color fallbackColor,
             Material authoredMaterial,
             bool addCollider = true)
@@ -295,13 +377,17 @@ namespace SRPG.Gameplay.Island
             var mesh = new Mesh
             {
                 name = objectName,
-                indexFormat = vertices.Count > 65000
+                indexFormat = buffer.Count > 65000
                     ? UnityEngine.Rendering.IndexFormat.UInt32
                     : UnityEngine.Rendering.IndexFormat.UInt16,
             };
 
-            mesh.SetVertices(vertices);
-            mesh.SetTriangles(triangles, 0);
+            mesh.SetVertices(buffer.Vertices);
+            mesh.SetTriangles(buffer.Triangles, 0);
+
+            // 접지 음영입니다. 셰이더가 R 채널을 읽습니다.
+            mesh.SetColors(buffer.Colors);
+
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
 
@@ -309,7 +395,7 @@ namespace SRPG.Gameplay.Island
 
             var material = _useAuthoredMaterials && authoredMaterial != null
                 ? authoredMaterial
-                : PrototypeVisuals.CreateMaterial(fallbackColor);
+                : PrototypeVisuals.CreateTerrainMaterial(fallbackColor);
 
             go.AddComponent<MeshRenderer>().sharedMaterial = material;
 

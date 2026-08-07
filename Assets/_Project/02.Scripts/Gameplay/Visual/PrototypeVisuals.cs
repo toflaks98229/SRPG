@@ -14,8 +14,16 @@ namespace SRPG.Gameplay.Visual
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>지형 셰이더의 이름입니다.</summary>
+        public const string TerrainShaderName = "SRPG/Terrain";
+
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ShadeColorId = Shader.PropertyToID("_ShadeColor");
+        private static readonly int OutlineWidthId = Shader.PropertyToID("_OutlineWidth");
+
         private static Mesh s_capsuleMesh;
         private static Mesh s_cubeMesh;
+        private static bool s_warnedMissingShader;
 
         // ====================================================================================================
         // 2. Public Methods - Material
@@ -65,6 +73,55 @@ namespace SRPG.Gameplay.Visual
             }
 
             return material;
+        }
+
+        /// <summary>
+        /// 지형용 머티리얼을 만듭니다. 외곽선과 접지 음영이 붙은 전용 셰이더를 씁니다.
+        ///
+        /// 셰이더를 찾지 못하면 조용히 기본 머티리얼로 물러납니다.
+        /// 셰이더 하나 때문에 게임이 실행조차 안 되는 것보다는, 밋밋하게라도 돌아가는 편이 낫습니다.
+        /// </summary>
+        /// <param name="color">기본 색상입니다.</param>
+        /// <param name="outlineWidth">외곽선 두께입니다. 0이면 외곽선이 사실상 사라집니다.</param>
+        public static Material CreateTerrainMaterial(Color color, float outlineWidth = 0.06f)
+        {
+            var shader = Shader.Find(TerrainShaderName);
+            if (shader == null)
+            {
+                WarnMissingShaderOnce();
+                return CreateMaterial(color);
+            }
+
+            var material = new Material(shader)
+            {
+                name = $"Terrain_{ColorUtility.ToHtmlStringRGB(color)}",
+                hideFlags = HideFlags.DontSave,
+            };
+
+            material.SetColor(BaseColorId, color);
+
+            // 그늘색은 기본색을 어둡게 민 것입니다.
+            // 별도로 지정하게 두면 지형마다 색 조합을 손으로 맞춰야 하고, 어긋나기 쉽습니다.
+            material.SetColor(ShadeColorId, color * 0.42f);
+            material.SetFloat(OutlineWidthId, outlineWidth);
+
+            return material;
+        }
+
+        /// <summary>
+        /// 지형 셰이더가 없다는 경고를 한 번만 냅니다.
+        /// </summary>
+        private static void WarnMissingShaderOnce()
+        {
+            if (s_warnedMissingShader)
+            {
+                return;
+            }
+
+            s_warnedMissingShader = true;
+            Debug.LogWarning(
+                $"[PrototypeVisuals] 셰이더 '{TerrainShaderName}' 를 찾지 못해 기본 머티리얼로 대체합니다.\n" +
+                "외곽선과 접지 음영이 표시되지 않습니다.");
         }
 
         // ====================================================================================================
