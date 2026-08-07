@@ -48,6 +48,9 @@ namespace SRPG.Gameplay.Units
         /// <summary>넉백 속도가 초당 얼마나 줄어드는지입니다.</summary>
         private const float KnockbackDecay = 11f;
 
+        /// <summary>도약 속도가 초당 얼마나 줄어드는지입니다. 넉백보다 빨리 잦아듭니다.</summary>
+        private const float LungeDecay = 20f;
+
         /// <summary>이 속도 이상으로 밀려나는 중이면 물 위로도 밀려납니다(= 익사할 수 있습니다).</summary>
         private const float DrownKnockbackThreshold = 1.2f;
 
@@ -96,6 +99,14 @@ namespace SRPG.Gameplay.Units
         private Vector3 _slotTarget;
         private Vector3 _lastVelocity;
         private Vector3 _knockbackVelocity;
+
+        /// <summary>
+        /// 스스로 앞으로 던진 도약 속도입니다. 넉백과 <b>따로</b> 둡니다.
+        ///
+        /// 같은 채널에 넣으면 물가의 적에게 달려들 때마다 스스로 물에 뛰어들어 익사합니다.
+        /// 밀려나는 것과 뛰어드는 것은 결과가 달라야 합니다.
+        /// </summary>
+        private Vector3 _lungeVelocity;
         private Transform _transform;
 
         private readonly List<Unit> _neighborBuffer = new List<Unit>(16);
@@ -171,6 +182,9 @@ namespace SRPG.Gameplay.Units
         /// <summary>지금 나를 치기로 예약한 적의 수입니다. 디버그 표시와 오버킬 판정에 씁니다.</summary>
         public int CommittedAttackerCount => _committedAttackers.Count;
 
+        /// <summary>이 병사의 무기가 횡대를 선호하는지 여부입니다. 분대가 진형 모양을 정할 때 묻습니다.</summary>
+        public bool PrefersLineFormation => _weapon != null && _weapon.PrefersLineFormation;
+
         // ====================================================================================================
         // 5. Events
         // ====================================================================================================
@@ -241,6 +255,7 @@ namespace SRPG.Gameplay.Units
             IsAlive = true;
             _slotTarget = _transform.position;
             _knockbackVelocity = Vector3.zero;
+            _lungeVelocity = Vector3.zero;
             _staggerTimer = 0f;
             _rootTimer = 0f;
 
@@ -406,6 +421,23 @@ namespace SRPG.Gameplay.Units
                 _staggerTimer = Mathf.Max(_staggerTimer, staggerSeconds);
                 _weapon?.CancelAttack();
             }
+        }
+
+        /// <summary>
+        /// 스스로 앞으로 몸을 던집니다. 검병이 벨 때 파고드는 힘입니다.
+        ///
+        /// 넉백과 달리 <b>물로 밀려나지 않습니다.</b>
+        /// 밀려서 빠지는 것은 사고지만, 달려들다 빠지는 것은 자살입니다.
+        /// </summary>
+        public void ApplyLunge(Vector3 impulse)
+        {
+            if (!IsAlive)
+            {
+                return;
+            }
+
+            impulse.y = 0f;
+            _lungeVelocity += impulse;
         }
 
         /// <summary>
@@ -607,6 +639,12 @@ namespace SRPG.Gameplay.Units
                 _knockbackVelocity,
                 Vector3.zero,
                 KnockbackDecay * deltaTime);
+
+            // 도약은 넉백보다 빨리 잦아듭니다. 한 걸음 파고드는 것이지 미끄러지는 것이 아닙니다.
+            _lungeVelocity = Vector3.MoveTowards(
+                _lungeVelocity,
+                Vector3.zero,
+                LungeDecay * deltaTime);
         }
 
         /// <summary>
@@ -769,17 +807,20 @@ namespace SRPG.Gameplay.Units
 
             // 아군끼리 겹치지 않도록 밀어냅니다.
             float separationRadius = _definition.Radius * 2.4f;
-            int neighborCount = _context.QueryTeam(position, separationRadius, _team, this, _neighborBuffer);
-            if (neighborCount > 0)
-            {
-                Vector3 separation = Vector3.zero;
-                for (int i = 0; i < neighborCount; i++)
-                {
-                    separation += SteeringSolver.SeparationFrom(position, _neighborBuffer[i].Position, separationRadius);
-                }
+            velocity += ComputeSeparation(position, separationRadius, _team, this, SeparationWeight);
 
-                velocity += separation * (_definition.MoveSpeed * SeparationWeight);
-            }
+            // 적과도 밀어냅니다. 다만 <b>약하게</b>입니다.
+            //
+            // 안 밀어내면 난전에서 몸이 그대로 겹쳐 어느 쪽이 어디 있는지 알 수 없게 됩니다.
+            // 그렇다고 아군만큼 세게 밀면 서로 다가가지 못해 영영 칼이 닿지 않습니다.
+            // 부딪히되 뚫고 지나가지는 않는 정도가 필요합니다.
+            var enemyTeam = _team == Team.Player ? Team.Enemy : Team.Player;
+            velocity += ComputeSeparation(
+                position,
+                separationRadius,
+                enemyTeam,
+                null,
+                _context.Tuning.EnemySeparationWeight);
 
             // 최대 속도를 넘지 않게 제한합니다.
             float maxSpeed = _definition.MoveSpeed;
@@ -844,6 +885,31 @@ namespace SRPG.Gameplay.Units
             }
 
             return _weapon.FormationBreakTiles * _context.Grid.CellSize;
+        }
+
+        /// <summary>
+        /// 지정 진영의 이웃에게서 밀려나는 속도를 구합니다.
+        /// </summary>
+        private Vector3 ComputeSeparation(Vector3 position, float radius, Team team, Unit exclude, float weight)
+        {
+            if (weight <= 0f)
+            {
+                return Vector3.zero;
+            }
+
+            int count = _context.QueryTeam(position, radius, team, exclude, _neighborBuffer);
+            if (count == 0)
+            {
+                return Vector3.zero;
+            }
+
+            Vector3 separation = Vector3.zero;
+            for (int i = 0; i < count; i++)
+            {
+                separation += SteeringSolver.SeparationFrom(position, _neighborBuffer[i].Position, radius);
+            }
+
+            return separation * (_definition.MoveSpeed * weight);
         }
 
         // ====================================================================================================
@@ -912,7 +978,7 @@ namespace SRPG.Gameplay.Units
         {
             _lastVelocity = steering;
 
-            Vector3 total = steering + _knockbackVelocity;
+            Vector3 total = steering + _knockbackVelocity + _lungeVelocity;
             Vector3 position = Position;
             Vector3 next = position + total * deltaTime;
 

@@ -32,6 +32,12 @@ namespace SRPG.Gameplay.Squads
         // 1. Constants
         // ====================================================================================================
 
+        /// <summary>슬롯 배정을 다시 짜는 주기(초)입니다. 매 프레임 짜면 병사들이 자리를 두고 떱니다.</summary>
+        private const float AssignmentInterval = 0.35f;
+
+        /// <summary>전열이 향할 방향을 다시 살피는 주기(초)입니다.</summary>
+        private const float FacingScanInterval = 0.4f;
+
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -39,6 +45,14 @@ namespace SRPG.Gameplay.Squads
         private readonly List<Unit> _units = new List<Unit>(12);
         private readonly List<GridCoord> _path = new List<GridCoord>(64);
         private readonly List<Vector3> _slots = new List<Vector3>(12);
+        private readonly List<Vector3> _positionBuffer = new List<Vector3>(12);
+
+        /// <summary>병사별로 맡은 슬롯 인덱스입니다. <c>_units</c>와 같은 순서입니다.</summary>
+        private readonly List<int> _slotOf = new List<int>(12);
+
+        private float _assignmentTimer;
+        private float _facingScanTimer;
+        private Vector3 _lineFacing = Vector3.forward;
 
         /// <summary>앵커 전진은 적 분대와 공유하는 순수 로직입니다.</summary>
         private readonly FormationMotor _motor = new FormationMotor();
@@ -114,6 +128,8 @@ namespace SRPG.Gameplay.Squads
                 DestroySquad();
                 return;
             }
+
+            _facingScanTimer -= deltaTime;
 
             AdvanceAnchor(deltaTime);
             AssignUnitTargets();
@@ -344,7 +360,8 @@ namespace SRPG.Gameplay.Squads
         /// 이동 중에는 전원이 같은 지점(앵커)을 향합니다. 슬롯을 주지 않는다는 뜻입니다.
         /// 겹침은 분리 조향이 알아서 풀어 주므로, 결과적으로 앵커를 뒤따르는 느슨한 무리가 됩니다.
         ///
-        /// 도착한 뒤에야 동심원 슬롯을 배정합니다. 이때 지휘관은 항상 중심입니다.
+        /// 도착한 뒤에야 슬롯을 배정합니다. 이때 지휘관은 항상 중심입니다.
+        /// 진형의 모양은 병과가 정합니다. 창은 횡대, 검과 활은 동심원입니다.
         /// </summary>
         private void AssignUnitTargets()
         {
@@ -364,29 +381,117 @@ namespace SRPG.Gameplay.Squads
                 return;
             }
 
-            FormationSolver.SolveRings(_motor.Anchor, count, _context.Tuning.FormationSpacing, _slots);
-
-            int slotCursor = 1; // 0번은 지휘관 자리로 비워 둡니다.
+            SolveSlots(count);
+            RefreshAssignment(count);
 
             for (int i = 0; i < count; i++)
             {
                 var unit = _units[i];
-                if (unit == null)
+                if (unit == null || i >= _slotOf.Count)
                 {
                     continue;
                 }
 
-                if (unit.IsCommander)
-                {
-                    unit.SetSlotTarget(_slots[0]);
-                    continue;
-                }
-
-                // 지휘관이 이미 죽어 없을 수도 있으므로 커서 범위를 지킵니다.
-                int slotIndex = Mathf.Min(slotCursor, _slots.Count - 1);
+                int slotIndex = Mathf.Clamp(_slotOf[i], 0, _slots.Count - 1);
                 unit.SetSlotTarget(_slots[slotIndex]);
-                slotCursor++;
             }
+        }
+
+        /// <summary>
+        /// 진형 슬롯 위치를 계산합니다. 모양은 병과가 정합니다.
+        ///
+        /// 창은 정면 좁은 각도만 위험하므로 <b>옆으로 늘어서야</b> 방어선이 됩니다.
+        /// 검과 활은 사방에서 오는 위협에 대응해야 하므로 동심원이 낫습니다.
+        /// </summary>
+        private void SolveSlots(int count)
+        {
+            float spacing = _context.Tuning.FormationSpacing;
+
+            if (!PrefersLineFormation())
+            {
+                FormationSolver.SolveRings(_motor.Anchor, count, spacing, _slots);
+                return;
+            }
+
+            FormationSolver.SolveGrid(_motor.Anchor, ResolveFacing(), count, spacing, _slots);
+        }
+
+        /// <summary>이 분대가 횡대를 선호하는지 무기에게 묻습니다.</summary>
+        private bool PrefersLineFormation()
+        {
+            for (int i = 0; i < _units.Count; i++)
+            {
+                if (_units[i] != null)
+                {
+                    return _units[i].PrefersLineFormation;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 전열이 향할 방향입니다. 가장 가까운 적 쪽을 봅니다.
+        ///
+        /// 적이 없으면 마지막으로 걸어온 방향을 유지합니다.
+        /// 그러지 않으면 적이 죽는 순간 전열이 홱 돌아갑니다.
+        /// </summary>
+        private Vector3 ResolveFacing()
+        {
+            if (_facingScanTimer <= 0f)
+            {
+                _facingScanTimer = FacingScanInterval;
+
+                var enemy = _context.FindNearestEnemy(_motor.Anchor, Team.Player, _context.Tuning.ShieldThreatRadius);
+                if (enemy != null)
+                {
+                    Vector3 toEnemy = enemy.Position - _motor.Anchor;
+                    toEnemy.y = 0f;
+
+                    if (toEnemy.sqrMagnitude > 0.0001f)
+                    {
+                        _lineFacing = toEnemy.normalized;
+                    }
+                }
+            }
+
+            return _lineFacing;
+        }
+
+        /// <summary>
+        /// 병사와 슬롯의 짝을 다시 짭니다.
+        ///
+        /// 매 프레임 다시 짜면 미세한 위치 변화로 슬롯이 서로 뒤바뀌며 병사들이 떱니다.
+        /// 인원이 바뀌었을 때와 일정 시간마다만 다시 짭니다.
+        /// </summary>
+        private void RefreshAssignment(int count)
+        {
+            _assignmentTimer -= UnityEngine.Time.deltaTime;
+
+            bool countChanged = _slotOf.Count != count;
+
+            if (!countChanged && _assignmentTimer > 0f)
+            {
+                return;
+            }
+
+            _assignmentTimer = AssignmentInterval;
+
+            _positionBuffer.Clear();
+            int commanderIndex = -1;
+
+            for (int i = 0; i < count; i++)
+            {
+                var unit = _units[i];
+                _positionBuffer.Add(unit != null ? unit.Position : _motor.Anchor);
+
+                if (unit != null && unit.IsCommander)
+                {
+                    commanderIndex = i;
+                }
+            }
+
+            SlotAssigner.AssignNearest(_positionBuffer, _slots, _slotOf, commanderIndex);
         }
 
         /// <summary>

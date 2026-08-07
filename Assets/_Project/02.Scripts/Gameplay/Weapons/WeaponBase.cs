@@ -100,6 +100,26 @@ namespace SRPG.Gameplay.Weapons
         /// </summary>
         public virtual bool UsesSpringTurn => false;
 
+        /// <summary>
+        /// 공격을 시작할 때 <b>몸을 앞으로 던지는</b> 힘입니다. 0이면 제자리에서 휘두릅니다.
+        ///
+        /// 도약은 두 가지를 합니다.
+        ///   · 무기의 짧은 사거리를 몸으로 메웁니다 — 닿을락 말락 한 거리에서 파고들 수 있습니다
+        ///   · 타격 순간의 넉백과 맞물려 <b>부딪히는 느낌</b>을 만듭니다
+        ///
+        /// 제자리에서 허공에 칼을 휘두르면 아무리 판정이 정확해도 답답해 보입니다.
+        /// 버티는 것이 일인 무기(창)는 0으로 둡니다. 창병이 뛰어들면 그 순간 창병이 아니게 됩니다.
+        /// </summary>
+        public virtual float LungeForce => 0f;
+
+        /// <summary>
+        /// 분대가 <b>가로로 넓게 퍼지는</b> 전열을 선호하는지 여부입니다.
+        ///
+        /// 창은 정면 좁은 각도만 위험하므로 옆으로 늘어서야 방어선이 됩니다.
+        /// 검과 활은 사방에서 오는 위협에 대응해야 하므로 동심원이 낫습니다.
+        /// </summary>
+        public virtual bool PrefersLineFormation => false;
+
         /// <summary>회전 스프링의 진동수입니다. 클수록 빠르게 따라붙습니다.</summary>
         public virtual float TurnSpringFrequency => 1.6f;
 

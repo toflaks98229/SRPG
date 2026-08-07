@@ -142,6 +142,14 @@ namespace SRPG.Gameplay.Weapons
         /// </summary>
         public override bool UsesSpringTurn => true;
 
+        /// <summary>
+        /// 창병은 <b>횡대</b>로 늘어섭니다.
+        ///
+        /// 창은 정면의 좁은 각도만 위험합니다. 동심원으로 뭉치면 대부분의 창이 안쪽을 향해
+        /// 아무것도 막지 못합니다. 옆으로 늘어서야 창끝이 모두 같은 방향을 겨눠 방어선이 됩니다.
+        /// </summary>
+        public override bool PrefersLineFormation => true;
+
         public override float TurnSpringFrequency =>
             Tuning != null ? Tuning.PikeTurnSpringFrequency : DefaultTurnSpringFrequency;
 

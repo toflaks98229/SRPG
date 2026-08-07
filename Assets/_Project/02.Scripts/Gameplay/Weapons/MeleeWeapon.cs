@@ -44,6 +44,12 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>튜닝이 없을 때 쓰는 대열 이탈 거리(칸)입니다.</summary>
         private const float DefaultBreakFormationTiles = 2f;
 
+        /// <summary>튜닝이 없을 때 쓰는 도약 세기입니다.</summary>
+        private const float DefaultLungeForce = 3.6f;
+
+        /// <summary>튜닝이 없을 때 쓰는 최소 도약 거리입니다.</summary>
+        private const float DefaultLungeMinDistance = 0.7f;
+
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -78,10 +84,51 @@ namespace SRPG.Gameplay.Weapons
         // 3. Overrides - Lifecycle
         // ====================================================================================================
 
+        /// <summary>
+        /// 검병은 <b>몸을 던지며</b> 벱니다. 제자리에서 휘두르면 판정이 아무리 정확해도 답답해 보입니다.
+        /// </summary>
+        public override float LungeForce =>
+            Tuning != null ? Tuning.MeleeLungeForce : DefaultLungeForce;
+
         protected override void OnAttackBegan(Unit target)
         {
             _alreadyHit.Clear();
             _hasPreviousTip = false;
+
+            Lunge(target);
+        }
+
+        /// <summary>
+        /// 표적을 향해 몸을 던집니다.
+        ///
+        /// 이미 붙어 있으면 도약하지 않습니다. 밀고 들어갈 공간이 없는데 힘을 주면
+        /// 서로 통과하거나 어색하게 미끄러집니다. 거리가 남아 있을 때만 파고듭니다.
+        /// </summary>
+        private void Lunge(Unit target)
+        {
+            if (Owner == null || target == null)
+            {
+                return;
+            }
+
+            float force = LungeForce;
+            if (force <= 0f)
+            {
+                return;
+            }
+
+            Vector3 toTarget = target.Position - Owner.Position;
+            toTarget.y = 0f;
+
+            float distance = toTarget.magnitude;
+            float minimum = Tuning != null ? Tuning.MeleeLungeMinDistance : DefaultLungeMinDistance;
+
+            if (distance <= minimum)
+            {
+                return;
+            }
+
+            Owner.ApplyLunge(toTarget / distance * force);
         }
 
         protected override void OnActionTick(float deltaTime, float progress)

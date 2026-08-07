@@ -38,6 +38,9 @@ namespace SRPG.Gameplay.Enemies
         /// <summary>목표 재판단 시점을 분대마다 흩뜨리는 폭(초)입니다. 같은 프레임에 몰리지 않게 합니다.</summary>
         private const float ReplanJitter = 0.6f;
 
+        /// <summary>슬롯 배정을 다시 짜는 주기(초)입니다.</summary>
+        private const float AssignmentInterval = 0.35f;
+
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -46,6 +49,12 @@ namespace SRPG.Gameplay.Enemies
         private readonly List<Vector3> _slots = new List<Vector3>(8);
         private readonly List<GridCoord> _path = new List<GridCoord>(64);
         private readonly List<GoalCandidate> _candidates = new List<GoalCandidate>(16);
+        private readonly List<Vector3> _positionBuffer = new List<Vector3>(8);
+
+        /// <summary>병사별로 맡은 슬롯 인덱스입니다. <c>_units</c>와 같은 순서입니다.</summary>
+        private readonly List<int> _slotOf = new List<int>(8);
+
+        private float _assignmentTimer;
 
         private readonly FormationMotor _motor = new FormationMotor();
         private readonly EnemyGoalPlanner _planner = new EnemyGoalPlanner();
@@ -314,11 +323,42 @@ namespace SRPG.Gameplay.Enemies
 
             FormationSolver.SolveRings(_motor.Anchor, count, _context.Tuning.FormationSpacing, _slots);
 
+            // 가까운 병사에게 자리를 줍니다. 순서대로 나눠 주면 대열을 가로질러 걸어갑니다.
+            RefreshAssignment(count);
+
             for (int i = 0; i < count; i++)
             {
-                int slotIndex = Mathf.Min(i, _slots.Count - 1);
+                if (i >= _slotOf.Count)
+                {
+                    continue;
+                }
+
+                int slotIndex = Mathf.Clamp(_slotOf[i], 0, _slots.Count - 1);
                 _units[i]?.SetSlotTarget(_slots[slotIndex]);
             }
+        }
+
+        /// <summary>
+        /// 병사와 슬롯의 짝을 다시 짭니다. 매 프레임 짜면 병사들이 자리를 두고 떱니다.
+        /// </summary>
+        private void RefreshAssignment(int count)
+        {
+            _assignmentTimer -= UnityEngine.Time.deltaTime;
+
+            if (_slotOf.Count == count && _assignmentTimer > 0f)
+            {
+                return;
+            }
+
+            _assignmentTimer = AssignmentInterval;
+
+            _positionBuffer.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                _positionBuffer.Add(_units[i] != null ? _units[i].Position : _motor.Anchor);
+            }
+
+            SlotAssigner.AssignNearest(_positionBuffer, _slots, _slotOf);
         }
 
         private void PruneDeadUnits()
