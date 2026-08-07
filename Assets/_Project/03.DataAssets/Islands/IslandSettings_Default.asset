@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ffb1d2933629de49afd5b8d7cee27e0, type: 3}
+  m_Name: IslandSettings_Default
+  m_EditorClassIdentifier: SRPG.Data::SRPG.Data.IslandSettings
+  Width: 30
+  Depth: 30
+  CellSize: 2
+  HeightStep: 0.9
+  MaxHeightLevel: 2
+  IslandRadius: 0.36
+  NoiseScale: 4.5
+  NoiseStrength: 0.16
+  HouseCount: 3
+  LandingZoneCount: 4
+  HouseMinSpacing: 4
+  Seed: 0

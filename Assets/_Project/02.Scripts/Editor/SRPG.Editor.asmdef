@@ -1,0 +1,31 @@
+{
+    "name": "SRPG.Editor",
+    "rootNamespace": "SRPG.Editor",
+    "references": [
+        "SRPG.Common",
+        "SRPG.Data",
+        "SRPG.Framework",
+        "SRPG.Core",
+        "SRPG.Systems",
+        "SRPG.Gameplay",
+        "SRPG.UI",
+        "SRPG.Composition",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI",
+        "Unity.InputSystem",
+        "Unity.AI.Navigation",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "autoReferenced": true,
+    "precompiledReferences": [],
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

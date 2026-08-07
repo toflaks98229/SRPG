@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 72b3644fddaca9b41a82a01a3f8a1c86, type: 3}
+  m_Name: UnitDef_Militia
+  m_EditorClassIdentifier: SRPG.Data::SRPG.Data.UnitDefinition
+  SchemaVersion: 3
+  Role: 0
+  DisplayName: "\uBBFC\uBCD1"
+  MaxHealth: 30
+  ProjectileResistance: 0
+  MoveSpeed: 3.5
+  Radius: 0.35
+  AttackRange: 1.2
+  AttackDamage: 8
+  AttackInterval: 1.1
+  IsRangedAttack: 0
+  CanAttackWhileMoving: 1
+  EngageRadius: 2.5
+  Style: 0
+  WeaponLength: 0.8
+  WeaponThickness: 0.18
+  AttackDuration: 0.44
+  AttackRootDuration: 0
+  KnockbackForce: 2.8
+  KnockbackStagger: 0.18
+  ProjectilePrefab: {fileID: 0}
+  ArcLaunchAngleDegrees: 40
+  ProjectileSpeed: 22
+  ProjectileGravityScale: 1
+  MaxSpreadDegrees: 9
+  MinSpreadDegrees: 1.6
+  UsePredictiveAim: 1
+  Prefab: {fileID: 2281822561148482709, guid: b1e805efe8a91bd489aa23d4a3576394, type: 3}
+  DebugColor: {r: 0.8, g: 0.8, b: 0.85, a: 1}
+  DebugHeight: 1

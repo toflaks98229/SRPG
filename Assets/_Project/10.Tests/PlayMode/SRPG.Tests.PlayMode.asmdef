@@ -1,0 +1,28 @@
+{
+    "name": "SRPG.Tests.PlayMode",
+    "rootNamespace": "SRPG.Tests.PlayMode",
+    "references": [
+        "SRPG.Common",
+        "SRPG.Data",
+        "SRPG.Framework",
+        "SRPG.Core",
+        "SRPG.Systems",
+        "SRPG.Gameplay",
+        "SRPG.UI",
+        "SRPG.Composition",
+        "UnityEngine.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

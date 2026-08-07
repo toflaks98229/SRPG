@@ -1,0 +1,10 @@
+﻿{
+  "name": "com.logi.unity-bridge",
+  "version": "0.4.0",
+  "displayName": "Logi Unity Bridge",
+  "description": "Receives commands from the Logi Loupedeck plugin and drives the Unity Editor. Editor-only; never included in player builds.",
+  "unity": "2019.1",
+  "author": {
+    "name": "LogiForUnity"
+  }
+}

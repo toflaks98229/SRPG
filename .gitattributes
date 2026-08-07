@@ -1,0 +1,68 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# --- 소스 파일 인코딩/줄바꿈 정책 ---
+# 소스는 UTF-8로 저장합니다. 에디터 강제 규칙은 .editorconfig 참고.
+*.cs         text diff=csharp
+*.shader     text
+*.hlsl       text
+*.cginc      text
+*.compute    text
+*.json       text
+*.csv        text
+*.txt        text
+*.md         text
+*.uss        text
+*.uxml       text
+
+# Unity 직렬화 에셋 (YAML 텍스트)
+# merge=unityyamlmerge: 씬/프리팹 충돌 시 텍스트 병합 대신 Unity SmartMerge 사용.
+# 드라이버가 등록되지 않은 클론에서는 git이 오류 없이 기본 텍스트 병합으로 조용히
+# 되돌아가므로, 새 클론에서는 Tools/setup-git.ps1 을 반드시 한 번 실행해야 합니다.
+*.unity      text merge=unityyamlmerge
+*.prefab     text merge=unityyamlmerge
+*.asset      text merge=unityyamlmerge
+*.mat        text merge=unityyamlmerge
+*.anim       text merge=unityyamlmerge
+*.controller text merge=unityyamlmerge
+*.meta       text merge=unityyamlmerge
+*.physicMaterial text merge=unityyamlmerge
+
+# --- 일반 바이너리 (LFS 아님, 자동 판별에 맡기지 않음) ---
+# 스프라이트 PNG/JPG는 이미 150여 개가 일반 git 객체로 커밋돼 있고 개당 용량도
+# 작아 그대로 둡니다. 여기에 filter=lfs를 걸면 기존 파일이 포인터가 아니어서
+# "Encountered N files that should have been pointers" 오류가 발생합니다.
+*.png        binary
+*.PNG        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.ttf        binary
+*.otf        binary
+*.dll        binary
+*.so         binary
+*.pdb        binary
+*.a          binary
+*.bundle     binary
+
+# --- Git LFS 대상: 원본/대용량 미디어 ---
+# 현재 저장소에 커밋된 파일이 하나도 없는 확장자만 선정했습니다.
+# 따라서 히스토리 재작성 없이 즉시 적용되며, 앞으로 추가되는 파일부터 LFS로 갑니다.
+*.psd        filter=lfs diff=lfs merge=lfs -text
+*.psb        filter=lfs diff=lfs merge=lfs -text
+*.tga        filter=lfs diff=lfs merge=lfs -text
+*.tif        filter=lfs diff=lfs merge=lfs -text
+*.tiff       filter=lfs diff=lfs merge=lfs -text
+*.exr        filter=lfs diff=lfs merge=lfs -text
+*.hdr        filter=lfs diff=lfs merge=lfs -text
+*.fbx        filter=lfs diff=lfs merge=lfs -text
+*.blend      filter=lfs diff=lfs merge=lfs -text
+*.obj        filter=lfs diff=lfs merge=lfs -text
+*.wav        filter=lfs diff=lfs merge=lfs -text
+*.mp3        filter=lfs diff=lfs merge=lfs -text
+*.ogg        filter=lfs diff=lfs merge=lfs -text
+*.aif        filter=lfs diff=lfs merge=lfs -text
+*.aiff       filter=lfs diff=lfs merge=lfs -text
+*.mp4        filter=lfs diff=lfs merge=lfs -text
+*.mov        filter=lfs diff=lfs merge=lfs -text
+*.unitypackage filter=lfs diff=lfs merge=lfs -text

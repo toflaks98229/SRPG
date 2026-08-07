@@ -1,0 +1,26 @@
+{
+    "name": "SRPG.Gameplay",
+    "rootNamespace": "SRPG.Gameplay",
+    "references": [
+        "SRPG.Common",
+        "SRPG.Data",
+        "SRPG.Framework",
+        "SRPG.Core",
+        "SRPG.Systems",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI",
+        "Unity.InputSystem",
+        "Unity.AI.Navigation",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "autoReferenced": true,
+    "precompiledReferences": [],
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

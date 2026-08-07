@@ -1,0 +1,31 @@
+root = true
+
+# 모든 파일 기본값: UTF-8
+# (CP949/EUC-KR로 저장되어 주석이 깨지는 문제를 방지)
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# C# 및 셰이더 소스는 UTF-8 with BOM.
+# Unity와 Visual Studio가 BOM 없이는 한글 주석을 시스템 코드페이지(CP949)로
+# 오인해 저장하는 경우가 있어, BOM을 명시적으로 요구합니다.
+[*.{cs,shader,hlsl,cginc,compute}]
+charset = utf-8-bom
+
+# 데이터 파일은 BOM 없이 UTF-8.
+# (CSV 임포터 등 커스텀 파서가 BOM을 첫 컬럼 값으로 읽는 사고 방지)
+[*.{json,csv,yml,yaml,md,txt}]
+charset = utf-8
+indent_size = 2
+insert_final_newline = false
+
+# Unity가 직렬화하는 YAML 에셋은 Unity가 쓰는 형식 그대로 둡니다.
+[*.{unity,prefab,asset,mat,anim,controller,meta,physicMaterial}]
+charset = utf-8
+trim_trailing_whitespace = false
+insert_final_newline = false
+indent_size = 2

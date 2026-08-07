@@ -1,0 +1,29 @@
+{
+    "name": "SRPG.Tests.EditMode",
+    "rootNamespace": "SRPG.Tests",
+    "references": [
+        "SRPG.Common",
+        "SRPG.Data",
+        "SRPG.Framework",
+        "SRPG.Core",
+        "SRPG.Systems",
+        "SRPG.Gameplay",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
