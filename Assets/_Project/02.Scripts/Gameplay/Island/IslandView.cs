@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Visual;
 using SRPG.Systems.Grid;
+using SRPG.Systems.Meshing;
+using SRPG.Systems.Props;
 using UnityEngine;
 
 namespace SRPG.Gameplay.Island
@@ -10,9 +12,22 @@ namespace SRPG.Gameplay.Island
     /// <summary>
     /// <see cref="IslandGrid"/>를 눈에 보이는 지형 메시로 변환합니다.
     ///
-    /// 타일마다 GameObject를 만들지 않고 지형 종류별로 메시를 하나씩 합쳐 굽습니다.
+    /// 타일마다 GameObject를 만들지 않고 <b>역할별로</b> 메시를 하나씩 합쳐 굽습니다.
     /// 30x30 격자면 타일이 900개인데, 개별 오브젝트로 두면 드로우콜과 트랜스폼 갱신이 낭비됩니다.
-    /// 합친 결과는 지형 종류 수(4~5개)만큼의 드로우콜로 끝납니다.
+    ///
+    /// <b>윗면과 측면을 나눕니다</b>
+    ///
+    /// 이 게임에서 플레이어가 지형을 보고 판단해야 하는 것은 하나입니다 — <b>딛을 수 있는가</b>.
+    /// 그 답은 면의 방향에 이미 들어 있습니다.
+    ///
+    ///   · 윗면 — 평평하고 걸을 수 있습니다. 잔디·모래가 덮입니다.
+    ///   · 측면 — 수직이고 딛을 수 없습니다. 드러난 암반입니다.
+    ///
+    /// 그래서 둘을 <b>다른 메시, 다른 재질</b>로 굽습니다.
+    /// 같은 재질로 두면 고도 차가 색이 아니라 음영으로만 남아, 절벽인지 언덕인지 헷갈립니다.
+    /// 나눠 두면 나중에 윗면만 눈으로 갈아 끼우는 것도 재질 하나 바꾸는 일이 됩니다.
+    ///
+    /// 절벽 타일은 윗면까지 암반으로 갑니다. 딛을 수 없는 것은 전부 같은 재질이어야 합니다.
     /// </summary>
     public sealed class IslandView : MonoBehaviour
     {
@@ -32,18 +47,30 @@ namespace SRPG.Gameplay.Island
         /// <summary>가옥 상자가 타일 안쪽으로 들어가는 비율입니다.</summary>
         private const float HouseInset = 0.34f;
 
+        /// <summary>지형지물의 기본 밀도입니다.</summary>
+        private const float PropDensity = 1f;
+
+        /// <summary>
+        /// 지형지물의 외곽선 두께입니다. 지형보다 훨씬 얇습니다.
+        ///
+        /// 외곽선은 뒤집힌 껍질을 <b>월드 단위로</b> 부풀려 만듭니다.
+        /// 지형 두께(0.06)를 그대로 쓰면 반경 0.16짜리 조약돌은 껍질이 형상을 삼켜
+        /// 검은 덩어리만 남습니다. 작은 것일수록 선이 가늘어야 형태가 보입니다.
+        /// </summary>
+        private const float PropOutlineWidth = 0.018f;
+
         // ====================================================================================================
         // 1-1. Palette
         // ====================================================================================================
 
-        /// <summary>통행 가능한 평지입니다.</summary>
+        /// <summary>통행 가능한 평지의 윗면입니다.</summary>
         private static readonly Color WalkableGrassColor = new Color(0.44f, 0.62f, 0.36f);
 
-        /// <summary>통행 가능한 해변입니다. 평지와 같은 계열로 두어 구분이 정보로 읽히지 않게 합니다.</summary>
+        /// <summary>통행 가능한 해변의 윗면입니다. 평지와 같은 계열로 두어 구분이 정보로 읽히지 않게 합니다.</summary>
         private static readonly Color WalkableSandColor = new Color(0.55f, 0.66f, 0.40f);
 
-        /// <summary>통행 불가입니다. 통행 가능 계열과 확실히 갈라져야 합니다.</summary>
-        private static readonly Color BlockedColor = new Color(0.42f, 0.40f, 0.43f);
+        /// <summary>드러난 암반입니다. 측면과 절벽과 바위가 전부 이 색입니다.</summary>
+        private static readonly Color RockColor = new Color(0.42f, 0.40f, 0.43f);
 
         /// <summary>방어 목표입니다. 유일하게 따뜻한 색이라 눈에 먼저 들어옵니다.</summary>
         private static readonly Color ObjectiveColor = new Color(0.72f, 0.48f, 0.28f);
@@ -69,6 +96,8 @@ namespace SRPG.Gameplay.Island
         private TerrainMaterialSet _materials;
         private bool _useAuthoredMaterials;
 
+        private readonly List<PropInstance> _props = new List<PropInstance>(512);
+
         // ====================================================================================================
         // 3. Public Methods
         // ====================================================================================================
@@ -91,17 +120,17 @@ namespace SRPG.Gameplay.Island
             ClearChildren();
 
             // 색을 셋으로 줄였습니다. 플레이어가 알아야 하는 것은 딱 그만큼입니다.
-            //   · 갈 수 있는 땅   — 해변과 평지를 같은 계열로 묶습니다
-            //   · 갈 수 없는 땅   — 절벽
+            //   · 갈 수 있는 땅   — 윗면. 해변과 평지를 같은 계열로 묶습니다
+            //   · 갈 수 없는 땅   — 암반. 모든 측면과 절벽과 바위
             //   · 목표            — 가옥
             //
             // 해변과 평지의 색을 나누면 정보가 하나 더 늘어나는데,
             // 그 구분은 적의 상륙 판정에만 쓰이지 플레이어의 이동 판단에는 쓰이지 않습니다.
             // 판단에 쓰이지 않는 구분은 화면에서는 잡음입니다.
-            BuildTerrainLayer("Terrain_Beach", TileType.Beach, WalkableSandColor, _materials.Beach);
-            BuildTerrainLayer("Terrain_Ground", TileType.Ground, WalkableGrassColor, _materials.Ground);
-            BuildTerrainLayer("Terrain_Cliff", TileType.Cliff, BlockedColor, _materials.Cliff);
-            BuildTerrainLayer("Terrain_House", TileType.House, ObjectiveColor, _materials.House);
+            BuildWalkableTops();
+            BuildRockLayer();
+            BuildHouseLayer();
+            BuildProps();
             BuildWaterPlane();
         }
 
@@ -110,39 +139,135 @@ namespace SRPG.Gameplay.Island
         // ====================================================================================================
 
         /// <summary>
-        /// 특정 지형 종류의 타일을 하나의 메시로 합쳐 생성합니다.
+        /// 걸을 수 있는 타일의 윗면입니다. 잔디와 모래가 덮이는 면입니다.
+        ///
+        /// 해변과 평지는 재질만 다르고 역할은 같습니다. 둘 다 딛을 수 있습니다.
         /// </summary>
-        private void BuildTerrainLayer(string layerName, TileType type, Color fallbackColor, Material authoredMaterial)
+        private void BuildWalkableTops()
+        {
+            BuildTopLayer("Terrain_Top_Beach", TileType.Beach, WalkableSandColor, _materials.Beach);
+            BuildTopLayer("Terrain_Top_Ground", TileType.Ground, WalkableGrassColor, _materials.Ground);
+        }
+
+        private void BuildTopLayer(string layerName, TileType type, Color fallbackColor, Material authoredMaterial)
         {
             var buffer = new MeshBuffer();
-
             float half = _grid.CellSize * 0.5f;
 
             for (int i = 0; i < _grid.AllTiles.Count; i++)
             {
                 var tile = _grid.AllTiles[i];
-                if (tile.Type != type)
+
+                if (tile.Type == type)
+                {
+                    AddTopQuad(buffer, tile.WorldCenter, half);
+                }
+            }
+
+            CreateMeshObject(layerName, buffer, fallbackColor, authoredMaterial);
+        }
+
+        /// <summary>
+        /// 드러난 암반입니다. <b>딛을 수 없는 것이 전부 여기 모입니다.</b>
+        ///
+        ///   · 모든 타일의 측면 벽 — 수직면이라 오를 수 없습니다
+        ///   · 절벽 타일의 윗면   — 통행 불가로 확정된 곳입니다
+        ///
+        /// 측면을 각 지형 종류의 메시에 남겨 두면, 잔디 재질의 벽이 생깁니다.
+        /// 위에서 내려다보는 게임에서 벽은 실루엣의 대부분을 차지하므로 그건 곧 판독 실패입니다.
+        /// </summary>
+        private void BuildRockLayer()
+        {
+            var buffer = new MeshBuffer();
+            float half = _grid.CellSize * 0.5f;
+
+            for (int i = 0; i < _grid.AllTiles.Count; i++)
+            {
+                var tile = _grid.AllTiles[i];
+
+                if (tile.IsWater)
                 {
                     continue;
                 }
 
-                Vector3 center = tile.WorldCenter;
-
-                AddTopQuad(buffer, center, half);
-                AddSideWalls(buffer, tile, center, half);
-
-                if (type == TileType.House)
+                if (tile.Type == TileType.Cliff)
                 {
-                    AddHouseBox(buffer, center, half);
+                    AddTopQuad(buffer, tile.WorldCenter, half);
                 }
+
+                AddSideWalls(buffer, tile, tile.WorldCenter, half);
             }
 
-            if (buffer.Count == 0)
+            CreateMeshObject("Terrain_Rock", buffer, RockColor, _materials.Cliff);
+        }
+
+        /// <summary>
+        /// 가옥입니다. 윗면과 상자를 함께 굽습니다. 측면은 암반 층이 이미 세웠습니다.
+        /// </summary>
+        private void BuildHouseLayer()
+        {
+            var buffer = new MeshBuffer();
+            float half = _grid.CellSize * 0.5f;
+
+            for (int i = 0; i < _grid.AllTiles.Count; i++)
+            {
+                var tile = _grid.AllTiles[i];
+
+                if (tile.Type != TileType.House)
+                {
+                    continue;
+                }
+
+                AddTopQuad(buffer, tile.WorldCenter, half);
+                AddHouseBox(buffer, tile.WorldCenter, half);
+            }
+
+            CreateMeshObject("Terrain_House", buffer, ObjectiveColor, _materials.House);
+        }
+
+        /// <summary>
+        /// 지형지물입니다. 암반 계열과 지표 계열을 나눠 굽습니다.
+        ///
+        /// <b>콜라이더를 붙이지 않습니다.</b>
+        /// 지형지물은 통행에도, 클릭 판정에도 영향을 주면 안 됩니다.
+        /// 콜라이더가 있으면 바위를 클릭했을 때 지면이 아니라 바위 표면이 잡혀
+        /// 이동 명령이 엉뚱한 곳에 떨어집니다.
+        /// </summary>
+        private void BuildProps()
+        {
+            PropPlacement.Generate(_grid, PropDensity, _props);
+
+            if (_props.Count == 0)
             {
                 return;
             }
 
-            CreateMeshObject(layerName, buffer, fallbackColor, authoredMaterial);
+            var rock = new MeshBuffer();
+            var ground = new MeshBuffer();
+
+            for (int i = 0; i < _props.Count; i++)
+            {
+                var prop = _props[i];
+
+                PropMeshBuilder.AddBoulder(
+                    prop.IsRock ? rock : ground,
+                    prop.GroundPosition,
+                    prop.Rotation,
+                    prop.Radius,
+                    prop.Height,
+                    prop.Weathering,
+                    prop.Shape);
+            }
+
+            CreateMeshObject(
+                "Props_Rock", rock,
+                PropMaterial(RockColor, _materials.Cliff),
+                addCollider: false);
+
+            CreateMeshObject(
+                "Props_Ground", ground,
+                PropMaterial(WalkableGrassColor, _materials.Ground),
+                addCollider: false);
         }
 
         /// <summary>
@@ -179,6 +304,11 @@ namespace SRPG.Gameplay.Island
                 _materials.Water,
                 addCollider: false);
 
+            if (water == null)
+            {
+                return;
+            }
+
             var renderer = water.GetComponent<MeshRenderer>();
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
@@ -190,73 +320,6 @@ namespace SRPG.Gameplay.Island
         // ====================================================================================================
         // 5. Private Methods - Geometry
         // ====================================================================================================
-
-        /// <summary>
-        /// 메시를 쌓아 올리는 버퍼입니다.
-        ///
-        /// 정점 컬러를 함께 담습니다. 셰이더가 이 값의 R을 <b>접지 음영</b>으로 읽습니다.
-        /// 텍스처 없이 경계를 세우는 것이 이 게임 룩의 핵심이라, 그 정보가 지오메트리와 같이 만들어져야 합니다.
-        /// </summary>
-        private sealed class MeshBuffer
-        {
-            public readonly List<Vector3> Vertices = new List<Vector3>(1024);
-            public readonly List<int> Triangles = new List<int>(2048);
-            public readonly List<Color> Colors = new List<Color>(1024);
-
-            public int Count => Vertices.Count;
-
-            /// <summary>
-            /// 사각형을 추가합니다. 네 꼭짓점의 음영을 각각 받습니다.
-            ///
-            /// 방향을 일일이 계산해 감기 순서를 맞추는 대신, 만들어진 법선이 원하는 방향과 반대면 뒤집습니다.
-            /// 벽 방향마다 감기 순서를 손으로 유도하다 생기는 실수를 원천 차단하기 위한 방식입니다.
-            /// </summary>
-            public void AddQuad(
-                Vector3 a, Vector3 b, Vector3 c, Vector3 d,
-                Vector3 desiredNormal,
-                float shadeA, float shadeB, float shadeC, float shadeD)
-            {
-                Vector3 normal = Vector3.Cross(b - a, c - a);
-                bool flip = Vector3.Dot(normal, desiredNormal) < 0f;
-
-                int baseIndex = Vertices.Count;
-
-                Vertices.Add(a);
-                Vertices.Add(b);
-                Vertices.Add(c);
-                Vertices.Add(d);
-
-                Colors.Add(new Color(shadeA, 0f, 0f, 1f));
-                Colors.Add(new Color(shadeB, 0f, 0f, 1f));
-                Colors.Add(new Color(shadeC, 0f, 0f, 1f));
-                Colors.Add(new Color(shadeD, 0f, 0f, 1f));
-
-                if (flip)
-                {
-                    Triangles.Add(baseIndex + 0);
-                    Triangles.Add(baseIndex + 3);
-                    Triangles.Add(baseIndex + 2);
-                    Triangles.Add(baseIndex + 0);
-                    Triangles.Add(baseIndex + 2);
-                    Triangles.Add(baseIndex + 1);
-                }
-                else
-                {
-                    Triangles.Add(baseIndex + 0);
-                    Triangles.Add(baseIndex + 1);
-                    Triangles.Add(baseIndex + 2);
-                    Triangles.Add(baseIndex + 0);
-                    Triangles.Add(baseIndex + 2);
-                    Triangles.Add(baseIndex + 3);
-                }
-            }
-
-            /// <summary>네 꼭짓점의 음영이 같은 사각형입니다.</summary>
-            public void AddQuad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 desiredNormal, float shade)
-            {
-                AddQuad(a, b, c, d, desiredNormal, shade, shade, shade, shade);
-            }
-        }
 
         /// <summary>
         /// 타일 상단 면을 추가합니다.
@@ -275,7 +338,7 @@ namespace SRPG.Gameplay.Island
         /// 이웃보다 높은 쪽에 측면 벽을 세웁니다. 바다와 맞닿은 쪽은 수면 아래까지 내려 스커트를 만듭니다.
         ///
         /// <b>벽의 아래쪽을 어둡게 칠합니다.</b>
-        /// 지금까지는 벽과 윗면이 같은 색이라 계단 고도가 눈에 들어오지 않았습니다.
+        /// 벽과 윗면이 같은 밝기면 계단 고도가 눈에 들어오지 않습니다.
         /// 텍스처를 붙이는 대신 경계에 음영을 넣는 것이 이 룩의 방식입니다.
         /// </summary>
         private void AddSideWalls(MeshBuffer buffer, Tile tile, Vector3 center, float half)
@@ -323,10 +386,9 @@ namespace SRPG.Gameplay.Island
         private static void AddHouseBox(MeshBuffer buffer, Vector3 center, float half)
         {
             float inset = half * (1f - HouseInset);
-            float baseY = center.y;
             float topY = center.y + HouseHeight;
 
-            Vector3 min = new Vector3(center.x - inset, baseY, center.z - inset);
+            Vector3 min = new Vector3(center.x - inset, center.y, center.z - inset);
             Vector3 max = new Vector3(center.x + inset, topY, center.z + inset);
 
             // 윗면
@@ -359,7 +421,6 @@ namespace SRPG.Gameplay.Island
                 WallTopShade, WallTopShade, WallBottomShade, WallBottomShade);
         }
 
-
         // ====================================================================================================
         // 6. Private Methods - Object Creation
         // ====================================================================================================
@@ -371,31 +432,29 @@ namespace SRPG.Gameplay.Island
             Material authoredMaterial,
             bool addCollider = true)
         {
+            return CreateMeshObject(
+                objectName,
+                buffer,
+                TerrainMaterial(fallbackColor, authoredMaterial),
+                addCollider);
+        }
+
+        private GameObject CreateMeshObject(
+            string objectName,
+            MeshBuffer buffer,
+            Material material,
+            bool addCollider)
+        {
+            if (buffer.IsEmpty)
+            {
+                return null;
+            }
+
             var go = new GameObject(objectName);
             go.transform.SetParent(transform, false);
 
-            var mesh = new Mesh
-            {
-                name = objectName,
-                indexFormat = buffer.Count > 65000
-                    ? UnityEngine.Rendering.IndexFormat.UInt32
-                    : UnityEngine.Rendering.IndexFormat.UInt16,
-            };
-
-            mesh.SetVertices(buffer.Vertices);
-            mesh.SetTriangles(buffer.Triangles, 0);
-
-            // 접지 음영입니다. 셰이더가 R 채널을 읽습니다.
-            mesh.SetColors(buffer.Colors);
-
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-
+            var mesh = buffer.ToMesh(objectName);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
-
-            var material = _useAuthoredMaterials && authoredMaterial != null
-                ? authoredMaterial
-                : PrototypeVisuals.CreateTerrainMaterial(fallbackColor);
 
             go.AddComponent<MeshRenderer>().sharedMaterial = material;
 
@@ -409,6 +468,41 @@ namespace SRPG.Gameplay.Island
             }
 
             return go;
+        }
+
+        /// <summary>
+        /// 지형 재질을 고릅니다. 연결된 것이 있으면 그것을, 없으면 임시 재질을 씁니다.
+        /// </summary>
+        private Material TerrainMaterial(Color fallbackColor, Material authoredMaterial)
+        {
+            return _useAuthoredMaterials && authoredMaterial != null
+                ? authoredMaterial
+                : PrototypeVisuals.CreateTerrainMaterial(fallbackColor);
+        }
+
+        /// <summary>
+        /// 지형지물 재질을 만듭니다. 지형과 같은 색을 쓰되 외곽선만 가늘게 줄입니다.
+        ///
+        /// 지형 재질을 그대로 공유하지 않고 복제하는 이유는 두께 하나 때문입니다.
+        /// 공유하면 두께를 바꾸는 순간 지형의 외곽선까지 같이 얇아집니다.
+        /// 지형은 굵어야 경계가 서고, 지형지물은 가늘어야 형태가 보입니다.
+        /// </summary>
+        private Material PropMaterial(Color fallbackColor, Material authoredMaterial)
+        {
+            var source = TerrainMaterial(fallbackColor, authoredMaterial);
+
+            var material = new Material(source)
+            {
+                name = $"{source.name}_Prop",
+                hideFlags = HideFlags.DontSave,
+            };
+
+            if (material.HasProperty("_OutlineWidth"))
+            {
+                material.SetFloat("_OutlineWidth", PropOutlineWidth);
+            }
+
+            return material;
         }
 
         private void ClearChildren()

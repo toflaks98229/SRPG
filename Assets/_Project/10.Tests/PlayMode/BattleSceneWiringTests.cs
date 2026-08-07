@@ -145,6 +145,77 @@ namespace SRPG.Tests.PlayMode
         }
 
         /// <summary>
+        /// 지형지물이 실제로 나오는지, 그리고 <b>통행을 막지 않는지</b> 봅니다.
+        ///
+        /// 콜라이더가 붙으면 바위를 클릭했을 때 지면이 아니라 바위 표면이 잡혀
+        /// 이동 명령이 엉뚱한 곳에 떨어집니다. 길을 막는 것은 지형이지 장식이 아닙니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 지형지물이_나오고_통행을_막지_않는다()
+        {
+            yield return LoadBattleScene();
+
+            var island = Object.FindFirstObjectByType<IslandView>();
+            Assert.IsNotNull(island, "섬이 만들어지지 않았습니다.");
+
+            int propObjects = 0;
+
+            foreach (Transform child in island.transform)
+            {
+                if (!child.name.StartsWith("Props_"))
+                {
+                    continue;
+                }
+
+                propObjects++;
+
+                Assert.IsNull(
+                    child.GetComponent<Collider>(),
+                    $"{child.name} 에 콜라이더가 있습니다. 클릭 판정과 통행을 방해합니다.");
+
+                var filter = child.GetComponent<MeshFilter>();
+                Assert.IsNotNull(filter, $"{child.name} 에 메시가 없습니다.");
+                Assert.Greater(filter.sharedMesh.vertexCount, 0, $"{child.name} 의 메시가 비어 있습니다.");
+            }
+
+            Assert.Greater(propObjects, 0, "지형지물이 하나도 만들어지지 않았습니다.");
+        }
+
+        /// <summary>
+        /// 걸을 수 있는 윗면과 딛을 수 없는 암반이 <b>다른 메시</b>로 갈라져 있는지 봅니다.
+        ///
+        /// 한 메시에 섞여 있으면 재질을 따로 줄 수 없고,
+        /// 잔디 재질의 수직 벽이 생겨 절벽인지 언덕인지 읽히지 않습니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 윗면과_암반이_다른_메시로_갈라진다()
+        {
+            yield return LoadBattleScene();
+
+            var island = Object.FindFirstObjectByType<IslandView>();
+
+            Transform rock = island.transform.Find("Terrain_Rock");
+            Assert.IsNotNull(rock, "암반 메시가 없습니다. 측면이 윗면과 같은 메시에 섞여 있습니다.");
+
+            bool hasTop = false;
+
+            foreach (Transform child in island.transform)
+            {
+                if (child.name.StartsWith("Terrain_Top_"))
+                {
+                    hasTop = true;
+
+                    Assert.AreNotSame(
+                        rock.GetComponent<MeshRenderer>().sharedMaterial,
+                        child.GetComponent<MeshRenderer>().sharedMaterial,
+                        $"{child.name} 이 암반과 같은 재질을 씁니다. 딛을 수 있는지가 색으로 구분되지 않습니다.");
+                }
+            }
+
+            Assert.IsTrue(hasTop, "걸을 수 있는 윗면 메시가 없습니다.");
+        }
+
+        /// <summary>
         /// 유닛이 빌보드로 나오는지 봅니다.
         ///
         /// <see cref="SRPG.Data.UnitDefinition.Prefab"/>이 연결되어 있으면 부트스트랩은 프리팹을 씁니다.
