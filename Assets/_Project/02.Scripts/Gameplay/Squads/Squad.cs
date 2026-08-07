@@ -32,9 +32,6 @@ namespace SRPG.Gameplay.Squads
         // 1. Constants
         // ====================================================================================================
 
-        /// <summary>앵커가 다음 경로점으로 넘어가는 거리입니다.</summary>
-        private const float WaypointReachDistance = 0.2f;
-
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -43,10 +40,11 @@ namespace SRPG.Gameplay.Squads
         private readonly List<GridCoord> _path = new List<GridCoord>(64);
         private readonly List<Vector3> _slots = new List<Vector3>(12);
 
+        /// <summary>앵커 전진은 적 분대와 공유하는 순수 로직입니다.</summary>
+        private readonly FormationMotor _motor = new FormationMotor();
+
         private BattleContext _context;
         private Unit _commander;
-        private Vector3 _anchorPosition;
-        private int _pathIndex;
         private float _anchorSpeed = 3f;
 
         // ====================================================================================================
@@ -63,10 +61,10 @@ namespace SRPG.Gameplay.Squads
         public SquadState State { get; private set; } = SquadState.Idle;
 
         /// <summary>분대 진형의 중심 월드 좌표입니다.</summary>
-        public Vector3 AnchorPosition => _anchorPosition;
+        public Vector3 AnchorPosition => _motor.Anchor;
 
         /// <summary>분대가 명령받은 목적지 좌표입니다.</summary>
-        public GridCoord OrderedCoord { get; private set; } = GridCoord.Invalid;
+        public GridCoord OrderedCoord => _motor.Destination;
 
         /// <summary>분대의 표시 이름입니다.</summary>
         public string DisplayName { get; private set; } = "분대";
@@ -87,7 +85,7 @@ namespace SRPG.Gameplay.Squads
         /// 명령받은 지점에 도착했는지 여부입니다.
         /// 진형을 잡을지 말지를 가르는 유일한 기준입니다.
         /// </summary>
-        public bool HasArrived => _path.Count == 0 || _pathIndex >= _path.Count;
+        public bool HasArrived => _motor.HasArrived;
 
         // ====================================================================================================
         // 4. Events
@@ -149,15 +147,14 @@ namespace SRPG.Gameplay.Squads
             DisplayName = displayName;
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);
 
-            _anchorPosition = context.Grid.CoordToWorld(spawnCoord);
-            OrderedCoord = spawnCoord;
+            _motor.Teleport(context.Grid.CoordToWorld(spawnCoord), spawnCoord);
             _anchorSpeed = definition.MoveSpeed * context.Tuning.AnchorSpeedFactor;
 
             // 초기 배치 칸도 점유해 두어야 다른 분대가 그 위로 명령받지 않습니다.
             context.Occupancy.Claim(spawnCoord, this);
 
             int total = Mathf.Max(1, soldierCount) + 1; // 지휘관 1명 포함
-            FormationSolver.SolveRings(_anchorPosition, total, context.Tuning.FormationSpacing, _slots);
+            FormationSolver.SolveRings(_motor.Anchor, total, context.Tuning.FormationSpacing, _slots);
 
             for (int i = 0; i < total; i++)
             {
@@ -195,13 +192,13 @@ namespace SRPG.Gameplay.Squads
                 return false;
             }
 
-            var startCoord = _context.Grid.WorldToCoord(_anchorPosition);
+            var startCoord = _context.Grid.WorldToCoord(_motor.Anchor);
 
             // 앵커가 통행 불가 지점에 있으면 가장 가까운 통행 가능 타일에서 출발합니다.
             var startTile = _context.Grid.GetTile(startCoord);
             if (startTile == null || !startTile.IsWalkable)
             {
-                var nearest = _context.Grid.FindNearestWalkable(_anchorPosition);
+                var nearest = _context.Grid.FindNearestWalkable(_motor.Anchor);
                 if (nearest == null)
                 {
                     return false;
@@ -235,8 +232,7 @@ namespace SRPG.Gameplay.Squads
 
             _context.Occupancy.Claim(resolved, this);
 
-            OrderedCoord = resolved;
-            _pathIndex = 0;
+            _motor.SetPath(_path, resolved);
             State = SquadState.Moving;
             return true;
         }
@@ -246,18 +242,15 @@ namespace SRPG.Gameplay.Squads
         /// </summary>
         public void StopOrder()
         {
-            _path.Clear();
-            _pathIndex = 0;
-
             if (_context == null)
             {
-                OrderedCoord = GridCoord.Invalid;
+                _motor.Stop(GridCoord.Invalid);
                 return;
             }
 
             // 멈춘 자리를 새 점유 칸으로 삼습니다.
-            var here = _context.Grid.WorldToCoord(_anchorPosition);
-            OrderedCoord = here;
+            var here = _context.Grid.WorldToCoord(_motor.Anchor);
+            _motor.Stop(here);
             _context.Occupancy.Claim(here, this);
         }
 
@@ -338,35 +331,11 @@ namespace SRPG.Gameplay.Squads
         // ====================================================================================================
 
         /// <summary>
-        /// 앵커를 경로를 따라 전진시킵니다.
+        /// 앵커를 경로를 따라 전진시킵니다. 실제 계산은 적 분대와 공유하는 <see cref="FormationMotor"/>가 합니다.
         /// </summary>
         private void AdvanceAnchor(float deltaTime)
         {
-            if (HasArrived)
-            {
-                return;
-            }
-
-            Vector3 waypoint = _context.Grid.CoordToWorld(_path[_pathIndex]);
-
-            Vector3 flatAnchor = new Vector3(_anchorPosition.x, 0f, _anchorPosition.z);
-            Vector3 flatWaypoint = new Vector3(waypoint.x, 0f, waypoint.z);
-
-            if (Vector3.Distance(flatAnchor, flatWaypoint) <= WaypointReachDistance)
-            {
-                _pathIndex++;
-                if (_pathIndex >= _path.Count)
-                {
-                    _path.Clear();
-                    _pathIndex = 0;
-                }
-
-                return;
-            }
-
-            Vector3 direction = (flatWaypoint - flatAnchor).normalized;
-            _anchorPosition += direction * (_anchorSpeed * deltaTime);
-            _anchorPosition.y = _context.Grid.SampleGroundHeight(_anchorPosition);
+            _motor.Advance(deltaTime, _anchorSpeed, _context.Grid);
         }
 
         /// <summary>
@@ -389,13 +358,13 @@ namespace SRPG.Gameplay.Squads
             {
                 for (int i = 0; i < count; i++)
                 {
-                    _units[i]?.SetSlotTarget(_anchorPosition);
+                    _units[i]?.SetSlotTarget(_motor.Anchor);
                 }
 
                 return;
             }
 
-            FormationSolver.SolveRings(_anchorPosition, count, _context.Tuning.FormationSpacing, _slots);
+            FormationSolver.SolveRings(_motor.Anchor, count, _context.Tuning.FormationSpacing, _slots);
 
             int slotCursor = 1; // 0번은 지휘관 자리로 비워 둡니다.
 

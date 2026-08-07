@@ -4,6 +4,7 @@ using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Squads;
 using SRPG.Systems.Grid;
+using SRPG.Systems.Spatial;
 using UnityEngine;
 
 namespace SRPG.Tests
@@ -72,7 +73,7 @@ namespace SRPG.Tests
         [Test]
         public void 점유하면_다른_분대에게_막힌다()
         {
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var alpha = CreateSquad("Alpha");
             var bravo = CreateSquad("Bravo");
             var coord = WalkableAt(0);
@@ -87,7 +88,7 @@ namespace SRPG.Tests
         [Test]
         public void 새로_점유하면_이전_칸이_풀린다()
         {
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var alpha = CreateSquad("Alpha");
 
             var first = WalkableAt(0);
@@ -103,7 +104,7 @@ namespace SRPG.Tests
         [Test]
         public void 해제하면_다시_비어_있다()
         {
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var alpha = CreateSquad("Alpha");
             var coord = WalkableAt(0);
 
@@ -120,7 +121,7 @@ namespace SRPG.Tests
         [Test]
         public void 빈_칸을_요청하면_그대로_돌려준다()
         {
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var alpha = CreateSquad("Alpha");
             var coord = WalkableAt(0);
 
@@ -131,7 +132,7 @@ namespace SRPG.Tests
         [Test]
         public void 점유된_칸을_요청하면_가까운_빈_칸으로_보정한다()
         {
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var alpha = CreateSquad("Alpha");
             var bravo = CreateSquad("Bravo");
 
@@ -149,7 +150,7 @@ namespace SRPG.Tests
         public void 보정된_칸은_원래_목적지에_인접할_만큼_가깝다()
         {
             // 한 칸 빗나간 클릭 때문에 분대가 엉뚱한 곳으로 가면 조작이 고장 난 것처럼 느껴집니다.
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var alpha = CreateSquad("Alpha");
             var bravo = CreateSquad("Bravo");
 
@@ -166,7 +167,7 @@ namespace SRPG.Tests
         public void 자기가_점유한_칸은_보정하지_않는다()
         {
             // 같은 자리에 다시 명령했을 때 옆 칸으로 밀려나면 안 됩니다.
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var alpha = CreateSquad("Alpha");
             var coord = WalkableAt(5);
 
@@ -179,7 +180,7 @@ namespace SRPG.Tests
         [Test]
         public void 통행_불가_칸을_요청하면_통행_가능한_칸으로_보정한다()
         {
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var alpha = CreateSquad("Alpha");
 
             // 격자 테두리는 항상 바다입니다. 다만 바다 한가운데는 탐색 반경 안에 육지가 없을 수 있으므로,
@@ -208,7 +209,7 @@ namespace SRPG.Tests
         public void 서로_다른_분대는_결국_서로_다른_칸을_갖는다()
         {
             // 여러 분대가 같은 칸을 연달아 노려도 최종 점유는 겹치지 않아야 합니다.
-            var occupancy = new SquadOccupancy();
+            var occupancy = new TileOccupancy<Squad>(s => s == null || s.IsDestroyed);
             var target = WalkableAt(30);
 
             var claims = new List<GridCoord>();

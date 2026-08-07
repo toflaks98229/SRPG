@@ -56,6 +56,14 @@ namespace SRPG.Gameplay.Enemies
         private int _remainingUnits;
         private float _unloadTimer;
 
+        /// <summary>
+        /// 이 배가 내려놓는 병력이 이루는 분대입니다.
+        ///
+        /// <b>배 한 척이 곧 분대 하나입니다.</b> 같은 배에서 내린 병력은 같은 판단으로 함께 움직입니다.
+        /// 그래야 상륙정의 접근이 "저 해안에 분대 하나가 온다"는 예고로 읽힙니다.
+        /// </summary>
+        private EnemySquad _squad;
+
         // ====================================================================================================
         // 4. Properties
         // ====================================================================================================
@@ -221,8 +229,27 @@ namespace SRPG.Gameplay.Enemies
                 return;
             }
 
-            var agent = unit.gameObject.AddComponent<EnemyAgent>();
-            agent.Initialize(_context, unit);
+            EnsureSquad().AddUnit(unit);
+        }
+
+        /// <summary>
+        /// 이 배의 분대를 확보합니다. 첫 병력이 내릴 때 만듭니다.
+        /// 배가 떠난 뒤에도 분대는 남아야 하므로 배의 자식으로 두지 않습니다.
+        /// </summary>
+        private EnemySquad EnsureSquad()
+        {
+            if (_squad != null)
+            {
+                return _squad;
+            }
+
+            var squadObject = new GameObject($"EnemySquad_{_landingTile.Coord}");
+            squadObject.transform.SetParent(transform.parent, worldPositionStays: false);
+
+            _squad = squadObject.AddComponent<EnemySquad>();
+            _squad.Initialize(_context, _landingTile.WorldCenter);
+
+            return _squad;
         }
 
         private void FaceTowards(Vector3 target)

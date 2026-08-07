@@ -1,9 +1,11 @@
 ﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
+using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Squads;
 using SRPG.Gameplay.Units;
 using SRPG.Gameplay.Weapons;
+using SRPG.Systems.AI;
 using SRPG.Systems.Grid;
 using SRPG.Systems.Pathfinding;
 using SRPG.Systems.Spatial;
@@ -42,6 +44,13 @@ namespace SRPG.Gameplay.Battle
         /// </summary>
         private readonly List<Unit> _candidateBuffer = new List<Unit>(64);
 
+        private readonly InfluenceMap _playerThreat;
+        private readonly InfluenceMap _enemyThreat;
+
+        /// <summary>영향력 맵을 마지막으로 다시 만든 시각입니다. 진영별로 따로 셉니다.</summary>
+        private float _playerThreatTime = float.NegativeInfinity;
+        private float _enemyThreatTime = float.NegativeInfinity;
+
         // ====================================================================================================
         // 2. Properties
         // ====================================================================================================
@@ -69,9 +78,19 @@ namespace SRPG.Gameplay.Battle
         public BattleTuning Tuning { get; }
 
         /// <summary>
-        /// 분대의 타일 점유 현황입니다. 한 칸에 분대 하나만 자리 잡을 수 있게 강제합니다.
+        /// 플레이어 분대의 타일 점유 현황입니다. 한 칸에 분대 하나만 자리 잡을 수 있게 강제합니다.
         /// </summary>
-        public SquadOccupancy Occupancy { get; } = new SquadOccupancy();
+        public TileOccupancy<Squad> Occupancy { get; } =
+            new TileOccupancy<Squad>(squad => squad == null || squad.IsDestroyed);
+
+        /// <summary>
+        /// 적 분대의 타일 점유 현황입니다.
+        ///
+        /// 플레이어와 <b>따로</b> 관리합니다. 하나로 합치면 적이 플레이어가 선 칸을 목적지로 삼을 수 없게 되는데,
+        /// 그건 "공격하지 말라"는 뜻이 되어 버립니다.
+        /// </summary>
+        public TileOccupancy<EnemySquad> EnemyOccupancy { get; } =
+            new TileOccupancy<EnemySquad>(squad => squad == null || squad.IsDisbanded);
 
         /// <summary>플레이어 유닛 목록입니다.</summary>
         public IReadOnlyList<Unit> PlayerUnits => _playerUnits;
@@ -97,6 +116,9 @@ namespace SRPG.Gameplay.Battle
 
             _playerIndex = CreateUnitIndex(grid);
             _enemyIndex = CreateUnitIndex(grid);
+
+            _playerThreat = new InfluenceMap(grid);
+            _enemyThreat = new InfluenceMap(grid);
         }
 
         /// <summary>
@@ -282,6 +304,82 @@ namespace SRPG.Gameplay.Battle
             RebuildIndex(_playerIndex, _playerUnits);
             RebuildIndex(_enemyIndex, _enemyUnits);
         }
+
+        // ====================================================================================================
+        // 7. Public Methods - Influence
+        // ====================================================================================================
+
+        /// <summary>
+        /// 지정 진영이 뿜는 위협 영향력 맵을 반환합니다.
+        ///
+        /// 갱신 비용이 격자 크기에 비례하므로 매 프레임 다시 만들지 않고 <b>주기적으로만</b> 갱신합니다.
+        /// AI가 0.1초 늦게 아는 것은 문제가 되지 않습니다. 어차피 목표 재판단 자체가 그보다 드뭅니다.
+        ///
+        /// 공간 색인과 같은 방식으로, <b>첫 조회가 스스로</b> 갱신 여부를 판단합니다.
+        /// 어딘가의 Update에 갱신을 두면 "AI보다 먼저 돌아야 한다"는 숨은 순서 조건이 생깁니다.
+        /// </summary>
+        public InfluenceMap GetThreatMap(Team team)
+        {
+            float now = UnityEngine.Time.time;
+            float interval = Mathf.Max(0.02f, Tuning.InfluenceRefreshInterval);
+
+            if (team == Team.Player)
+            {
+                if (now - _playerThreatTime >= interval)
+                {
+                    _playerThreatTime = now;
+                    RebuildThreat(_playerThreat, _playerUnits);
+                }
+
+                return _playerThreat;
+            }
+
+            if (now - _enemyThreatTime >= interval)
+            {
+                _enemyThreatTime = now;
+                RebuildThreat(_enemyThreat, _enemyUnits);
+            }
+
+            return _enemyThreat;
+        }
+
+        /// <summary>
+        /// 영향력 맵을 다음 조회 때 다시 만들도록 표시합니다.
+        /// 평소에는 주기적으로 갱신되므로 부를 일이 없습니다. 테스트에서만 필요합니다.
+        /// </summary>
+        public void InvalidateThreatMaps()
+        {
+            _playerThreatTime = float.NegativeInfinity;
+            _enemyThreatTime = float.NegativeInfinity;
+        }
+
+        /// <summary>
+        /// 유닛 위치를 발생원으로 삼아 위협을 다시 펼칩니다.
+        ///
+        /// 세기를 체력 비율로 두는 것이 핵심입니다. 반쯤 죽은 분대는 위협도 절반입니다.
+        /// 그래야 적이 "약해진 쪽을 노린다"는 판단을 별도 규칙 없이 하게 됩니다.
+        /// </summary>
+        private void RebuildThreat(InfluenceMap map, List<Unit> units)
+        {
+            map.Clear();
+
+            for (int i = 0; i < units.Count; i++)
+            {
+                var unit = units[i];
+                if (unit == null || !unit.IsAlive)
+                {
+                    continue;
+                }
+
+                map.AddSourceWorld(unit.Position, Mathf.Max(0.05f, unit.HealthRatio));
+            }
+
+            map.Propagate(Tuning.InfluenceDecayPerTile);
+        }
+
+        // ====================================================================================================
+        // 8. Private Methods
+        // ====================================================================================================
 
         private static void RebuildIndex(SpatialGrid<Unit> index, List<Unit> units)
         {

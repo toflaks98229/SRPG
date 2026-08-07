@@ -3,6 +3,7 @@ using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.CameraControl;
+using SRPG.Gameplay.Debugging;
 using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Island;
 using SRPG.Gameplay.Selection;
@@ -65,6 +66,10 @@ namespace SRPG.Composition
         [SerializeField]
         [Tooltip("디버그 HUD를 표시합니다.")]
         private bool _showDebugHud = true;
+
+        [SerializeField]
+        [Tooltip("AI 판단(위협 영향력·목표)을 씬 뷰에 기즈모로 그립니다. 게임 화면에는 나오지 않습니다.")]
+        private bool _showAiDebugOverlay = true;
 
         [SerializeField]
         [Tooltip("씬에 카메라와 조명이 없으면 자동으로 만듭니다.")]
@@ -153,6 +158,7 @@ namespace SRPG.Composition
             SpawnPlayerSquads(grid);
             BuildSpawner(waves);
             BuildHud();
+            BuildAiOverlay();
         }
 
         /// <summary>
@@ -291,6 +297,23 @@ namespace SRPG.Composition
 
             var hud = hudObject.AddComponent<BattleDebugHud>();
             hud.Initialize(_context, _selectionController, _spawner);
+        }
+
+        /// <summary>
+        /// AI 판단을 씬 뷰에 그리는 오버레이를 붙입니다.
+        /// 기즈모라 게임 화면에는 나오지 않고 빌드에도 남지 않습니다.
+        /// </summary>
+        private void BuildAiOverlay()
+        {
+            if (!_showAiDebugOverlay)
+            {
+                return;
+            }
+
+            var overlayObject = new GameObject("AiDebugOverlay");
+            overlayObject.transform.SetParent(_runtimeRoot, false);
+
+            overlayObject.AddComponent<AiDebugOverlay>().Initialize(_context);
         }
 
         // ====================================================================================================

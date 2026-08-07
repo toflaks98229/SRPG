@@ -3,6 +3,7 @@ using SRPG.Common;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Selection;
+using SRPG.Systems.AI;
 using UnityEngine;
 
 namespace SRPG.UI.HUD
@@ -129,6 +130,8 @@ namespace SRPG.UI.HUD
                 }
             }
 
+            AppendEnemySquads();
+
             _builder.AppendLine();
             _builder.AppendLine("<b>── 조작 ──</b>");
             _builder.AppendLine("좌클릭(분대 근처): 선택");
@@ -139,6 +142,39 @@ namespace SRPG.UI.HUD
             _builder.AppendLine("<i>선택 중에는 시간이 느려집니다</i>");
 
             return _builder.ToString();
+        }
+
+        /// <summary>
+        /// 적 분대가 무슨 판단을 했는지 씁니다.
+        ///
+        /// AI를 튜닝할 때 가장 먼저 보게 되는 정보입니다.
+        /// "가옥으로 가는가, 분대를 치러 가는가"와 그 판단의 점수가 여기 나옵니다.
+        /// 실제 경로는 씬 뷰의 <c>AiDebugOverlay</c> 기즈모로 확인합니다.
+        /// </summary>
+        private void AppendEnemySquads()
+        {
+            var squads = Object.FindObjectsByType<EnemySquad>(FindObjectsSortMode.None);
+
+            _builder.AppendLine();
+            _builder.AppendLine($"<b>── 적 분대 ({squads.Length}) ──</b>");
+
+            if (squads.Length == 0)
+            {
+                _builder.AppendLine("상륙한 적이 없습니다.");
+                return;
+            }
+
+            for (int i = 0; i < squads.Length; i++)
+            {
+                var squad = squads[i];
+                if (squad == null || squad.IsDisbanded)
+                {
+                    continue;
+                }
+
+                string goal = squad.GoalKind == GoalKind.House ? "가옥" : "분대";
+                _builder.AppendLine($"   {squad.AliveCount}명 → {goal} {squad.GoalCoord}  ({squad.GoalScore:F2})");
+            }
         }
 
         /// <summary>
