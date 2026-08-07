@@ -322,6 +322,7 @@ namespace SRPG.Gameplay.Enemies
             }
 
             FormationSolver.SolveRings(_motor.Anchor, count, _context.Tuning.FormationSpacing, _slots);
+            FormationSolver.ClampToWalkable(_context.Grid, _motor.Anchor, _slots);
 
             // 가까운 병사에게 자리를 줍니다. 순서대로 나눠 주면 대열을 가로질러 걸어갑니다.
             RefreshAssignment(count);

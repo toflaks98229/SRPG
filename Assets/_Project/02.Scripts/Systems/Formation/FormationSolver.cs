@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using SRPG.Systems.Grid;
 using UnityEngine;
 
 namespace SRPG.Systems.Formation
@@ -74,7 +75,74 @@ namespace SRPG.Systems.Formation
         }
 
         // ====================================================================================================
-        // 2. Public Methods - Grid (방향 기반, 현재 미사용)
+        // 1-1. Public Methods - Walkability
+        // ====================================================================================================
+
+        /// <summary>
+        /// 지형에 걸린 슬롯을 앵커 쪽으로 끌어당깁니다.
+        ///
+        /// <b>왜 필요한가</b>
+        ///
+        /// 진형은 순수한 기하로 계산됩니다. 앵커가 절벽이나 물가에 가까우면
+        /// 슬롯 몇 개가 <b>갈 수 없는 자리에</b> 생깁니다.
+        ///
+        /// 그 자리를 배정받은 병사는 영영 도착하지 못합니다.
+        /// 벽에 붙어 계속 밀기만 하고, 도착 판정이 서지 않으니 교전도 시작하지 않습니다.
+        /// 분대는 도착했다고 판단하는데 그 한 명만 벽에 붙어 있는, 눈에 잘 안 띄는 낙오입니다.
+        ///
+        /// 앵커 쪽으로 조금씩 당겨 보고 설 수 있는 첫 지점을 씁니다.
+        /// 끝까지 못 찾으면 앵커 자체를 줍니다. 거기 모이면 분리 조향이 알아서 흩어 놓습니다.
+        /// </summary>
+        /// <param name="grid">지형입니다.</param>
+        /// <param name="anchor">진형의 중심입니다. 항상 설 수 있는 자리로 전제합니다.</param>
+        /// <param name="slots">검사하고 필요하면 옮길 슬롯 목록입니다.</param>
+        /// <param name="samples">앵커까지 몇 단계로 나눠 시도할지입니다.</param>
+        public static void ClampToWalkable(IslandGrid grid, Vector3 anchor, List<Vector3> slots, int samples = 4)
+        {
+            if (grid == null || slots == null)
+            {
+                return;
+            }
+
+            int steps = Mathf.Max(1, samples);
+
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (GroundMotion.TryStand(grid, slots[i], out float height))
+                {
+                    // 지면 높이까지 맞춰 둡니다. 계단 지형에서 슬롯이 공중에 뜨지 않게 합니다.
+                    var settled = slots[i];
+                    settled.y = height;
+                    slots[i] = settled;
+                    continue;
+                }
+
+                slots[i] = PullTowardAnchor(grid, anchor, slots[i], steps);
+            }
+        }
+
+        /// <summary>
+        /// 슬롯을 앵커 쪽으로 당겨 설 수 있는 첫 지점을 찾습니다.
+        /// </summary>
+        private static Vector3 PullTowardAnchor(IslandGrid grid, Vector3 anchor, Vector3 slot, int steps)
+        {
+            for (int step = 1; step <= steps; step++)
+            {
+                float t = (float)step / steps;
+                Vector3 candidate = Vector3.Lerp(slot, anchor, t);
+
+                if (GroundMotion.TryStand(grid, candidate, out float height))
+                {
+                    candidate.y = height;
+                    return candidate;
+                }
+            }
+
+            return anchor;
+        }
+
+        // ====================================================================================================
+        // 2. Public Methods - Grid (방향 기반)
         // ====================================================================================================
 
         /// <summary>

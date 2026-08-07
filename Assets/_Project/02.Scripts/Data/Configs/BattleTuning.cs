@@ -76,11 +76,23 @@ namespace SRPG.Data
                  "밀고 들어갈 공간이 없는데 힘을 주면 서로 통과하거나 어색하게 미끄러집니다.")]
         public float MeleeLungeMinDistance = 0.7f;
 
+        [Range(0f, 4f)]
+        [Tooltip("아군끼리 서로 밀어내는 세기입니다.\n" +
+                 "0이면 병사들이 겹쳐 서고, 크면 진형이 부풀어 슬롯을 벗어납니다.")]
+        public float AllySeparationWeight = 1.6f;
+
         [Range(0f, 2f)]
         [Tooltip("<b>적</b>과 서로 밀어내는 세기입니다. 아군끼리보다 약해야 합니다.\n" +
                  "0이면 난전에서 몸이 그대로 겹쳐 어느 쪽이 어디 있는지 알 수 없습니다.\n" +
                  "크면 서로 다가가지 못해 영영 칼이 닿지 않습니다.")]
         public float EnemySeparationWeight = 0.6f;
+
+        [Range(1f, 30f)]
+        [Tooltip("분리 힘이 목표값을 따라가는 속도입니다. <b>작을수록 부드럽습니다.</b>\n" +
+                 "값을 그대로 더하면 이웃이 반경에 드나들 때마다 속도가 계단처럼 튀어\n" +
+                 "옆 사람이 다가왔을 뿐인데 홱 밀려나는 것처럼 보입니다.\n" +
+                 "너무 낮추면 반응이 늦어 병사들이 잠깐 겹쳤다 떨어집니다.")]
+        public float SeparationSmoothing = 8f;
 
         [Header("유닛")]
         [Min(0f)]

@@ -5,6 +5,7 @@ using SRPG.Data;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Weapons;
 using SRPG.Systems.Combat;
+using SRPG.Systems.Grid;
 using SRPG.Systems.Pathfinding;
 using UnityEngine;
 
@@ -38,9 +39,6 @@ namespace SRPG.Gameplay.Units
 
         /// <summary>도착 감속이 시작되는 거리입니다.</summary>
         private const float ArriveSlowRadius = 1.2f;
-
-        /// <summary>분리 조향의 가중치입니다. 값이 크면 서로 더 강하게 밀어냅니다.</summary>
-        private const float SeparationWeight = 1.6f;
 
         /// <summary>이동 중으로 판정하는 최소 속도입니다. 창병의 이동 중 공격 금지 판정에 사용합니다.</summary>
         private const float MovingSpeedThreshold = 0.25f;
@@ -107,6 +105,14 @@ namespace SRPG.Gameplay.Units
         /// 밀려나는 것과 뛰어드는 것은 결과가 달라야 합니다.
         /// </summary>
         private Vector3 _lungeVelocity;
+
+        /// <summary>
+        /// 부드럽게 따라가는 분리 성분입니다.
+        ///
+        /// 계산된 값을 그대로 더하면 이웃이 반경에 드나들 때마다 속도가 계단처럼 튑니다.
+        /// 옆 사람이 조금 다가왔을 뿐인데 홱 밀려나는 것처럼 보입니다.
+        /// </summary>
+        private Vector3 _separationVelocity;
         private Transform _transform;
 
         private readonly List<Unit> _neighborBuffer = new List<Unit>(16);
@@ -129,6 +135,10 @@ namespace SRPG.Gameplay.Units
 
         /// <summary>방패병이 몸을 돌릴 위협 대상입니다. 공격 대상과는 별개입니다.</summary>
         private Unit _threatSource;
+
+        /// <summary>분대가 지정한 대기 방향입니다. 교전 대상이 없을 때 이쪽을 봅니다.</summary>
+        private Vector3 _idleFacing;
+        private bool _hasIdleFacing;
 
         private float _threatScanTimer;
 
@@ -220,11 +230,15 @@ namespace SRPG.Gameplay.Units
             // 경직 중이거나 공격 동작에 붙잡힌 동안에는 스스로 움직이지 않습니다.
             // 넉백은 그와 무관하게 계속 적용됩니다. 맞고 밀려나는 도중에 버티면 넉백이 무의미해집니다.
             bool canSteer = _staggerTimer <= 0f && _rootTimer <= 0f;
-            Vector3 steering = canSteer ? ComputeSteering() : Vector3.zero;
+            Vector3 steering = canSteer ? ComputeSteering(deltaTime) : Vector3.zero;
 
             // 이동 여부를 여기서 한 번만 정합니다.
             // 전투 규칙(창병의 이동 중 공격 금지)과 무기의 자세가 같은 판단을 봐야 합니다.
             // 각자 계산하면 "창을 들고 걷는데 공격은 나가는" 어긋남이 생깁니다.
+            //
+            // <b>조향(=자리 옮김)만 셉니다. 회전은 이동이 아닙니다.</b>
+            // 제자리에서 고개를 돌리는 것은 창을 세워 들 이유가 되지 않습니다.
+            // 창병이 위협 쪽으로 몸을 틀면서도 계속 찌를 수 있어야 방어선이 성립합니다.
             IsMoving = steering.sqrMagnitude > MovingSpeedThreshold * MovingSpeedThreshold;
 
             TickCombat(deltaTime);
@@ -256,6 +270,7 @@ namespace SRPG.Gameplay.Units
             _slotTarget = _transform.position;
             _knockbackVelocity = Vector3.zero;
             _lungeVelocity = Vector3.zero;
+            _separationVelocity = Vector3.zero;
             _staggerTimer = 0f;
             _rootTimer = 0f;
 
@@ -471,6 +486,23 @@ namespace SRPG.Gameplay.Units
         public void SetSlotTarget(Vector3 worldPosition)
         {
             _slotTarget = worldPosition;
+        }
+
+        /// <summary>
+        /// 교전 대상이 없을 때 바라볼 방향을 분대가 지정합니다.
+        ///
+        /// 이게 없으면 대기 중인 병사는 <b>마지막으로 걷던 방향</b>을 그대로 보고 서 있습니다.
+        /// 분대가 해안을 등지고 도착하면 전원이 섬 안쪽을 보고 선 채로 상륙을 맞이합니다.
+        /// </summary>
+        public void SetIdleFacing(Vector3 direction)
+        {
+            direction.y = 0f;
+
+            if (direction.sqrMagnitude > 0.0001f)
+            {
+                _idleFacing = direction.normalized;
+                _hasIdleFacing = true;
+            }
         }
 
         // ====================================================================================================
@@ -749,7 +781,7 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 이번 프레임의 목표 속도를 계산합니다. 도착 조향과 분리 조향의 합입니다.
         /// </summary>
-        private Vector3 ComputeSteering()
+        private Vector3 ComputeSteering(float deltaTime)
         {
             Vector3 position = Position;
             Vector3 destination = _slotTarget;
@@ -807,7 +839,9 @@ namespace SRPG.Gameplay.Units
 
             // 아군끼리 겹치지 않도록 밀어냅니다.
             float separationRadius = _definition.Radius * 2.4f;
-            velocity += ComputeSeparation(position, separationRadius, _team, this, SeparationWeight);
+
+            Vector3 separation = ComputeSeparation(
+                position, separationRadius, _team, this, _context.Tuning.AllySeparationWeight);
 
             // 적과도 밀어냅니다. 다만 <b>약하게</b>입니다.
             //
@@ -815,12 +849,21 @@ namespace SRPG.Gameplay.Units
             // 그렇다고 아군만큼 세게 밀면 서로 다가가지 못해 영영 칼이 닿지 않습니다.
             // 부딪히되 뚫고 지나가지는 않는 정도가 필요합니다.
             var enemyTeam = _team == Team.Player ? Team.Enemy : Team.Player;
-            velocity += ComputeSeparation(
-                position,
-                separationRadius,
-                enemyTeam,
-                null,
-                _context.Tuning.EnemySeparationWeight);
+            separation += ComputeSeparation(
+                position, separationRadius, enemyTeam, null, _context.Tuning.EnemySeparationWeight);
+
+            // <b>분리 성분만 따로 부드럽게 따라갑니다.</b>
+            //
+            // 계산된 값을 그대로 더하면, 이웃이 반경에 들어오거나 슬롯 배정이 바뀌는 순간
+            // 속도가 계단처럼 튑니다. 옆 사람이 다가왔을 뿐인데 홱 밀려나는 것처럼 보입니다.
+            // 도착 조향은 원래 부드러우므로 여기만 눌러 주면 됩니다.
+            float smoothing = Mathf.Max(0.01f, _context.Tuning.SeparationSmoothing);
+            _separationVelocity = Vector3.Lerp(
+                _separationVelocity,
+                separation,
+                1f - Mathf.Exp(-smoothing * deltaTime));
+
+            velocity += _separationVelocity;
 
             // 최대 속도를 넘지 않게 제한합니다.
             float maxSpeed = _definition.MoveSpeed;
@@ -1002,32 +1045,22 @@ namespace SRPG.Gameplay.Units
         private bool ResolveGround(Vector3 position, ref Vector3 next)
         {
             var grid = _context.Grid;
-            var nextTile = grid.GetTile(grid.WorldToCoord(next));
 
-            bool isWater = nextTile == null || nextTile.IsWater;
+            // 익사 판정이 먼저입니다.
+            // 미끄러짐을 먼저 보면 밀려나던 유닛이 물가를 따라 스르륵 비껴가고, 물이 위험 요소가 아니게 됩니다.
             bool beingKnockedBack = _knockbackVelocity.sqrMagnitude > DrownKnockbackThreshold * DrownKnockbackThreshold;
 
-            if (isWater)
+            if (beingKnockedBack && GroundMotion.IsWater(grid, next))
             {
-                if (beingKnockedBack)
-                {
-                    Drown(next);
-                    return false;
-                }
-
-                // 스스로는 물에 들어가지 않습니다.
-                next = position;
-                return true;
+                Drown(next);
+                return false;
             }
 
-            if (!nextTile.IsWalkable)
-            {
-                // 절벽·바위는 넉백으로도 통과할 수 없습니다.
-                next = position;
-                return true;
-            }
-
-            next.y = nextTile.WorldCenter.y;
+            // 막혔으면 벽을 따라 미끄러집니다.
+            //
+            // 예전에는 제자리에 멈췄습니다. 벽에 비스듬히 다가가는 병사는 어느 축으로도 못 나아가
+            // 그 자리에서 굳고, 분대는 떠나가고 그 한 명만 낙오했습니다.
+            next = GroundMotion.Resolve(grid, position, next);
             return true;
         }
 
@@ -1060,11 +1093,21 @@ namespace SRPG.Gameplay.Units
 
                 facing = lookTarget - position;
             }
+            else if (TryGetThreatFacing(position, out var threatFacing))
+            {
+                // 방패를 든 채 서 있는 병사는 위협 쪽으로 몸을 돌립니다.
+                // 방패는 정면만 막으므로 어디를 보고 서 있느냐가 곧 방어력입니다.
+                facing = threatFacing;
+            }
+            else if (IsMoving)
+            {
+                // 걷는 중에는 가는 쪽을 봅니다.
+                facing = steering;
+            }
             else
             {
-                // 교전 대상이 없어도, 방패를 든 채 서 있는 병사는 위협 쪽으로 몸을 돌립니다.
-                // 방패는 정면만 막으므로 어디를 보고 서 있느냐가 곧 방어력입니다.
-                facing = TryGetThreatFacing(position, out var threatFacing) ? threatFacing : steering;
+                // 멈춰 서 있으면 분대가 지정한 방향을 봅니다. 보통 해안선이나 적의 진로입니다.
+                facing = _hasIdleFacing ? _idleFacing : steering;
             }
 
             facing.y = 0f;

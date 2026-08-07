@@ -45,6 +45,14 @@ namespace SRPG.Systems.Grid
         public List<Tile> HouseTiles { get; } = new List<Tile>();
 
         /// <summary>
+        /// 물과 맞닿은 통행 가능 타일입니다. 곧 해안선입니다.
+        ///
+        /// 침공은 언제나 바다에서 옵니다. 그래서 "어느 쪽이 바깥인가"가 곧 "어느 쪽을 봐야 하는가"입니다.
+        /// 매번 전체 타일을 훑지 않도록 파생 정보를 만들 때 함께 모아 둡니다.
+        /// </summary>
+        public List<Tile> CoastalTiles { get; } = new List<Tile>();
+
+        /// <summary>
         /// 상륙 구역 목록입니다. 각 항목은 하나의 해안 구역을 이루는 해변 타일들입니다.
         /// 적 상륙정은 구역 단위로 접근합니다.
         /// </summary>
@@ -154,6 +162,32 @@ namespace SRPG.Systems.Grid
         }
 
         /// <summary>
+        /// 가장 가까운 해안 타일을 찾습니다. 없으면 null입니다.
+        ///
+        /// 방어 부대가 어느 쪽을 보고 설지 정하는 근거입니다.
+        /// 해안선 목록만 훑으므로 섬 전체를 훑는 것보다 훨씬 쌉니다.
+        /// </summary>
+        public Tile FindNearestCoastal(Vector3 world)
+        {
+            Tile best = null;
+            float bestSqr = float.MaxValue;
+
+            for (int i = 0; i < CoastalTiles.Count; i++)
+            {
+                var tile = CoastalTiles[i];
+                float sqr = (tile.WorldCenter - world).sqrMagnitude;
+
+                if (sqr < bestSqr)
+                {
+                    bestSqr = sqr;
+                    best = tile;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>
         /// 월드 좌표의 지면 높이를 반환합니다. 격자 밖이거나 통행 불가면 해수면(0)으로 봅니다.
         /// 유닛과 분대 앵커를 지면에 붙이는 데 사용합니다.
         /// </summary>
@@ -198,6 +232,7 @@ namespace SRPG.Systems.Grid
         {
             WalkableTiles.Clear();
             HouseTiles.Clear();
+            CoastalTiles.Clear();
 
             var buffer = new Tile[4];
 
@@ -237,6 +272,11 @@ namespace SRPG.Systems.Grid
                 if (tile.IsWalkable)
                 {
                     WalkableTiles.Add(tile);
+                }
+
+                if (tile.IsCoastal)
+                {
+                    CoastalTiles.Add(tile);
                 }
 
                 if (tile.Type == TileType.House)

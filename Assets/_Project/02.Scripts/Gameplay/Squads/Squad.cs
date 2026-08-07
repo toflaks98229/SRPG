@@ -4,6 +4,7 @@ using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Units;
+using SRPG.Systems.Combat;
 using SRPG.Systems.Formation;
 using UnityEngine;
 
@@ -38,6 +39,12 @@ namespace SRPG.Gameplay.Squads
         /// <summary>전열이 향할 방향을 다시 살피는 주기(초)입니다.</summary>
         private const float FacingScanInterval = 0.4f;
 
+        /// <summary>적이 분대에 닿았다고 보는 거리(칸)입니다. 접근 예측의 목표 지점이 됩니다.</summary>
+        private const float ContactRangeTiles = 1.5f;
+
+        /// <summary>방향 예측의 상한(초)입니다. 너무 길면 먼 적의 진로에 전열이 끌려다닙니다.</summary>
+        private const float FacingLeadSeconds = 1.5f;
+
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -52,7 +59,22 @@ namespace SRPG.Gameplay.Squads
 
         private float _assignmentTimer;
         private float _facingScanTimer;
+        /// <summary>
+        /// 병사들이 <b>고개를 돌릴</b> 방향입니다. 계속 갱신되며 슬롯에는 영향을 주지 않습니다.
+        /// </summary>
         private Vector3 _lineFacing = Vector3.forward;
+
+        /// <summary>
+        /// 진형이 세워진 방향입니다. 도착할 때 한 번 정해지고 그 자리에 머무는 동안 바뀌지 않습니다.
+        ///
+        /// 시선과 나눠 둔 이유가 있습니다. 이 값이 바뀌면 슬롯이 전부 옮겨지고
+        /// 병사들이 자리를 다시 찾아 걸어갑니다. 그 이동이 곧 재정렬 비용이고,
+        /// 창병에게는 "이동 중 공격 불가"로 이어져 아예 못 싸우게 됩니다.
+        /// </summary>
+        private Vector3 _formationFacing = Vector3.forward;
+
+        /// <summary>이번 정지 지점에서 진형을 이미 세웠는지 여부입니다.</summary>
+        private bool _hasFormedUp;
 
         /// <summary>앵커 전진은 적 분대와 공유하는 순수 로직입니다.</summary>
         private readonly FormationMotor _motor = new FormationMotor();
@@ -168,6 +190,11 @@ namespace SRPG.Gameplay.Squads
 
             // 초기 배치 칸도 점유해 두어야 다른 분대가 그 위로 명령받지 않습니다.
             context.Occupancy.Claim(spawnCoord, this);
+
+            // 배치되자마자 해안을 봅니다. 첫 갱신을 기다리면 한순간 엉뚱한 쪽을 보고 서 있습니다.
+            _lineFacing = ComputeFacing();
+            _formationFacing = _lineFacing;
+            _hasFormedUp = true;
 
             int total = Mathf.Max(1, soldierCount) + 1; // 지휘관 1명 포함
             FormationSolver.SolveRings(_motor.Anchor, total, context.Tuning.FormationSpacing, _slots);
@@ -371,6 +398,17 @@ namespace SRPG.Gameplay.Squads
                 return;
             }
 
+            // 병사 개인이 바라볼 방향입니다. 계속 갱신합니다.
+            //
+            // <b>회전은 이동이 아닙니다.</b> 제자리에서 고개만 돌리는 것이라
+            // 슬롯이 움직이지 않고, 따라서 재정렬 이동도 창병의 공격 불가도 일어나지 않습니다.
+            Vector3 lookDirection = ResolveFacing();
+
+            for (int i = 0; i < count; i++)
+            {
+                _units[i]?.SetIdleFacing(lookDirection);
+            }
+
             if (!HasArrived)
             {
                 for (int i = 0; i < count; i++)
@@ -378,10 +416,22 @@ namespace SRPG.Gameplay.Squads
                     _units[i]?.SetSlotTarget(_motor.Anchor);
                 }
 
+                _hasFormedUp = false;
                 return;
             }
 
-            SolveSlots(count);
+            // 도착하는 순간 진형 방향을 <b>한 번만</b> 확정하고, 그 뒤로는 건드리지 않습니다.
+            //
+            // 매번 다시 잡으면 위협이 조금만 움직여도 전열이 통째로 돌아가고,
+            // 슬롯이 전부 옮겨져 병사들이 자리를 다시 찾아 걸어갑니다.
+            // 그 이동 때문에 창병은 계속 "이동 중"이 되어 영영 찌르지 못합니다.
+            if (!_hasFormedUp)
+            {
+                _formationFacing = lookDirection;
+                _hasFormedUp = true;
+            }
+
+            SolveSlots(count, _formationFacing);
             RefreshAssignment(count);
 
             for (int i = 0; i < count; i++)
@@ -403,17 +453,22 @@ namespace SRPG.Gameplay.Squads
         /// 창은 정면 좁은 각도만 위험하므로 <b>옆으로 늘어서야</b> 방어선이 됩니다.
         /// 검과 활은 사방에서 오는 위협에 대응해야 하므로 동심원이 낫습니다.
         /// </summary>
-        private void SolveSlots(int count)
+        private void SolveSlots(int count, Vector3 facing)
         {
             float spacing = _context.Tuning.FormationSpacing;
 
-            if (!PrefersLineFormation())
+            if (PrefersLineFormation())
+            {
+                FormationSolver.SolveGrid(_motor.Anchor, facing, count, spacing, _slots);
+            }
+            else
             {
                 FormationSolver.SolveRings(_motor.Anchor, count, spacing, _slots);
-                return;
             }
 
-            FormationSolver.SolveGrid(_motor.Anchor, ResolveFacing(), count, spacing, _slots);
+            // 절벽이나 물에 걸린 슬롯을 안쪽으로 당깁니다.
+            // 그러지 않으면 그 자리를 받은 병사가 벽에 붙어 영영 도착하지 못합니다.
+            FormationSolver.ClampToWalkable(_context.Grid, _motor.Anchor, _slots);
         }
 
         /// <summary>이 분대가 횡대를 선호하는지 무기에게 묻습니다.</summary>
@@ -431,31 +486,93 @@ namespace SRPG.Gameplay.Squads
         }
 
         /// <summary>
-        /// 전열이 향할 방향입니다. 가장 가까운 적 쪽을 봅니다.
+        /// 분대가 바라볼 방향입니다.
         ///
-        /// 적이 없으면 마지막으로 걸어온 방향을 유지합니다.
-        /// 그러지 않으면 적이 죽는 순간 전열이 홱 돌아갑니다.
+        /// <b>우선순위</b>
+        ///   1. 공격자가 있으면 <b>그들이 다가오는 길</b>을 봅니다
+        ///   2. 없으면 <b>해안선</b>을 봅니다. 침공은 언제나 바다에서 오기 때문입니다
+        ///   3. 둘 다 없으면 마지막 방향을 유지합니다
+        ///
+        /// 2번이 기본값인 것이 중요합니다.
+        /// 예전에는 적이 없으면 월드 +Z를 보고 서 있었습니다. 아무 의미 없는 방향이라,
+        /// 창병 전열이 바다를 등지고 서는 그림이 나왔습니다.
+        /// 방어 부대가 아무 일도 없을 때 바다를 보고 서 있는 것은 그 자체로 옳습니다.
         /// </summary>
         private Vector3 ResolveFacing()
         {
             if (_facingScanTimer <= 0f)
             {
                 _facingScanTimer = FacingScanInterval;
+                _lineFacing = ComputeFacing();
+            }
 
-                var enemy = _context.FindNearestEnemy(_motor.Anchor, Team.Player, _context.Tuning.ShieldThreatRadius);
-                if (enemy != null)
+            return _lineFacing;
+        }
+
+        private Vector3 ComputeFacing()
+        {
+            Vector3 anchor = _motor.Anchor;
+
+            var enemy = _context.FindNearestEnemy(anchor, Team.Player, _context.Tuning.ShieldThreatRadius);
+            if (enemy != null && TryResolveApproachFacing(anchor, enemy, out Vector3 approach))
+            {
+                return approach;
+            }
+
+            var coast = _context.Grid.FindNearestCoastal(anchor);
+            if (coast != null)
+            {
+                Vector3 toCoast = coast.WorldCenter - anchor;
+                toCoast.y = 0f;
+
+                if (toCoast.sqrMagnitude > 0.0001f)
                 {
-                    Vector3 toEnemy = enemy.Position - _motor.Anchor;
-                    toEnemy.y = 0f;
-
-                    if (toEnemy.sqrMagnitude > 0.0001f)
-                    {
-                        _lineFacing = toEnemy.normalized;
-                    }
+                    return toCoast.normalized;
                 }
             }
 
             return _lineFacing;
+        }
+
+        /// <summary>
+        /// 공격자가 다가오는 길을 봅니다.
+        ///
+        /// 지금 서 있는 자리가 아니라 <b>닿을 자리</b>를 겨눕니다.
+        /// 옆으로 흘러가는 적을 그대로 따라 보면 전열이 함께 돌아가 옆구리를 내줍니다.
+        /// 창병의 조준과 같은 계산을 씁니다.
+        /// </summary>
+        private bool TryResolveApproachFacing(Vector3 anchor, Unit enemy, out Vector3 facing)
+        {
+            float contactRange = _context.Grid.CellSize * ContactRangeTiles;
+
+            Vector3 arrival = AimPredictor.PredictApproachPoint(
+                anchor,
+                enemy.Position,
+                enemy.Velocity,
+                contactRange,
+                extraLeadSeconds: 0f,
+                maxLeadSeconds: FacingLeadSeconds);
+
+            facing = arrival - anchor;
+            facing.y = 0f;
+
+            if (facing.sqrMagnitude > 0.0001f)
+            {
+                facing.Normalize();
+                return true;
+            }
+
+            // 이미 코앞이면 예측이 무의미합니다. 현재 위치를 그대로 봅니다.
+            facing = enemy.Position - anchor;
+            facing.y = 0f;
+
+            if (facing.sqrMagnitude > 0.0001f)
+            {
+                facing.Normalize();
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
