@@ -35,6 +35,9 @@ namespace SRPG.Gameplay.Weapons
         /// </summary>
         protected ProjectilePool ProjectilePool { get; private set; }
 
+        /// <summary>전투 튜닝 수치입니다. 무기별 감각을 재컴파일 없이 조정하는 통로입니다.</summary>
+        protected BattleTuning Tuning { get; private set; }
+
         /// <summary>무기 모델이 붙는 트랜스폼입니다. 프리팹에서 연결하거나 런타임에 만듭니다.</summary>
         [SerializeField]
         [Tooltip("무기 모델의 루트입니다. 공격 동작에서 이 트랜스폼을 움직입니다.")]
@@ -62,6 +65,20 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>공격을 시작할 때 소유자를 제자리에 붙잡는 시간입니다.</summary>
         public virtual float RootDuration => Definition != null ? Definition.AttackRootDuration : 0f;
 
+        /// <summary>
+        /// 대열을 풀고 적에게 다가갈 수 있는 최대 <b>격자 거리</b>입니다. 0이면 자리를 지킵니다.
+        ///
+        /// <b>왜 무기가 정하는가</b>
+        ///
+        /// 대열을 풀어도 되는지는 무기의 성격입니다.
+        /// 검을 든 병사는 한두 걸음 나가 베는 것이 자연스럽지만,
+        /// 창병이 대열을 풀면 그 순간 창병이 아니게 되고, 궁수가 앞으로 나가면 궁수가 아니게 됩니다.
+        ///
+        /// 기본값은 0입니다. <b>기본은 자리를 지키는 것</b>이고, 나서는 쪽이 예외입니다.
+        /// 반대로 두면 새 무기를 추가할 때마다 "얘도 대열을 풀면 안 되는데"를 매번 기억해야 합니다.
+        /// </summary>
+        public virtual float FormationBreakTiles => 0f;
+
         // ====================================================================================================
         // 3. Public Methods
         // ====================================================================================================
@@ -72,11 +89,17 @@ namespace SRPG.Gameplay.Weapons
         /// <param name="owner">이 무기를 든 유닛입니다.</param>
         /// <param name="definition">소유자의 정의 데이터입니다.</param>
         /// <param name="projectilePool">투사체 재사용 풀입니다. 없어도 동작합니다.</param>
-        public virtual void Initialize(Unit owner, UnitDefinition definition, ProjectilePool projectilePool = null)
+        /// <param name="tuning">전투 튜닝입니다. 없으면 무기가 코드 기본값으로 동작합니다.</param>
+        public virtual void Initialize(
+            Unit owner,
+            UnitDefinition definition,
+            ProjectilePool projectilePool = null,
+            BattleTuning tuning = null)
         {
             Owner = owner;
             Definition = definition;
             ProjectilePool = projectilePool;
+            Tuning = tuning;
 
             if (WeaponPivot == null)
             {
@@ -162,6 +185,29 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>공격하지 않는 동안 매 프레임 호출됩니다.</summary>
         protected virtual void OnIdleTick(float deltaTime)
         {
+        }
+
+        // ====================================================================================================
+        // 5. Aiming
+        // ====================================================================================================
+
+        /// <summary>
+        /// 이 무기가 겨누고 싶은 지점을 알려 줍니다.
+        ///
+        /// 기본값은 "따로 없음"입니다. 그러면 소유자는 대상의 현재 위치를 그대로 바라봅니다.
+        /// 창처럼 <b>적이 올 자리를 미리 겨눠야</b> 하는 무기가 이걸 재정의합니다.
+        ///
+        /// 이 갈래가 무기 쪽에 있는 이유가 있습니다.
+        /// 겨누는 방식은 무기의 성격이지 유닛의 성격이 아닙니다.
+        /// <c>Unit</c>에 병과별 분기를 넣기 시작하면 무기를 늘릴 때마다 액터가 두꺼워집니다.
+        /// </summary>
+        /// <param name="target">현재 교전 대상입니다.</param>
+        /// <param name="aimPoint">겨눌 월드 좌표입니다.</param>
+        /// <returns>겨눌 지점이 따로 있으면 true입니다.</returns>
+        public virtual bool TryGetAimPoint(Unit target, out Vector3 aimPoint)
+        {
+            aimPoint = Vector3.zero;
+            return false;
         }
 
         /// <summary>무기 모델이 없을 때 기본 형상을 만듭니다.</summary>

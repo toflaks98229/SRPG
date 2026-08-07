@@ -137,6 +137,13 @@ namespace SRPG.Gameplay.Units
         /// <summary>넉백으로 경직된 상태인지 여부입니다.</summary>
         public bool IsStaggered => _staggerTimer > 0f;
 
+        /// <summary>
+        /// 스스로 이동 중인지 여부입니다. 넉백에 밀려나는 것은 포함하지 않습니다.
+        ///
+        /// 창병의 "이동 중 공격 금지"와 무기의 운반 자세가 <b>같은 이 값</b>을 봅니다.
+        /// </summary>
+        public bool IsMoving { get; private set; }
+
         // ====================================================================================================
         // 5. Events
         // ====================================================================================================
@@ -174,7 +181,12 @@ namespace SRPG.Gameplay.Units
             bool canSteer = _staggerTimer <= 0f && _rootTimer <= 0f;
             Vector3 steering = canSteer ? ComputeSteering() : Vector3.zero;
 
-            TickCombat(deltaTime, steering);
+            // 이동 여부를 여기서 한 번만 정합니다.
+            // 전투 규칙(창병의 이동 중 공격 금지)과 무기의 자세가 같은 판단을 봐야 합니다.
+            // 각자 계산하면 "창을 들고 걷는데 공격은 나가는" 어긋남이 생깁니다.
+            IsMoving = steering.sqrMagnitude > MovingSpeedThreshold * MovingSpeedThreshold;
+
+            TickCombat(deltaTime);
             ApplyMovement(steering, deltaTime);
         }
 
@@ -432,7 +444,7 @@ namespace SRPG.Gameplay.Units
                 };
             }
 
-            _weapon.Initialize(this, _definition, _context.ProjectilePool);
+            _weapon.Initialize(this, _definition, _context.ProjectilePool, _context.Tuning);
         }
 
         // ====================================================================================================
@@ -494,22 +506,34 @@ namespace SRPG.Gameplay.Units
 
             bool atSlot = slotDistance <= SlotArrivalThreshold;
 
-            // 슬롯에 도착했는데 적이 사거리 밖이면, 리시 범위 안에서만 접근합니다.
-            if (atSlot && _target != null && _target.IsAlive)
+            // 얼마나 나설 수 있는지는 무기가 정합니다. 창병과 궁수는 0이라 자리를 지킵니다.
+            float leash = GetFormationBreakDistance();
+
+            // 대열을 풀 수 있는 병과는 <b>행군 중에도</b> 눈앞의 적에게 붙습니다.
+            // 자리를 잡은 뒤에만 나서게 하면 행군로에 선 적을 그냥 지나쳐 가 버립니다.
+            bool mayEngage = atSlot || leash > 0f;
+
+            if (mayEngage && _target != null && _target.IsAlive)
             {
+                // 리시는 자기 자리(행군 중이면 앵커)에서 잽니다.
+                // 분대가 지나가 버리면 거리가 벌어져 자연히 교전을 접고 따라붙습니다.
+                // 별도의 "복귀" 규칙 없이 이 한 줄이 이탈 시간을 스스로 제한합니다.
+                bool withinLeash = leash > 0f
+                                   && Vector3.Distance(_target.Position, _slotTarget) <= leash;
+
                 float targetDistance = Vector3.Distance(position, _target.Position);
-                if (targetDistance > _definition.AttackRange)
+
+                if (targetDistance <= _definition.AttackRange)
                 {
-                    float targetToSlot = Vector3.Distance(_target.Position, _slotTarget);
-                    if (targetToSlot <= _context.Tuning.ChaseLeash)
+                    // 사거리 안입니다. 자리를 지키는 병과이거나 아직 리시 안이면 멈춰 싸웁니다.
+                    if (atSlot || withinLeash)
                     {
-                        destination = _target.Position;
+                        destination = position;
                     }
                 }
-                else
+                else if (withinLeash)
                 {
-                    // 사거리 안이면 멈춰서 싸웁니다.
-                    destination = position;
+                    destination = _target.Position;
                 }
             }
 
@@ -539,6 +563,23 @@ namespace SRPG.Gameplay.Units
             return velocity;
         }
 
+        /// <summary>
+        /// 대열을 풀고 나갈 수 있는 월드 거리입니다.
+        ///
+        /// 무기는 <b>칸</b> 단위로 말하고, 여기서 타일 크기를 곱해 월드 거리로 바꿉니다.
+        /// 칸으로 두는 이유는 이 게임의 공간 단위가 타일이기 때문입니다.
+        /// "2칸까지 나간다"는 기획 의도가 타일 크기를 바꿔도 그대로 유지됩니다.
+        /// </summary>
+        private float GetFormationBreakDistance()
+        {
+            if (_weapon == null)
+            {
+                return 0f;
+            }
+
+            return _weapon.FormationBreakTiles * _context.Grid.CellSize;
+        }
+
         // ====================================================================================================
         // 12. Private Methods - Combat
         // ====================================================================================================
@@ -547,7 +588,7 @@ namespace SRPG.Gameplay.Units
         /// 무기 동작을 진행시키고, 조건이 맞으면 새 공격을 시작합니다.
         /// 실제 타격 판정은 무기가 수행합니다.
         /// </summary>
-        private void TickCombat(float deltaTime, Vector3 steering)
+        private void TickCombat(float deltaTime)
         {
             if (_weapon == null)
             {
@@ -567,8 +608,7 @@ namespace SRPG.Gameplay.Units
             }
 
             // 창병 규칙: 이동 중에는 공격하지 않습니다. 자리를 먼저 잡도록 강제하는 장치입니다.
-            bool isMoving = steering.magnitude > MovingSpeedThreshold;
-            if (isMoving && !_definition.CanAttackWhileMoving)
+            if (IsMoving && !_definition.CanAttackWhileMoving)
             {
                 return;
             }
@@ -666,7 +706,23 @@ namespace SRPG.Gameplay.Units
         {
             bool hasTarget = _target != null && _target.IsAlive;
 
-            Vector3 facing = hasTarget ? _target.Position - position : steering;
+            Vector3 facing;
+
+            if (hasTarget)
+            {
+                // 무기가 겨눌 자리를 따로 가지고 있으면 그쪽을 봅니다.
+                // 창은 적이 지금 있는 곳이 아니라 <b>올 자리</b>를 미리 겨눕니다.
+                Vector3 lookTarget = _weapon != null && _weapon.TryGetAimPoint(_target, out var aimPoint)
+                    ? aimPoint
+                    : _target.Position;
+
+                facing = lookTarget - position;
+            }
+            else
+            {
+                facing = steering;
+            }
+
             facing.y = 0f;
 
             if (facing.sqrMagnitude <= 0.0001f)
