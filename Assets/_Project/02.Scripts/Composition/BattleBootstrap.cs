@@ -86,6 +86,7 @@ namespace SRPG.Composition
         private SquadSelectionController _selectionController;
         private EnemySpawner _spawner;
         private Transform _unitRoot;
+        private Transform _shadowRoot;
 
         private UnitDefinition[] _playerRoster;
         private UnitDefinition[] _enemyRoster;
@@ -439,7 +440,29 @@ namespace SRPG.Composition
             }
 
             unit.Initialize(definition, team, _context, isCommander);
+            AttachContactShadow(unit, definition);
+
             return unit;
+        }
+
+        /// <summary>
+        /// 유닛 발밑에 접지 그림자를 답니다.
+        ///
+        /// 프리팹 경로와 프리미티브 경로가 함께 지나는 자리라 여기 한 번만 붙이면 됩니다.
+        ///
+        /// <b>왜 필요한가</b>
+        /// 빌보드는 평면이라 지면과 닿는 면이 없습니다.
+        /// 방향광 그림자만으로는 유닛이 어디에 서 있는지 읽히지 않고, 카메라를 돌리면 떠 보입니다.
+        /// </summary>
+        private void AttachContactShadow(Unit unit, UnitDefinition definition)
+        {
+            if (_shadowRoot == null)
+            {
+                _shadowRoot = CreateChild("Shadows");
+            }
+
+            // 발자국보다 조금 넓어야 그림자로 읽힙니다. 딱 맞으면 유닛에 가려 안 보입니다.
+            ContactShadow.Attach(unit.transform, _context.Grid, definition.Radius * 1.4f, _shadowRoot);
         }
 
         /// <summary>
@@ -564,6 +587,9 @@ namespace SRPG.Composition
 
         /// <summary>
         /// 방향광이 없으면 하나 만듭니다. 조명이 없으면 지형이 전부 검게 보입니다.
+        ///
+        /// 환경광은 조명을 만들지 않더라도 맞춥니다.
+        /// 씬에 조명만 있고 환경광이 기본값이면 절벽 그늘이 새까맣게 죽습니다.
         /// </summary>
         private void EnsureLight()
         {
@@ -571,6 +597,8 @@ namespace SRPG.Composition
             {
                 return;
             }
+
+            BattleLighting.ApplyAmbient();
 
             var existing = FindAnyObjectByType<Light>();
             if (existing != null && existing.type == LightType.Directional)
@@ -580,13 +608,9 @@ namespace SRPG.Composition
 
             var lightObject = new GameObject("BattleLight");
             lightObject.transform.SetParent(_runtimeRoot, false);
-            lightObject.transform.rotation = Quaternion.Euler(48f, 138f, 0f);
 
-            var light = lightObject.AddComponent<Light>();
-            light.type = LightType.Directional;
-            light.intensity = 1.15f;
-            light.color = new Color(1f, 0.97f, 0.9f);
-            light.shadows = LightShadows.Soft;
+            // 값은 BattleLighting이 정합니다. 여기에 숫자를 적으면 씬 빌더와 조용히 어긋납니다.
+            BattleLighting.ApplyDirectional(lightObject.AddComponent<Light>());
         }
     }
 }

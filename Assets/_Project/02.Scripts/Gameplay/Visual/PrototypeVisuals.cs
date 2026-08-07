@@ -20,6 +20,9 @@ namespace SRPG.Gameplay.Visual
         /// <summary>2.5D 유닛 빌보드 셰이더의 이름입니다.</summary>
         public const string BillboardShaderName = "SRPG/Billboard";
 
+        /// <summary>접지 그림자 셰이더의 이름입니다.</summary>
+        public const string ContactShadowShaderName = "SRPG/ContactShadow";
+
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ShadeColorId = Shader.PropertyToID("_ShadeColor");
         private static readonly int OutlineWidthId = Shader.PropertyToID("_OutlineWidth");
@@ -27,7 +30,18 @@ namespace SRPG.Gameplay.Visual
         private static Mesh s_capsuleMesh;
         private static Mesh s_cubeMesh;
         private static Mesh s_groundedQuadMesh;
+        private static Mesh s_centeredQuadMesh;
+        private static Material s_contactShadowMaterial;
         private static bool s_warnedMissingShader;
+
+        /// <summary>
+        /// 병종별 빌보드 머티리얼입니다.
+        ///
+        /// 유닛마다 새로 만들면 수백 개가 생겨 배칭이 통째로 깨집니다.
+        /// 같은 병종은 같은 그림을 쓰고, 방향과 프레임은 <see cref="MaterialPropertyBlock"/>이 개별로 넘깁니다.
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<UnitDefinition, Material> s_billboardMaterials
+            = new System.Collections.Generic.Dictionary<UnitDefinition, Material>();
 
         // ====================================================================================================
         // 2. Public Methods - Material
@@ -178,6 +192,25 @@ namespace SRPG.Gameplay.Visual
             body.AddComponent<MeshFilter>().sharedMesh = GetGroundedQuadMesh();
             body.transform.localScale = new Vector3(width, height, 1f);
 
+            var renderer = body.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = GetBillboardMaterial(definition, shader);
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+
+            // 방향 판독은 이 컴포넌트가 맡습니다. 회전 자체는 셰이더가 합니다.
+            parent.gameObject.AddComponent<UnitBillboard>();
+        }
+
+        /// <summary>
+        /// 병종이 공유하는 빌보드 머티리얼을 가져옵니다. 없으면 만들어 담아 둡니다.
+        /// </summary>
+        private static Material GetBillboardMaterial(UnitDefinition definition, Shader shader)
+        {
+            // 씬을 다시 열면 머티리얼만 파괴되고 항목은 남습니다. 그때는 새로 만듭니다.
+            if (s_billboardMaterials.TryGetValue(definition, out var cached) && cached != null)
+            {
+                return cached;
+            }
+
             var material = new Material(shader)
             {
                 name = $"Billboard_{definition.name}",
@@ -187,12 +220,8 @@ namespace SRPG.Gameplay.Visual
             // 아직 스프라이트가 없습니다. 단색 실루엣만으로도 형태와 외곽선은 읽힙니다.
             material.SetColor(BaseColorId, definition.DebugColor);
 
-            var renderer = body.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = material;
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
-
-            // 방향 판독은 이 컴포넌트가 맡습니다. 회전 자체는 셰이더가 합니다.
-            parent.gameObject.AddComponent<UnitBillboard>();
+            s_billboardMaterials[definition] = material;
+            return material;
         }
 
         /// <summary>
@@ -260,6 +289,68 @@ namespace SRPG.Gameplay.Visual
 
             s_groundedQuadMesh = mesh;
             return s_groundedQuadMesh;
+        }
+
+        /// <summary>
+        /// 원점이 가운데인 1×1 쿼드입니다. 접지 그림자가 씁니다.
+        /// </summary>
+        public static Mesh GetCenteredQuadMesh()
+        {
+            if (s_centeredQuadMesh != null)
+            {
+                return s_centeredQuadMesh;
+            }
+
+            var mesh = new Mesh
+            {
+                name = "SRPG_CenteredQuad",
+                hideFlags = HideFlags.DontSave,
+            };
+
+            mesh.SetVertices(new[]
+            {
+                new Vector3(-0.5f, -0.5f, 0f),
+                new Vector3(-0.5f, 0.5f, 0f),
+                new Vector3(0.5f, 0.5f, 0f),
+                new Vector3(0.5f, -0.5f, 0f),
+            });
+
+            mesh.SetUVs(0, new[]
+            {
+                new Vector2(0f, 0f),
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 0f),
+            });
+
+            mesh.SetTriangles(new[] { 0, 1, 2, 0, 2, 3 }, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            s_centeredQuadMesh = mesh;
+            return s_centeredQuadMesh;
+        }
+
+        /// <summary>
+        /// 접지 그림자가 공유하는 머티리얼입니다.
+        ///
+        /// 유닛마다 새로 만들면 수백 개의 머티리얼이 생기고 배칭이 통째로 깨집니다.
+        /// 그림자는 전부 같은 모습이므로 하나로 충분합니다.
+        /// </summary>
+        public static Material GetSharedContactShadowMaterial(Shader shader)
+        {
+            if (s_contactShadowMaterial != null)
+            {
+                return s_contactShadowMaterial;
+            }
+
+            s_contactShadowMaterial = new Material(shader)
+            {
+                name = "SRPG_ContactShadow",
+                hideFlags = HideFlags.DontSave,
+            };
+
+            return s_contactShadowMaterial;
         }
 
         /// <summary>공유 캡슐 메시입니다.</summary>

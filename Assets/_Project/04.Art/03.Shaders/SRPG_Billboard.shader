@@ -27,7 +27,12 @@ Shader "SRPG/Billboard"
         _OutlineColor   ("Outline Color", Color)          = (0.08, 0.09, 0.11, 1)
         _OutlineWidth   ("Outline Width", Range(0, 0.3))  = 0.04
 
-        _AmbientBoost   ("Ambient Boost", Range(0, 1))    = 0.45
+        // 지형 셰이더와 <b>같은 값</b>이어야 합니다. 갈라지면 유닛만 다른 조명을 받는 것처럼 보입니다.
+        _AmbientBoost   ("Ambient Boost", Range(0, 1))    = 0.35
+
+        // 발치를 어둡게 눌러 지면에 앉힙니다.
+        _GroundShade    ("Ground Shade", Range(0, 1))     = 0.35
+
         _Cutoff         ("Alpha Cutoff", Range(0, 1))     = 0.5
 
         // 스프라이트 시트에서 이 유닛이 쓸 칸입니다.
@@ -55,6 +60,7 @@ Shader "SRPG/Billboard"
             float4 _OutlineColor;
             float  _OutlineWidth;
             float  _AmbientBoost;
+            float  _GroundShade;
             float  _Cutoff;
             float  _FrameCount;
             float  _FrameIndex;
@@ -211,13 +217,24 @@ Shader "SRPG/Billboard"
 
                 Light mainLight = GetMainLight();
 
-                // 빌보드에는 쓸 만한 노멀이 없습니다.
-                // 지형과 색조가 따로 놀지 않도록 방향광의 밝기만 완만하게 얹습니다.
-                float shading = lerp(_AmbientBoost, 1.0, saturate(mainLight.distanceAttenuation));
+                // 빌보드에는 쓸 만한 노멀이 없습니다. 그래서 <b>위</b>를 씁니다.
+                //
+                // 카메라를 향한 노멀을 쓰면 카메라를 돌릴 때마다 유닛의 밝기가 출렁입니다.
+                // 위쪽 노멀은 시점과 무관하고, 무엇보다 <b>평지의 지형면과 같은 노멀</b>입니다.
+                // 그래서 평지에 선 유닛은 발밑의 땅과 정확히 같은 밝기가 됩니다.
+                //
+                // 지형과 같은 half lambert 곡선을 그대로 씁니다. 여기서 식이 갈라지면
+                // 유닛만 다른 세계의 조명을 받는 것처럼 보입니다.
+                float lambert = dot(float3(0.0, 1.0, 0.0), mainLight.direction) * 0.5 + 0.5;
+                float shading = lerp(_AmbientBoost, 1.0, lambert);
+
+                // 발치를 어둡게 눌러 지면에 앉힙니다.
+                // 복셀 주변 차폐가 만들어 줄 그늘을, 세로 그러데이션 하나로 흉내 냅니다.
+                float grounding = lerp(1.0 - _GroundShade, 1.0, saturate(input.uv.y * 3.0));
 
                 half3 albedo = sampled.rgb * _BaseColor.rgb;
 
-                return half4(albedo * shading * mainLight.color, 1.0);
+                return half4(albedo * shading * grounding * mainLight.color, 1.0);
             }
             ENDHLSL
         }

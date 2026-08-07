@@ -2,10 +2,10 @@
 using SRPG.Composition;
 using SRPG.Data;
 using SRPG.Gameplay.CameraControl;
+using SRPG.Gameplay.Visual;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace SRPG.Editor.Tools
 {
@@ -149,27 +149,17 @@ namespace SRPG.Editor.Tools
         {
             var lightObject = new GameObject("DirectionalLight");
             lightObject.transform.SetParent(parent, false);
-            lightObject.transform.rotation = Quaternion.Euler(48f, 138f, 0f);
 
-            var light = lightObject.AddComponent<Light>();
-            light.type = LightType.Directional;
-            light.intensity = 1.15f;
-            light.color = new Color(1f, 0.97f, 0.9f);
-            light.shadows = LightShadows.Soft;
+            // 값은 BattleLighting이 정합니다. 여기에 숫자를 적으면 런타임 조명과 조용히 어긋납니다.
+            BattleLighting.ApplyDirectional(lightObject.AddComponent<Light>());
         }
 
         /// <summary>
         /// 환경광을 설정합니다.
-        /// 기본 스카이박스를 그대로 두면 절벽 그늘이 새까맣게 죽어 지형 판독이 어려워집니다.
         /// </summary>
         private static void ConfigureLighting()
         {
-            RenderSettings.skybox = null;
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.52f, 0.58f, 0.66f);
-            RenderSettings.ambientEquatorColor = new Color(0.36f, 0.38f, 0.42f);
-            RenderSettings.ambientGroundColor = new Color(0.20f, 0.20f, 0.24f);
-            RenderSettings.fog = false;
+            BattleLighting.ApplyAmbient();
         }
 
         /// <summary>
