@@ -17,12 +17,16 @@ namespace SRPG.Gameplay.Visual
         /// <summary>지형 셰이더의 이름입니다.</summary>
         public const string TerrainShaderName = "SRPG/Terrain";
 
+        /// <summary>2.5D 유닛 빌보드 셰이더의 이름입니다.</summary>
+        public const string BillboardShaderName = "SRPG/Billboard";
+
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ShadeColorId = Shader.PropertyToID("_ShadeColor");
         private static readonly int OutlineWidthId = Shader.PropertyToID("_OutlineWidth");
 
         private static Mesh s_capsuleMesh;
         private static Mesh s_cubeMesh;
+        private static Mesh s_groundedQuadMesh;
         private static bool s_warnedMissingShader;
 
         // ====================================================================================================
@@ -130,25 +134,27 @@ namespace SRPG.Gameplay.Visual
 
         /// <summary>
         /// 유닛의 임시 몸체를 만듭니다. 지휘관은 깃대를 달아 한눈에 구분되게 합니다.
+        ///
+        /// <b>몸은 빌보드 쿼드입니다.</b> 이 게임은 2.5D로 갈 예정이라, 임시 표현도 같은 형태여야
+        /// 나중에 스프라이트로 갈아 끼울 때 인상이 달라지지 않습니다.
+        /// 캡슐로 만들어 두면 "프로토타입은 그럴듯했는데 아트를 넣으니 이상하다"가 됩니다.
+        ///
+        /// 빌보드 셰이더가 없으면 캡슐로 물러납니다. 셰이더 하나 때문에 실행이 막히면 안 됩니다.
         /// </summary>
         public static GameObject CreateUnitVisual(UnitDefinition definition, Team team, bool isCommander, Material bodyMaterial)
         {
             var root = new GameObject(isCommander ? $"{definition.DisplayName}(지휘관)" : definition.DisplayName);
 
-            var body = new GameObject("Body");
-            body.transform.SetParent(root.transform, false);
-            body.transform.localPosition = new Vector3(0f, definition.DebugHeight * 0.5f, 0f);
-            body.transform.localScale = new Vector3(
-                definition.Radius * 2f,
-                definition.DebugHeight * 0.5f,
-                definition.Radius * 2f);
+            var billboardShader = Shader.Find(BillboardShaderName);
 
-            var bodyFilter = body.AddComponent<MeshFilter>();
-            bodyFilter.sharedMesh = GetCapsuleMesh();
-
-            var bodyRenderer = body.AddComponent<MeshRenderer>();
-            bodyRenderer.sharedMaterial = bodyMaterial;
-            bodyRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            if (billboardShader != null)
+            {
+                CreateBillboardBody(root.transform, definition, billboardShader);
+            }
+            else
+            {
+                CreateCapsuleBody(root.transform, definition, bodyMaterial);
+            }
 
             if (isCommander)
             {
@@ -158,9 +164,103 @@ namespace SRPG.Gameplay.Visual
             return root;
         }
 
+        /// <summary>
+        /// 빌보드 몸체를 만듭니다. 쿼드의 밑변이 원점에 오도록 만들어 발이 지면에 닿게 합니다.
+        /// </summary>
+        private static void CreateBillboardBody(Transform parent, UnitDefinition definition, Shader shader)
+        {
+            var body = new GameObject("Body");
+            body.transform.SetParent(parent, false);
+
+            float width = definition.Radius * 2.2f;
+            float height = definition.DebugHeight;
+
+            body.AddComponent<MeshFilter>().sharedMesh = GetGroundedQuadMesh();
+            body.transform.localScale = new Vector3(width, height, 1f);
+
+            var material = new Material(shader)
+            {
+                name = $"Billboard_{definition.name}",
+                hideFlags = HideFlags.DontSave,
+            };
+
+            // 아직 스프라이트가 없습니다. 단색 실루엣만으로도 형태와 외곽선은 읽힙니다.
+            material.SetColor(BaseColorId, definition.DebugColor);
+
+            var renderer = body.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+
+            // 방향 판독은 이 컴포넌트가 맡습니다. 회전 자체는 셰이더가 합니다.
+            parent.gameObject.AddComponent<UnitBillboard>();
+        }
+
+        /// <summary>
+        /// 캡슐 몸체를 만듭니다. 빌보드 셰이더가 없을 때의 폴백입니다.
+        /// </summary>
+        private static void CreateCapsuleBody(Transform parent, UnitDefinition definition, Material bodyMaterial)
+        {
+            var body = new GameObject("Body");
+            body.transform.SetParent(parent, false);
+            body.transform.localPosition = new Vector3(0f, definition.DebugHeight * 0.5f, 0f);
+            body.transform.localScale = new Vector3(
+                definition.Radius * 2f,
+                definition.DebugHeight * 0.5f,
+                definition.Radius * 2f);
+
+            body.AddComponent<MeshFilter>().sharedMesh = GetCapsuleMesh();
+
+            var renderer = body.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = bodyMaterial;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+        }
+
         // ====================================================================================================
         // 4. Public Methods - Shared Meshes
         // ====================================================================================================
+
+        /// <summary>
+        /// 밑변이 원점에 오는 1×1 쿼드입니다. 빌보드 몸체가 씁니다.
+        ///
+        /// 유니티 기본 쿼드는 원점이 가운데라 그대로 쓰면 유닛이 땅에 반쯤 박힙니다.
+        /// 발밑을 원점으로 두면 지면에 세우기만 하면 정확히 서 있습니다.
+        /// </summary>
+        public static Mesh GetGroundedQuadMesh()
+        {
+            if (s_groundedQuadMesh != null)
+            {
+                return s_groundedQuadMesh;
+            }
+
+            var mesh = new Mesh
+            {
+                name = "SRPG_GroundedQuad",
+                hideFlags = HideFlags.DontSave,
+            };
+
+            mesh.SetVertices(new[]
+            {
+                new Vector3(-0.5f, 0f, 0f),
+                new Vector3(-0.5f, 1f, 0f),
+                new Vector3(0.5f, 1f, 0f),
+                new Vector3(0.5f, 0f, 0f),
+            });
+
+            mesh.SetUVs(0, new[]
+            {
+                new Vector2(0f, 0f),
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 0f),
+            });
+
+            mesh.SetTriangles(new[] { 0, 1, 2, 0, 2, 3 }, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            s_groundedQuadMesh = mesh;
+            return s_groundedQuadMesh;
+        }
 
         /// <summary>공유 캡슐 메시입니다.</summary>
         public static Mesh GetCapsuleMesh()
