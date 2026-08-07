@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NUnit.Framework;
+using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.Grid;
 using SRPG.Systems.Props;
@@ -144,7 +145,7 @@ namespace SRPG.Tests
             {
                 float tilt = Vector3.Angle(props[i].Rotation * Vector3.up, Vector3.up);
 
-                Assert.Less(tilt, 20f, $"{tilt:F1}도 기울었습니다. 넘어진 것처럼 보입니다.");
+                Assert.Less(tilt, 32f, $"{tilt:F1}도 기울었습니다. 넘어진 것처럼 보입니다.");
 
                 if (tilt > 1f)
                 {
@@ -153,6 +154,54 @@ namespace SRPG.Tests
             }
 
             Assert.Greater(tilted, props.Count * 0.8f, "대부분이 똑바로 서 있습니다.");
+        }
+
+        /// <summary>
+        /// 비탈에 선 것이 평지에 선 것보다 더 기울어야 합니다.
+        ///
+        /// 전부 수직으로 세우면 경사면에서 즉시 티가 납니다 — 땅은 기울었는데
+        /// 그 위의 바위만 꼿꼿하면 붙여 놓은 것으로 보입니다.
+        /// 다만 비탈과 완전히 나란해져도 안 됩니다. 무거운 바위는 눕지 않습니다.
+        /// </summary>
+        [Test]
+        public void 비탈에_선_것이_더_기운다()
+        {
+            var grid = CreateIsland();
+            var props = Place(grid);
+
+            Assert.IsNotNull(grid.Height, "지형이 조각되지 않았습니다.");
+
+            float flatTilt = 0f;
+            int flatCount = 0;
+            float slopeTilt = 0f;
+            int slopeCount = 0;
+
+            for (int i = 0; i < props.Count; i++)
+            {
+                var position = props[i].GroundPosition;
+
+                float slope = Vector3.Angle(grid.Height.SampleNormal(position.x, position.z), Vector3.up);
+                float tilt = Vector3.Angle(props[i].Rotation * Vector3.up, Vector3.up);
+
+                if (slope < 3f)
+                {
+                    flatTilt += tilt;
+                    flatCount++;
+                }
+                else if (slope > 8f)
+                {
+                    slopeTilt += tilt;
+                    slopeCount++;
+                }
+            }
+
+            Assert.Greater(flatCount, 0, "평지에 선 것이 없습니다.");
+            Assert.Greater(slopeCount, 0, "비탈에 선 것이 없습니다.");
+
+            Assert.Greater(
+                slopeTilt / slopeCount,
+                flatTilt / flatCount,
+                "비탈에 선 것이 평지에 선 것보다 덜 기웁니다. 지표면을 따르지 않습니다.");
         }
 
         /// <summary>
@@ -226,23 +275,80 @@ namespace SRPG.Tests
         }
 
         /// <summary>
-        /// 물 위에는 아무것도 놓지 않습니다.
+        /// 물속 바위는 <b>해식애 바로 밑에만</b> 놓입니다.
+        ///
+        /// 섬의 실루엣은 격자가 가장 또렷하게 드러나는 선이라, 무너져 물에 잠긴 바위 몇 개가
+        /// 그 선을 깨 줍니다. 다만 완만한 해변 앞바다에까지 놓으면 상륙 지점만 어지럽히고
+        /// 섬 둘레에 테두리가 생겨 오히려 윤곽이 또렷해집니다.
         /// </summary>
         [Test]
-        public void 물_위에는_놓지_않는다()
+        public void 물속_바위는_해식애_밑에만_놓인다()
         {
             var grid = CreateIsland();
             var props = Place(grid);
+
+            int inWater = 0;
 
             for (int i = 0; i < props.Count; i++)
             {
                 var tile = grid.GetTile(grid.WorldToCoord(props[i].GroundPosition));
 
-                if (tile != null)
+                if (tile == null || !tile.IsWater)
                 {
-                    Assert.IsFalse(tile.IsWater, $"물 타일 {tile.Coord} 에 지형지물이 있습니다.");
+                    continue;
+                }
+
+                inWater++;
+
+                bool nextToCliffFace = false;
+
+                for (int n = 0; n < GridCoord.Neighbors8.Length; n++)
+                {
+                    var neighbor = grid.GetTile(tile.Coord + GridCoord.Neighbors8[n]);
+
+                    if (neighbor != null && !neighbor.IsWater && neighbor.Height > 0)
+                    {
+                        nextToCliffFace = true;
+                        break;
+                    }
+                }
+
+                Assert.IsTrue(nextToCliffFace, $"물 타일 {tile.Coord} 은 절벽 밑이 아닌데 바위가 있습니다.");
+            }
+
+            Assert.Less(
+                inWater,
+                props.Count * 0.15f,
+                $"물속 바위가 {inWater}개로 너무 많습니다. 섬 둘레에 테두리가 생깁니다.");
+        }
+
+        /// <summary>
+        /// 잔해는 손규칙이 아니라 <b>계산 결과</b>에서 나와야 합니다.
+        ///
+        /// 실제로 무너진 자리에 무너진 만큼 놓여야 "저기가 무너졌구나"가 읽힙니다.
+        /// 붕괴가 계산되었다면 잔해가 쌓인 표본이 반드시 존재합니다.
+        /// </summary>
+        [Test]
+        public void 붕괴가_잔해를_남긴다()
+        {
+            var grid = CreateIsland();
+
+            Assert.IsNotNull(grid.Height, "지형이 조각되지 않았습니다.");
+
+            int deposits = 0;
+
+            for (int sy = 0; sy < grid.Height.SamplesY; sy++)
+            {
+                for (int sx = 0; sx < grid.Height.SamplesX; sx++)
+                {
+                    if (grid.Height.GetTalus(sx, sy) > 0f)
+                    {
+                        deposits++;
+                    }
                 }
             }
+
+            Assert.Greater(deposits, 0, "무너져 쌓인 자리가 하나도 없습니다.");
         }
 
         /// <summary>

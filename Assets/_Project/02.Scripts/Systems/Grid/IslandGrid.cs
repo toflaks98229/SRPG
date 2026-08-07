@@ -38,6 +38,15 @@ namespace SRPG.Systems.Grid
         /// <summary>이 섬을 만들 때 사용한 시드입니다. 동일 시드는 동일 섬을 재현합니다.</summary>
         public int Seed { get; internal set; }
 
+        /// <summary>
+        /// 타일보다 촘촘한 연속 지형 높이입니다. 아직 조각되지 않았으면 null입니다.
+        ///
+        /// 타일의 <see cref="Tile.Height"/>가 <b>게임 규칙</b>이라면 이쪽은 <b>보이는 땅</b>입니다.
+        /// 통행 판정과 길찾기는 여전히 타일을 보고, 메시와 발 높이만 이쪽을 봅니다.
+        /// 둘을 섞으면 "보이는 것과 갈 수 있는 곳이 다른" 상태가 됩니다.
+        /// </summary>
+        public Landform.HeightField Height { get; internal set; }
+
         /// <summary>통행 가능한 모든 타일입니다.</summary>
         public List<Tile> WalkableTiles { get; } = new List<Tile>();
 
@@ -190,11 +199,32 @@ namespace SRPG.Systems.Grid
         /// <summary>
         /// 월드 좌표의 지면 높이를 반환합니다. 격자 밖이거나 통행 불가면 해수면(0)으로 봅니다.
         /// 유닛과 분대 앵커를 지면에 붙이는 데 사용합니다.
+        ///
+        /// <b>하이트필드가 있으면 그쪽을 봅니다.</b>
+        /// 지형 메시가 타일마다 평면이 아니라 굴곡을 가지므로, 발 높이도 같은 곡면에서 읽어야
+        /// 유닛이 땅에 박히거나 떠 있지 않습니다. 메시와 발 높이는 반드시 같은 출처여야 합니다.
         /// </summary>
         public float SampleGroundHeight(Vector3 world)
         {
             var tile = GetTile(WorldToCoord(world));
-            return tile != null && tile.IsWalkable ? tile.WorldCenter.y : 0f;
+
+            if (tile == null || !tile.IsWalkable)
+            {
+                return 0f;
+            }
+
+            return Height == null
+                ? tile.WorldCenter.y
+                : tile.WorldCenter.y + Height.SampleRelief(world.x, world.z);
+        }
+
+        /// <summary>
+        /// 월드 좌표에서의 지표면 법선입니다. 하이트필드가 없으면 수직입니다.
+        /// 지형지물을 비탈에 맞춰 세우는 데 씁니다.
+        /// </summary>
+        public Vector3 SampleGroundNormal(Vector3 world)
+        {
+            return Height == null ? Vector3.up : Height.SampleNormal(world.x, world.z);
         }
 
         // ====================================================================================================

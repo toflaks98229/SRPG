@@ -56,6 +56,14 @@ namespace SRPG.Systems.Props
         /// <summary>최대 기울기입니다. 이보다 크면 넘어진 것처럼 보입니다.</summary>
         private const float MaxTiltDegrees = 9f;
 
+        /// <summary>
+        /// 지표면 법선을 얼마나 따를지입니다. 1이면 비탈과 완전히 나란해집니다.
+        ///
+        /// 무거운 바위는 비탈면과 나란히 눕지 않습니다. 무게중심이 아래를 향하도록
+        /// 자리를 잡으며 파고들어, 지면보다 곧게 섭니다.
+        /// </summary>
+        private const float SurfaceAlignment = 0.55f;
+
         // ====================================================================================================
         // 2. Public Methods
         // ====================================================================================================
@@ -91,7 +99,17 @@ namespace SRPG.Systems.Props
             {
                 var tile = grid.AllTiles[i];
 
-                if (tile.IsWater || tile.Type == TileType.House)
+                if (tile.Type == TileType.House)
+                {
+                    continue;
+                }
+
+                // 물은 원칙적으로 비우되, 해식애 바로 밑만 예외입니다.
+                //
+                // 섬의 실루엣은 격자가 가장 또렷하게 드러나는 선입니다.
+                // 해안선이 계단 모양 직선이면 지형을 아무리 다듬어도 사각형으로 보입니다.
+                // 절벽에서 무너져 물에 잠긴 바위 몇 개가 그 선을 깨 줍니다.
+                if (tile.IsWater && !IsBelowSeaCliff(grid, tile))
                 {
                     continue;
                 }
@@ -116,7 +134,7 @@ namespace SRPG.Systems.Props
                         continue;
                     }
 
-                    results.Add(Build(seed, tile, rule, cell, n));
+                    results.Add(Build(grid, seed, tile, rule, cell, n));
                 }
             }
         }
@@ -128,7 +146,7 @@ namespace SRPG.Systems.Props
         /// <summary>
         /// 지형지물 하나의 자리·크기·방향을 정합니다.
         /// </summary>
-        private static PropInstance Build(int seed, Tile tile, PlacementRule rule, float cell, int index)
+        private static PropInstance Build(IslandGrid grid, int seed, Tile tile, PlacementRule rule, float cell, int index)
         {
             // 크기는 제곱으로 눌러 작은 쪽에 몰리게 합니다.
             // 큰 것이 흔하면 지형이 아니라 창고처럼 보입니다. 큰 것은 드물어야 큽니다.
@@ -154,10 +172,35 @@ namespace SRPG.Systems.Props
             float tiltX = (Roll(seed, tile.Coord, index, 0xD6E8FEB8u) - 0.5f) * 2f * MaxTiltDegrees;
             float tiltZ = (Roll(seed, tile.Coord, index, 0xCB1EA4B9u) - 0.5f) * 2f * MaxTiltDegrees;
 
+            Vector3 position = tile.WorldCenter + new Vector3(offsetX, 0f, offsetZ);
+
+            // 지형이 조각되어 있으면 그 곡면에 앉힙니다.
+            // 타일 중심 높이를 그대로 쓰면 비탈에서 절반이 땅에 묻히거나 공중에 뜹니다.
+            //
+            // IslandGrid.SampleGroundHeight 는 통행 불가 타일에서 해수면을 돌려줍니다.
+            // 절벽 위에도 바위를 올리므로 여기서는 타일의 고도 단계에 직접 기복을 얹습니다.
+            Quaternion surface = Quaternion.identity;
+
+            if (grid.Height != null)
+            {
+                position.y = tile.WorldCenter.y + grid.Height.SampleRelief(position.x, position.z);
+
+                // 지표면을 따라 기웁니다. 전부 수직으로 세우면 경사면에서 즉시 티가 납니다.
+                //
+                // 다만 <b>끝까지 눕히지는 않습니다.</b>
+                // 무거운 바위는 비탈면과 나란히 눕지 않습니다 — 무게중심이 아래를 향하도록
+                // 자리를 잡으며 파고들어, 지면보다 곧게 섭니다.
+                // 완전히 정렬하면 급경사에서 넘어진 것처럼 보입니다.
+                surface = Quaternion.Slerp(
+                    Quaternion.identity,
+                    Quaternion.FromToRotation(Vector3.up, grid.Height.SampleNormal(position.x, position.z)),
+                    SurfaceAlignment);
+            }
+
             return new PropInstance
             {
-                GroundPosition = tile.WorldCenter + new Vector3(offsetX, 0f, offsetZ),
-                Rotation = Quaternion.Euler(tiltX, yaw, tiltZ),
+                GroundPosition = position,
+                Rotation = surface * Quaternion.Euler(tiltX, yaw, tiltZ),
                 Radius = radius,
                 Height = height,
                 Weathering = weathering,
@@ -181,6 +224,20 @@ namespace SRPG.Systems.Props
         /// </summary>
         private static PlacementRule RuleFor(IslandGrid grid, Tile tile)
         {
+            if (tile.IsWater)
+            {
+                // 해식애 밑 물속 — 무너져 내려 파도에 깎이고 있는 바위입니다.
+                // 드물어야 합니다. 흔하면 섬 둘레에 테두리가 생겨 오히려 윤곽이 또렷해집니다.
+                return new PlacementRule
+                {
+                    Chance = 0.16f,
+                    MinRadius = 0.1f, MaxRadius = 0.26f,
+                    MinHeight = 0.06f, MaxHeight = 0.2f,
+                    MinWeathering = 0.55f, MaxWeathering = 0.95f,
+                    IsRock = true,
+                };
+            }
+
             if (tile.Type == TileType.Cliff)
             {
                 // 절벽 위 — 이미 통행 불가가 확정된 곳입니다. 여기만 큰 바위를 올릴 수 있습니다.
@@ -198,15 +255,38 @@ namespace SRPG.Systems.Props
                 };
             }
 
-            if (IsNextToCliff(grid, tile))
+            // 붕괴 잔해 — 실제로 무너진 자리입니다.
+            //
+            // "절벽에 인접한가"가 아니라 "여기에 얼마나 쌓였는가"를 봅니다.
+            // 앞의 것은 손규칙이고 뒤의 것은 계산 결과입니다.
+            // 계산 결과를 따라야 많이 무너진 곳에 돌이 많아지고, 그래야 잔해가 지형을 설명합니다.
+            float talus = TalusAt(grid, tile);
+
+            if (talus > 0.05f)
             {
-                // 절벽 밑 — 위에서 굴러떨어진 돌입니다. 아직 덜 깎였습니다.
                 return new PlacementRule
                 {
-                    Chance = 0.34f,
-                    MinRadius = 0.09f, MaxRadius = 0.22f,
-                    MinHeight = 0.07f, MaxHeight = 0.17f,
-                    MinWeathering = 0.3f, MaxWeathering = 0.7f,
+                    // 많이 쌓인 자리일수록 돌이 빽빽합니다.
+                    Chance = Mathf.Lerp(0.15f, 0.75f, talus),
+
+                    MinRadius = 0.09f, MaxRadius = Mathf.Lerp(0.16f, 0.3f, talus),
+                    MinHeight = 0.06f, MaxHeight = Mathf.Lerp(0.12f, 0.24f, talus),
+
+                    // 갓 떨어진 것은 각집니다. 오래된 비탈일수록 둥글게 깎였습니다.
+                    MinWeathering = 0.2f, MaxWeathering = 0.65f,
+                    IsRock = true,
+                };
+            }
+
+            if (IsNextToCliff(grid, tile))
+            {
+                // 절벽 밑이긴 한데 무너진 흔적은 없는 곳입니다. 자잘한 돌만 둡니다.
+                return new PlacementRule
+                {
+                    Chance = 0.2f,
+                    MinRadius = 0.08f, MaxRadius = 0.16f,
+                    MinHeight = 0.05f, MaxHeight = 0.12f,
+                    MinWeathering = 0.45f, MaxWeathering = 0.8f,
                     IsRock = true,
                 };
             }
@@ -233,6 +313,37 @@ namespace SRPG.Systems.Props
                 MinWeathering = 0.82f, MaxWeathering = 1f,
                 IsRock = false,
             };
+        }
+
+        /// <summary>
+        /// 절벽이 바로 물로 떨어지는 자리인지 봅니다.
+        ///
+        /// 완만한 해변 앞바다에는 바위가 없습니다. 거기 놓으면 상륙 지점만 어지럽힙니다.
+        /// 무너질 벽이 있는 곳에만 무너진 것이 있어야 합니다.
+        /// </summary>
+        private static bool IsBelowSeaCliff(IslandGrid grid, Tile tile)
+        {
+            for (int n = 0; n < GridCoord.Neighbors8.Length; n++)
+            {
+                var neighbor = grid.GetTile(tile.Coord + GridCoord.Neighbors8[n]);
+
+                if (neighbor != null && !neighbor.IsWater && neighbor.Height > 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 이 타일에 쌓인 붕괴 잔해의 양입니다. 지형이 조각되지 않았으면 0입니다.
+        /// </summary>
+        private static float TalusAt(IslandGrid grid, Tile tile)
+        {
+            return grid.Height == null
+                ? 0f
+                : grid.Height.SampleTalus(tile.WorldCenter.x, tile.WorldCenter.z);
         }
 
         /// <summary>

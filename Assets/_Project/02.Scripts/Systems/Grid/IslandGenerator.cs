@@ -112,6 +112,10 @@ namespace SRPG.Systems.Grid
 
             BuildLandingZones(settings, grid);
 
+            // 여기까지가 게임 구조입니다 — 어디를 걸을 수 있고, 어디가 목표이고, 적이 어디로 오는가.
+            // 그 위에 보이는 땅을 조각합니다. 고도 단계는 이 뒤로 바뀌지 않습니다.
+            grid.Height = Landform.LandformPipeline.Build(grid);
+
             return grid;
         }
 

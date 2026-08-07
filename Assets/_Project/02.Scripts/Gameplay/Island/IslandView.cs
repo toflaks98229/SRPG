@@ -160,7 +160,7 @@ namespace SRPG.Gameplay.Island
 
                 if (tile.Type == type)
                 {
-                    AddTopQuad(buffer, tile.WorldCenter, half);
+                    AddTopSurface(buffer, tile, half);
                 }
             }
 
@@ -192,7 +192,7 @@ namespace SRPG.Gameplay.Island
 
                 if (tile.Type == TileType.Cliff)
                 {
-                    AddTopQuad(buffer, tile.WorldCenter, half);
+                    AddTopSurface(buffer, tile, half);
                 }
 
                 AddSideWalls(buffer, tile, tile.WorldCenter, half);
@@ -218,7 +218,7 @@ namespace SRPG.Gameplay.Island
                     continue;
                 }
 
-                AddTopQuad(buffer, tile.WorldCenter, half);
+                AddTopSurface(buffer, tile, half);
                 AddHouseBox(buffer, tile.WorldCenter, half);
             }
 
@@ -323,15 +323,62 @@ namespace SRPG.Gameplay.Island
 
         /// <summary>
         /// 타일 상단 면을 추가합니다.
+        ///
+        /// <b>한 장이 아니라 여러 장입니다.</b>
+        /// 타일당 평면 쿼드 하나를 굽는 한, 지형은 각진 사각형 계단일 수밖에 없습니다.
+        /// 하이트필드의 표본만큼 잘라 굴곡을 따라가게 합니다.
+        ///
+        /// 하이트필드가 없으면 예전처럼 평면 한 장으로 물러납니다.
         /// </summary>
-        private static void AddTopQuad(MeshBuffer buffer, Vector3 center, float half)
+        private void AddTopSurface(MeshBuffer buffer, Tile tile, float half)
         {
-            Vector3 a = new Vector3(center.x - half, center.y, center.z - half);
-            Vector3 b = new Vector3(center.x - half, center.y, center.z + half);
-            Vector3 c = new Vector3(center.x + half, center.y, center.z + half);
-            Vector3 d = new Vector3(center.x + half, center.y, center.z - half);
+            var field = _grid.Height;
+            Vector3 center = tile.WorldCenter;
 
-            buffer.AddQuad(a, b, c, d, Vector3.up, TopShade);
+            if (field == null)
+            {
+                Vector3 a = new Vector3(center.x - half, center.y, center.z - half);
+                Vector3 b = new Vector3(center.x - half, center.y, center.z + half);
+                Vector3 c = new Vector3(center.x + half, center.y, center.z + half);
+                Vector3 d = new Vector3(center.x + half, center.y, center.z - half);
+
+                buffer.AddQuad(a, b, c, d, Vector3.up, TopShade);
+                return;
+            }
+
+            int steps = field.Resolution;
+            float cell = _grid.CellSize / steps;
+
+            float originX = center.x - half;
+            float originZ = center.z - half;
+
+            var corner = field.TileToSample(tile.Coord);
+
+            for (int j = 0; j < steps; j++)
+            {
+                for (int i = 0; i < steps; i++)
+                {
+                    float x0 = originX + i * cell;
+                    float x1 = x0 + cell;
+                    float z0 = originZ + j * cell;
+                    float z1 = z0 + cell;
+
+                    // 기준 높이는 타일의 고도 단계입니다. 여기에 표본의 기복만 얹습니다.
+                    // 표본의 기준 높이를 쓰면 이웃 타일의 층을 따라가 절벽이 무너집니다.
+                    float h00 = center.y + field.GetRelief(corner.X + i, corner.Y + j);
+                    float h10 = center.y + field.GetRelief(corner.X + i + 1, corner.Y + j);
+                    float h11 = center.y + field.GetRelief(corner.X + i + 1, corner.Y + j + 1);
+                    float h01 = center.y + field.GetRelief(corner.X + i, corner.Y + j + 1);
+
+                    buffer.AddQuad(
+                        new Vector3(x0, h00, z0),
+                        new Vector3(x0, h01, z1),
+                        new Vector3(x1, h11, z1),
+                        new Vector3(x1, h10, z0),
+                        Vector3.up,
+                        TopShade);
+                }
+            }
         }
 
         /// <summary>
@@ -368,13 +415,49 @@ namespace SRPG.Gameplay.Island
                 Vector3 edgeDirection = new Vector3(-outward.z, 0f, outward.x);
                 Vector3 edgeCenter = center + outward * half;
 
-                Vector3 topA = edgeCenter + edgeDirection * half;
-                Vector3 topB = edgeCenter - edgeDirection * half;
-                Vector3 bottomA = new Vector3(topA.x, bottomY, topA.z);
-                Vector3 bottomB = new Vector3(topB.x, bottomY, topB.z);
+                Vector3 endA = edgeCenter + edgeDirection * half;
+                Vector3 endB = edgeCenter - edgeDirection * half;
+
+                AddWallStrip(buffer, tile, endA, endB, bottomY, outward);
+            }
+        }
+
+        /// <summary>
+        /// 벽 한 면을 세웁니다. 윗변은 지형의 굴곡을 따라갑니다.
+        ///
+        /// <b>왜 잘라야 하는가</b>
+        /// 윗면이 굴곡지는데 벽 윗변만 곧으면 둘 사이에 틈이 벌어집니다.
+        /// 위에서 내려다보는 게임이라 그 틈으로 바다가 비쳐 즉시 눈에 띕니다.
+        /// 윗면과 같은 표본을 읽어 같은 높이로 맞춥니다.
+        /// </summary>
+        private void AddWallStrip(
+            MeshBuffer buffer,
+            Tile tile,
+            Vector3 endA,
+            Vector3 endB,
+            float bottomY,
+            Vector3 outward)
+        {
+            var field = _grid.Height;
+            int steps = field != null ? field.Resolution : 1;
+
+            for (int i = 0; i < steps; i++)
+            {
+                Vector3 a = Vector3.Lerp(endA, endB, (float)i / steps);
+                Vector3 b = Vector3.Lerp(endA, endB, (float)(i + 1) / steps);
+
+                if (field != null)
+                {
+                    // 윗면과 같은 출처에서 읽습니다. 기준 높이는 이 타일의 고도 단계입니다.
+                    a.y = tile.WorldCenter.y + field.SampleRelief(a.x, a.z);
+                    b.y = tile.WorldCenter.y + field.SampleRelief(b.x, b.z);
+                }
 
                 buffer.AddQuad(
-                    topA, topB, bottomB, bottomA,
+                    a,
+                    b,
+                    new Vector3(b.x, bottomY, b.z),
+                    new Vector3(a.x, bottomY, a.z),
                     outward,
                     WallTopShade, WallTopShade, WallBottomShade, WallBottomShade);
             }
