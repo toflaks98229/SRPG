@@ -102,6 +102,7 @@ GameObject:
   - component: {fileID: 5558002831520163715}
   - component: {fileID: 4601672502155861486}
   - component: {fileID: 6380548066044201905}
+  - component: {fileID: 7038541060341771462}
   m_Layer: 9
   m_Name: Unit_Militia
   m_TagString: Untagged
@@ -178,6 +179,21 @@ MonoBehaviour:
   _commanderFlag: {fileID: 3784764445834486294}
   _bodyRenderer: {fileID: 4714480526107628198}
   _bodyCollider: {fileID: 5558002831520163715}
+--- !u!114 &7038541060341771462
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2281822561148482709}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ebde095863adfb4cac39978799eff8e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: SRPG.Gameplay::SRPG.Gameplay.Visual.UnitBillboard
+  _renderer: {fileID: 4714480526107628198}
+  _directionCount: 8
+  _useMirroring: 0
 --- !u!1 &3473841574049838611
 GameObject:
   m_ObjectHideFlags: 0
@@ -205,8 +221,8 @@ Transform:
   m_GameObject: {fileID: 3473841574049838611}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.5, z: 0}
-  m_LocalScale: {x: 0.7, y: 0.5, z: 0.7}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.77, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 6286600932773865451}
@@ -218,7 +234,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3473841574049838611}
-  m_Mesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
+  m_Mesh: {fileID: 4300000, guid: f5426d26b5266d64495beef8032cd12b, type: 2}
 --- !u!23 &4714480526107628198
 MeshRenderer:
   m_ObjectHideFlags: 0

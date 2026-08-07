@@ -20,6 +20,7 @@ MonoBehaviour:
     Cliff: {fileID: 2100000, guid: 57cc321cd396f8f4eb192079467798dc, type: 2}
     House: {fileID: 2100000, guid: 91ad8e36c779e2c408fbcd13f5f374c9, type: 2}
     Water: {fileID: 2100000, guid: 1dfb9f56e090bff48aadee3a9a505474, type: 2}
+  Tuning: {fileID: 11400000, guid: 143e1a8289c7f584fa9488227cb5278e, type: 2}
   PlayerRoster:
   - {fileID: 11400000, guid: 49b1a6f1c2f2b594cbe6c7da2a251163, type: 2}
   - {fileID: 11400000, guid: 49a92c8938f50624e9c6e03a2c7e9bb0, type: 2}

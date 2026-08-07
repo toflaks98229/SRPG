@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 13e530aa59e692448bfc1531667ec915, type: 3}
+  m_Name: BattleTuning_Default
+  m_EditorClassIdentifier: SRPG.Data::SRPG.Data.BattleTuning
+  SlowMotionScale: 0.15
+  SlowMotionTransitionSpeed: 8
+  FormationSpacing: 0.95
+  AnchorSpeedFactor: 0.92
+  MeleeLungeForce: 3.6
+  MeleeLungeMinDistance: 0.7
+  AllySeparationWeight: 1.6
+  EnemySeparationWeight: 0.6
+  SeparationSmoothing: 8
+  MeleeBreakFormationTiles: 2
+  EnemyAggroRadius: 11
+  EnemyRepathInterval: 0.9
+  EnemyReplanInterval: 2.5
+  EnemyGoalSwitchMargin: 0.08
+  EnemyFormationLooseness: 1.5
+  EnemyFormationJitter: 0.5
+  EnemyChargeScatter: 1.2
+  AiProximityWeight: 0.7
+  AiValueWeight: 1
+  AiUndefendedWeight: 0.85
+  AiOpenGroundWeight: 0.45
+  InfluenceRefreshInterval: 0.4
+  InfluenceDecayPerTile: 0.72
+  ShipSpeed: 4.2
+  ShipUnloadInterval: 0.35
+  CameraPanSpeed: 18
+  CameraBoundsMargin: 8
+  ShieldSteepBlockMarginDegrees: 11
+  PikeInnerDeadZoneRatio: 0.45
+  PikeAimLeadSeconds: 0.15
+  PikeMaxAimLeadSeconds: 1.2
+  PikeTargetLockSeconds: 1.1
+  PikeTurnSpringFrequency: 1.4
+  PikeTurnSpringDamping: 0.5
+  PikeBreakRecoverySeconds: 1.4
+  MaxSimultaneousAttackers: 4
+  BlockedKnockbackRetention: 1
+  ShieldMovingEffectiveness: 0.35
+  ShieldThreatRadius: 14

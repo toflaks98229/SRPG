@@ -6,6 +6,7 @@ using SRPG.Gameplay.Visual;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 namespace SRPG.Editor.Tools
 {
@@ -133,6 +134,13 @@ namespace SRPG.Editor.Tools
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.11f, 0.15f, 0.21f);
             camera.farClipPlane = 400f;
+
+            // URP 추가 데이터를 씬에 명시적으로 넣습니다.
+            //
+            // 없어도 URP가 실행 중에 붙여 주긴 합니다. 그래서 없어도 굴러갑니다.
+            // 하지만 그러면 씬 에셋에 저장된 것과 실제로 도는 것이 달라지고,
+            // 안티에일리어싱이나 포스트 프로세싱 같은 설정을 씬에서 만질 수가 없습니다.
+            cameraObject.AddComponent<UniversalAdditionalCameraData>();
 
             // 실제 위치와 각도는 BattleCameraRig가 런타임에 섬 크기에 맞춰 잡습니다.
             // 여기 값은 편집 중 씬 뷰에서 대략의 구도를 보기 위한 것입니다.
