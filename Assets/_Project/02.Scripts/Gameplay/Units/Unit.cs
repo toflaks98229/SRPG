@@ -57,6 +57,9 @@ namespace SRPG.Gameplay.Units
         /// <summary>교전 중 회전 속도입니다. 무기 판정이 정면 기준이라 빠르게 돌아야 합니다.</summary>
         private const float CombatTurnSpeed = 22f;
 
+        /// <summary>방패병이 위협 방향을 다시 살피는 주기(초)입니다. 매 프레임 질의하지 않기 위한 것입니다.</summary>
+        private const float ThreatScanInterval = 0.3f;
+
         // ====================================================================================================
         // 2. Inspector
         // ====================================================================================================
@@ -96,6 +99,27 @@ namespace SRPG.Gameplay.Units
         private Transform _transform;
 
         private readonly List<Unit> _neighborBuffer = new List<Unit>(16);
+        private readonly List<Unit> _candidateBuffer = new List<Unit>(16);
+
+        /// <summary>
+        /// 지금 나를 치기로 <b>예약한</b> 적들입니다.
+        ///
+        /// 오버킬을 막기 위한 장치입니다. 창병 여럿이 최전방의 한 명만 동시에 찌르면
+        /// 그가 죽은 자리로 뒤따라오던 적들이 그대로 통과합니다.
+        /// 예약 인원에 상한을 두면 남는 창병이 자연히 다음 적을 겨눕니다.
+        /// </summary>
+        private readonly HashSet<Unit> _committedAttackers = new HashSet<Unit>();
+
+        /// <summary>표적을 바꾸지 못하는 남은 시간입니다.</summary>
+        private float _targetLockTimer;
+
+        /// <summary>회전 스프링의 각속도입니다. 무기가 무게를 가질 때만 씁니다.</summary>
+        private float _yawVelocity;
+
+        /// <summary>방패병이 몸을 돌릴 위협 대상입니다. 공격 대상과는 별개입니다.</summary>
+        private Unit _threatSource;
+
+        private float _threatScanTimer;
 
         // ====================================================================================================
         // 4. Properties
@@ -143,6 +167,9 @@ namespace SRPG.Gameplay.Units
         /// 창병의 "이동 중 공격 금지"와 무기의 운반 자세가 <b>같은 이 값</b>을 봅니다.
         /// </summary>
         public bool IsMoving { get; private set; }
+
+        /// <summary>지금 나를 치기로 예약한 적의 수입니다. 디버그 표시와 오버킬 판정에 씁니다.</summary>
+        public int CommittedAttackerCount => _committedAttackers.Count;
 
         // ====================================================================================================
         // 5. Events
@@ -301,9 +328,18 @@ namespace SRPG.Gameplay.Units
                 return;
             }
 
+            // <b>막아 내도 운동 에너지는 전달됩니다.</b>
+            // 방패는 날붙이를 막을 뿐 충격량까지 없애지는 못합니다.
+            // 이 덕분에 큰 적의 일격은 피해가 막혀도 방패벽을 뒤로 밀어 틈을 벌립니다.
+            float impulseRetention = _context != null
+                ? Mathf.Clamp01(_context.Tuning.BlockedKnockbackRetention)
+                : 1f;
+
+            float knockbackScale = Mathf.Lerp(mitigation, 1f, impulseRetention);
+
             ApplyKnockback(
-                push.normalized * (hit.KnockbackForce * mitigation),
-                hit.StaggerSeconds * mitigation);
+                push.normalized * (hit.KnockbackForce * knockbackScale),
+                hit.StaggerSeconds * knockbackScale);
         }
 
         /// <summary>
@@ -329,10 +365,20 @@ namespace SRPG.Gameplay.Units
                 ? _context.Tuning.ShieldSteepBlockMarginDegrees
                 : BattleTuning.DefaultSteepBlockMarginDegrees;
 
+            // 이동 중에는 방패가 제 몫을 못 합니다.
+            // 뛰는 동안 방패가 위아래로 흔들려 물리적인 빈틈이 생기기 때문입니다.
+            // 그래서 "궁수 앞에서 뛰어다니지 마라"가 규칙이 아니라 결과로 나옵니다.
+            float resistance = _definition.ProjectileResistance;
+
+            if (IsMoving && _context != null)
+            {
+                resistance *= Mathf.Clamp01(_context.Tuning.ShieldMovingEffectiveness);
+            }
+
             return ShieldSolver.ComputeBlockFactor(
                 hit.Direction,
                 _transform != null ? _transform.forward : transform.forward,
-                _definition.ProjectileResistance,
+                resistance,
                 hit.ArcAngleDegrees,
                 steepMargin);
         }
@@ -396,6 +442,104 @@ namespace SRPG.Gameplay.Units
         }
 
         // ====================================================================================================
+        // 9-1. Public Methods - Attack Queue
+        // ====================================================================================================
+
+        /// <summary>
+        /// 나를 칠 자리를 하나 예약합니다. 이미 자리가 찼으면 거절합니다.
+        ///
+        /// <b>정원은 체력으로 정해집니다.</b> 한 방에 죽는 적에게는 한 명만 붙고,
+        /// 여러 대를 맞아야 하는 거구에게는 여러 명이 함께 붙습니다.
+        /// 이 한 줄이 "덩치 큰 적에게는 유동적으로 여럿이 달라붙는다"를 규칙 없이 만들어 냅니다.
+        /// </summary>
+        /// <param name="attacker">예약하려는 쪽입니다.</param>
+        /// <param name="damagePerHit">그 공격이 한 번에 주는 피해량입니다. 정원 계산의 분모입니다.</param>
+        /// <param name="maxAttackers">정원의 상한입니다. 계산 결과가 아무리 커도 이를 넘지 않습니다.</param>
+        /// <returns>자리를 잡았으면 true입니다.</returns>
+        public bool TryCommitAttacker(Unit attacker, float damagePerHit, int maxAttackers)
+        {
+            if (attacker == null || !IsAlive)
+            {
+                return false;
+            }
+
+            // 이미 잡아 둔 자리는 그대로 유지합니다.
+            if (_committedAttackers.Contains(attacker))
+            {
+                return true;
+            }
+
+            PruneCommittedAttackers();
+
+            int capacity = ComputeAttackerCapacity(damagePerHit, maxAttackers);
+
+            if (_committedAttackers.Count >= capacity)
+            {
+                return false;
+            }
+
+            _committedAttackers.Add(attacker);
+            return true;
+        }
+
+        /// <summary>
+        /// 예약을 <b>잡지 않고</b> 자리가 남았는지만 봅니다. 표적을 고를 때 씁니다.
+        /// </summary>
+        public bool HasRoomForAttacker(Unit attacker, float damagePerHit, int maxAttackers)
+        {
+            if (!IsAlive)
+            {
+                return false;
+            }
+
+            if (attacker != null && _committedAttackers.Contains(attacker))
+            {
+                return true;
+            }
+
+            PruneCommittedAttackers();
+
+            return _committedAttackers.Count < ComputeAttackerCapacity(damagePerHit, maxAttackers);
+        }
+
+        /// <summary>
+        /// 지정 반경 안에서 가장 가까운 적을 찾습니다. 무기가 근접 위협을 살필 때 씁니다.
+        /// </summary>
+        public Unit FindClosestEnemyWithin(float radius)
+        {
+            return _context != null ? _context.FindNearestEnemy(Position, _team, radius) : null;
+        }
+
+        /// <summary>예약을 놓습니다. 표적을 바꾸거나 죽을 때 호출합니다.</summary>
+        public void ReleaseAttacker(Unit attacker)
+        {
+            if (attacker != null)
+            {
+                _committedAttackers.Remove(attacker);
+            }
+        }
+
+        /// <summary>
+        /// 동시에 붙을 수 있는 인원입니다. 지금 체력을 한 방 피해로 나눈 값입니다.
+        /// </summary>
+        private int ComputeAttackerCapacity(float damagePerHit, int maxAttackers)
+        {
+            if (damagePerHit <= 0.01f)
+            {
+                return Mathf.Max(1, maxAttackers);
+            }
+
+            int needed = Mathf.CeilToInt(_health / damagePerHit);
+            return Mathf.Clamp(needed, 1, Mathf.Max(1, maxAttackers));
+        }
+
+        /// <summary>죽었거나 사라진 예약자를 정리합니다.</summary>
+        private void PruneCommittedAttackers()
+        {
+            _committedAttackers.RemoveWhere(attacker => attacker == null || !attacker.IsAlive);
+        }
+
+        // ====================================================================================================
         // 10. Private Methods - Setup
         // ====================================================================================================
 
@@ -456,6 +600,8 @@ namespace SRPG.Gameplay.Units
             _attackTimer -= deltaTime;
             _staggerTimer -= deltaTime;
             _rootTimer -= deltaTime;
+            _targetLockTimer -= deltaTime;
+            _threatScanTimer -= deltaTime;
 
             _knockbackVelocity = Vector3.MoveTowards(
                 _knockbackVelocity,
@@ -472,7 +618,7 @@ namespace SRPG.Gameplay.Units
             {
                 if (!_target.IsAlive)
                 {
-                    _target = null;
+                    ClearTarget();
                 }
                 else
                 {
@@ -481,15 +627,85 @@ namespace SRPG.Gameplay.Units
                     float dropRange = _definition.EngageRadius * 1.5f;
                     if (sqrDistance > dropRange * dropRange)
                     {
-                        _target = null;
+                        ClearTarget();
                     }
                 }
             }
 
-            if (_target == null)
+            // 표적 고정: 한 번 잡으면 잠시 바꾸지 않습니다.
+            // 더 가까운 적이 나타날 때마다 시선을 돌리면 창끝이 흩어지고 방어선에 구멍이 납니다.
+            if (_target != null && _targetLockTimer > 0f)
             {
-                _target = _context.FindNearestEnemy(Position, _team, _definition.EngageRadius);
+                return;
             }
+
+            if (_target != null)
+            {
+                return;
+            }
+
+            var found = _weapon != null && _weapon.UsesAttackQueue
+                ? FindUnclaimedEnemy()
+                : _context.FindNearestEnemy(Position, _team, _definition.EngageRadius);
+
+            if (found == null)
+            {
+                return;
+            }
+
+            _target = found;
+            _targetLockTimer = _weapon != null ? _weapon.TargetLockSeconds : 0f;
+        }
+
+        /// <summary>
+        /// 아직 자리가 남은 적 중 가장 가까운 쪽을 고릅니다.
+        ///
+        /// <b>공격 대기열의 실행부입니다.</b> 다른 병사가 이미 맡은 적은 건너뛰고 다음으로 다가오는 적을 봅니다.
+        /// 아무도 남지 않았으면(전부 자리가 찼으면) 가장 가까운 적으로 되돌아갑니다.
+        /// 그러지 않으면 방어선 전체가 손을 놓고 서 있게 됩니다.
+        /// </summary>
+        private Unit FindUnclaimedEnemy()
+        {
+            var enemyTeam = _team == Team.Player ? Team.Enemy : Team.Player;
+            int count = _context.QueryTeam(Position, _definition.EngageRadius, enemyTeam, null, _candidateBuffer);
+
+            Unit best = null;
+            float bestSqr = float.MaxValue;
+
+            int maxAttackers = _context.Tuning.MaxSimultaneousAttackers;
+
+            for (int i = 0; i < count; i++)
+            {
+                var candidate = _candidateBuffer[i];
+                if (candidate == null || !candidate.IsAlive)
+                {
+                    continue;
+                }
+
+                // 이미 정원이 찬 적은 건너뜁니다. 예약은 실제로 공격을 시작할 때 잡습니다.
+                if (!candidate.HasRoomForAttacker(this, _definition.AttackDamage, maxAttackers))
+                {
+                    continue;
+                }
+
+                float sqr = (candidate.Position - Position).sqrMagnitude;
+                if (sqr < bestSqr)
+                {
+                    bestSqr = sqr;
+                    best = candidate;
+                }
+            }
+
+            // 전부 찼으면 평소대로 가장 가까운 적을 봅니다.
+            return best ?? _context.FindNearestEnemy(Position, _team, _definition.EngageRadius);
+        }
+
+        /// <summary>표적을 놓고 예약도 함께 반납합니다.</summary>
+        private void ClearTarget()
+        {
+            _target?.ReleaseAttacker(this);
+            _target = null;
+            _targetLockTimer = 0f;
         }
 
         /// <summary>
@@ -505,6 +721,18 @@ namespace SRPG.Gameplay.Units
                 new Vector3(_slotTarget.x, 0f, _slotTarget.z));
 
             bool atSlot = slotDistance <= SlotArrivalThreshold;
+
+            // 진형 붕괴: 품 안을 내준 무기는 싸울 방법이 없습니다. 물러나는 것이 유일한 반응입니다.
+            if (_weapon != null && _weapon.TryGetRetreatFrom(out Vector3 threat))
+            {
+                Vector3 away = position - threat;
+                away.y = 0f;
+
+                if (away.sqrMagnitude > 0.0001f)
+                {
+                    return away.normalized * _definition.MoveSpeed;
+                }
+            }
 
             // 얼마나 나설 수 있는지는 무기가 정합니다. 창병과 궁수는 0이라 자리를 지킵니다.
             float leash = GetFormationBreakDistance();
@@ -564,6 +792,44 @@ namespace SRPG.Gameplay.Units
         }
 
         /// <summary>
+        /// 방패를 든 병사가 몸을 돌려야 할 위협 방향입니다.
+        ///
+        /// 방패는 정면만 막으므로, 서 있는 동안 어디를 보느냐가 곧 방어력입니다.
+        /// 뒤에서 날아오는 화살에 등을 보이고 있으면 저항이 통째로 무의미해집니다.
+        ///
+        /// 교전 반경보다 넓게 봅니다. 궁수는 사거리 밖에서 쏘므로,
+        /// 교전 반경만 보면 정작 나를 쏘는 상대를 영영 인지하지 못합니다.
+        /// 매 프레임 질의하지 않고 <see cref="ThreatScanInterval"/>마다 한 번만 갱신합니다.
+        /// </summary>
+        private bool TryGetThreatFacing(Vector3 position, out Vector3 facing)
+        {
+            facing = Vector3.zero;
+
+            if (_definition.ProjectileResistance <= 0f || _context == null)
+            {
+                return false;
+            }
+
+            if (_threatScanTimer <= 0f)
+            {
+                _threatScanTimer = ThreatScanInterval;
+
+                float radius = _context.Tuning.ShieldThreatRadius;
+                _threatSource = radius > 0f
+                    ? _context.FindNearestEnemy(position, _team, radius)
+                    : null;
+            }
+
+            if (_threatSource == null || !_threatSource.IsAlive)
+            {
+                return false;
+            }
+
+            facing = _threatSource.Position - position;
+            return facing.sqrMagnitude > 0.0001f;
+        }
+
+        /// <summary>
         /// 대열을 풀고 나갈 수 있는 월드 거리입니다.
         ///
         /// 무기는 <b>칸</b> 단위로 말하고, 여기서 타일 크기를 곱해 월드 거리로 바꿉니다.
@@ -615,6 +881,16 @@ namespace SRPG.Gameplay.Units
 
             if (Vector3.Distance(Position, _target.Position) > _definition.AttackRange)
             {
+                return;
+            }
+
+            // 공격 대기열: 찌르기 직전에 자리를 예약합니다.
+            // 자리가 없으면 이번 공격을 보류합니다. 다음 표적 탐색에서 다른 적으로 옮겨 갑니다.
+            if (_weapon.UsesAttackQueue &&
+                !_target.TryCommitAttacker(this, _definition.AttackDamage, _context.Tuning.MaxSimultaneousAttackers))
+            {
+                // 고정이 풀리면 다른 적을 보게 됩니다.
+                _targetLockTimer = 0f;
                 return;
             }
 
@@ -720,13 +996,34 @@ namespace SRPG.Gameplay.Units
             }
             else
             {
-                facing = steering;
+                // 교전 대상이 없어도, 방패를 든 채 서 있는 병사는 위협 쪽으로 몸을 돌립니다.
+                // 방패는 정면만 막으므로 어디를 보고 서 있느냐가 곧 방어력입니다.
+                facing = TryGetThreatFacing(position, out var threatFacing) ? threatFacing : steering;
             }
 
             facing.y = 0f;
 
             if (facing.sqrMagnitude <= 0.0001f)
             {
+                return;
+            }
+
+            float targetYaw = Quaternion.LookRotation(facing.normalized, Vector3.up).eulerAngles.y;
+
+            // 무게가 있는 무기는 스프링으로 돕니다.
+            // 보간은 언제나 목표를 향해 곧바로 줄어들어 관성이 없습니다.
+            // 그래서 표적을 옮길 때마다 창이 로봇처럼 휙 꺾입니다.
+            if (_weapon != null && _weapon.UsesSpringTurn)
+            {
+                float yaw = SpringDamper.StepAngle(
+                    _transform.eulerAngles.y,
+                    targetYaw,
+                    ref _yawVelocity,
+                    _weapon.TurnSpringFrequency,
+                    _weapon.TurnSpringDamping,
+                    deltaTime);
+
+                _transform.rotation = Quaternion.Euler(0f, yaw, 0f);
                 return;
             }
 

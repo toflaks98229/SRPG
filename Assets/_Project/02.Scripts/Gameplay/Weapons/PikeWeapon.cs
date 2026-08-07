@@ -74,6 +74,16 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>튜닝이 없을 때 쓰는 예측 상한(초)입니다.</summary>
         private const float DefaultMaxAimLeadSeconds = 1.2f;
 
+        /// <summary>튜닝이 없을 때 쓰는 표적 고정 시간(초)입니다.</summary>
+        private const float DefaultTargetLockSeconds = 1.1f;
+
+        /// <summary>튜닝이 없을 때 쓰는 회전 스프링 값입니다.</summary>
+        private const float DefaultTurnSpringFrequency = 1.4f;
+        private const float DefaultTurnSpringDamping = 0.5f;
+
+        /// <summary>튜닝이 없을 때 쓰는 진형 붕괴 지속 시간(초)입니다.</summary>
+        private const float DefaultBreakRecoverySeconds = 1.4f;
+
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -82,6 +92,12 @@ namespace SRPG.Gameplay.Weapons
         private readonly Collider[] _hitBuffer = new Collider[MaxHitBuffer];
 
         private Vector3 _restLocalPosition;
+
+        /// <summary>진형이 무너진 뒤 회복까지 남은 시간입니다. 0보다 크면 창을 들고 물러납니다.</summary>
+        private float _breakTimer;
+
+        /// <summary>품 안으로 파고든 적의 위치입니다. 물러날 방향의 기준입니다.</summary>
+        private Vector3 _intruderPosition;
 
         // ====================================================================================================
         // 2-1. Properties
@@ -102,6 +118,35 @@ namespace SRPG.Gameplay.Weapons
                 return Mathf.Clamp(length * ratio, 0f, length * 0.9f);
             }
         }
+
+        /// <summary>
+        /// 한 번 겨눈 적은 잠시 놓지 않습니다.
+        ///
+        /// 더 가까운 적이 나타날 때마다 창끝을 돌리면 방어선이 이리저리 흩어지고,
+        /// 결국 아무도 막지 않는 구멍이 생깁니다. 굳건히 버티는 것이 창병의 일입니다.
+        /// </summary>
+        public override float TargetLockSeconds =>
+            Tuning != null ? Tuning.PikeTargetLockSeconds : DefaultTargetLockSeconds;
+
+        /// <summary>
+        /// 창병은 공격 대기열을 씁니다.
+        ///
+        /// 여럿이 최전방의 한 명만 동시에 찌르면 그가 죽은 자리로 뒤따라오던 적들이 그대로 통과합니다.
+        /// 방어선의 목적은 잘 죽이는 것이 아니라 <b>새지 않는 것</b>입니다.
+        /// </summary>
+        public override bool UsesAttackQueue => true;
+
+        /// <summary>
+        /// 창은 무게가 있습니다. 표적을 옮길 때 관성으로 잠깐 지나쳤다 되돌아옵니다.
+        /// 보간으로 돌리면 로봇처럼 휙 꺾여 긴 무기의 느낌이 나지 않습니다.
+        /// </summary>
+        public override bool UsesSpringTurn => true;
+
+        public override float TurnSpringFrequency =>
+            Tuning != null ? Tuning.PikeTurnSpringFrequency : DefaultTurnSpringFrequency;
+
+        public override float TurnSpringDamping =>
+            Tuning != null ? Tuning.PikeTurnSpringDamping : DefaultTurnSpringDamping;
 
         // ====================================================================================================
         // 3. Overrides - Lifecycle
@@ -138,12 +183,16 @@ namespace SRPG.Gameplay.Weapons
         /// </summary>
         protected override void OnIdleTick(float deltaTime)
         {
+            _breakTimer -= deltaTime;
+            DetectIntruder();
+
             if (WeaponPivot == null)
             {
                 return;
             }
 
-            bool carrying = Owner != null && Owner.IsMoving;
+            // 걷는 중이거나 진형이 무너졌으면 창을 세워 듭니다. 둘 다 싸울 수 없는 상태입니다.
+            bool carrying = (Owner != null && Owner.IsMoving) || IsBroken;
 
             Quaternion targetRotation = carrying
                 ? Quaternion.Euler(CarryPitchDegrees, 0f, 0f)
@@ -159,6 +208,49 @@ namespace SRPG.Gameplay.Weapons
                 WeaponPivot.localPosition,
                 _restLocalPosition,
                 PoseBlendSpeed * deltaTime);
+        }
+
+        // ====================================================================================================
+        // 3-0. Line Breaking
+        // ====================================================================================================
+
+        /// <summary>진형이 무너져 물러나는 중인지 여부입니다.</summary>
+        private bool IsBroken => _breakTimer > 0f;
+
+        /// <summary>
+        /// 품 안으로 파고든 적이 있는지 살핍니다.
+        ///
+        /// 사각지대 안까지 들어온 적이 있으면 창병은 싸울 방법이 없습니다.
+        /// 그 자리에 서서 헛찌르는 것은 선택지가 아니고, 창을 세워 들고 물러나는 것이 유일한 반응입니다.
+        ///
+        /// <b>이 한 명이 열어 준 구멍으로 뒤따르던 적들이 쏟아져 들어옵니다.</b>
+        /// 진형 붕괴가 연출이 아니라 물리적 결과로 일어나는 지점입니다.
+        /// </summary>
+        private void DetectIntruder()
+        {
+            if (Owner == null || Definition == null || Owner.IsMoving)
+            {
+                return;
+            }
+
+            var intruder = Owner.FindClosestEnemyWithin(InnerDeadZone);
+            if (intruder == null)
+            {
+                return;
+            }
+
+            _intruderPosition = intruder.Position;
+            _breakTimer = Tuning != null ? Tuning.PikeBreakRecoverySeconds : DefaultBreakRecoverySeconds;
+        }
+
+        /// <summary>무너진 동안에는 찌를 수 없습니다.</summary>
+        public override bool CanBeginAttack(Unit target) => !IsBroken;
+
+        /// <summary>무너진 동안에는 파고든 적에게서 물러납니다.</summary>
+        public override bool TryGetRetreatFrom(out Vector3 threatPosition)
+        {
+            threatPosition = _intruderPosition;
+            return IsBroken;
         }
 
         // ====================================================================================================

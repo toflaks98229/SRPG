@@ -79,6 +79,57 @@ namespace SRPG.Gameplay.Weapons
         /// </summary>
         public virtual float FormationBreakTiles => 0f;
 
+        /// <summary>
+        /// 표적을 한 번 잡으면 이 시간(초) 동안은 바꾸지 않습니다. 0이면 매 프레임 자유롭게 바꿉니다.
+        ///
+        /// 방어선을 유지하는 무기에 필요합니다. 더 가까운 적이 나타날 때마다 시선을 돌리면
+        /// 창끝이 이리저리 흩어지고, 결국 아무도 막지 않는 구멍이 생깁니다.
+        /// </summary>
+        public virtual float TargetLockSeconds => 0f;
+
+        /// <summary>
+        /// 이 무기가 <b>공격 대기열</b>을 쓰는지 여부입니다.
+        ///
+        /// 켜면 같은 적을 이미 다른 병사가 맡았을 때 물러나 다음 적을 겨눕니다.
+        /// 방어선을 세우는 무기에만 의미가 있습니다. 난전에서는 오히려 공격이 뜸해집니다.
+        /// </summary>
+        public virtual bool UsesAttackQueue => false;
+
+        /// <summary>
+        /// 회전에 <b>무게</b>가 있는지 여부입니다. 켜면 소유자가 스프링으로 방향을 바꿉니다.
+        /// </summary>
+        public virtual bool UsesSpringTurn => false;
+
+        /// <summary>회전 스프링의 진동수입니다. 클수록 빠르게 따라붙습니다.</summary>
+        public virtual float TurnSpringFrequency => 1.6f;
+
+        /// <summary>회전 스프링의 감쇠입니다. 1 미만이면 목표를 지나쳤다 돌아옵니다.</summary>
+        public virtual float TurnSpringDamping => 0.55f;
+
+        // ====================================================================================================
+        // 3-1. Hooks - Reaction
+        // ====================================================================================================
+
+        /// <summary>
+        /// 지금 공격을 시작해도 되는지 무기가 판단합니다.
+        ///
+        /// 사거리·재사용 대기 같은 공통 조건은 소유자가 이미 확인했습니다.
+        /// 여기서는 <b>무기 고유의 사정</b>만 봅니다. 창병이 품 안을 내주어 무너진 상태가 그렇습니다.
+        /// </summary>
+        public virtual bool CanBeginAttack(Unit target) => true;
+
+        /// <summary>
+        /// 지금 물러나야 할 위협이 있으면 그 위치를 알려 줍니다.
+        ///
+        /// 긴 무기가 품 안을 내주면 싸울 방법이 없습니다. 그 자리에 서 있는 것은 선택지가 아니고,
+        /// 창을 세워 들고 물러나는 것이 유일한 반응입니다.
+        /// </summary>
+        public virtual bool TryGetRetreatFrom(out Vector3 threatPosition)
+        {
+            threatPosition = Vector3.zero;
+            return false;
+        }
+
         // ====================================================================================================
         // 3. Public Methods
         // ====================================================================================================
@@ -116,6 +167,11 @@ namespace SRPG.Gameplay.Weapons
         public bool TryBeginAttack(Unit target)
         {
             if (IsBusy || Owner == null || Definition == null || target == null || !target.IsAlive)
+            {
+                return false;
+            }
+
+            if (!CanBeginAttack(target))
             {
                 return false;
             }
