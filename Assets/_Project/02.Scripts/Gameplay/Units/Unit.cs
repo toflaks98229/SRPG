@@ -195,6 +195,14 @@ namespace SRPG.Gameplay.Units
         /// <summary>이 병사의 무기가 횡대를 선호하는지 여부입니다. 분대가 진형 모양을 정할 때 묻습니다.</summary>
         public bool PrefersLineFormation => _weapon != null && _weapon.PrefersLineFormation;
 
+        /// <summary>
+        /// 이 병사에게 고정된 씨앗입니다. 태어날 때 한 번 정해지고 죽을 때까지 바뀌지 않습니다.
+        ///
+        /// 병사마다 달라야 하면서 <b>매 프레임 같아야 하는</b> 값들의 근거입니다.
+        /// 진형 흐트러짐이 대표적입니다. 매번 새로 뽑으면 제자리에서 부들부들 떱니다.
+        /// </summary>
+        public int VisualSeed { get; private set; }
+
         // ====================================================================================================
         // 5. Events
         // ====================================================================================================
@@ -276,6 +284,9 @@ namespace SRPG.Gameplay.Units
 
             // 같은 프레임에 생성된 유닛들이 동시에 공격하지 않도록 첫 쿨다운을 흩뜨립니다.
             _attackTimer = UnityEngine.Random.Range(0f, definition.AttackInterval);
+
+            // 이 병사만의 고정 씨앗입니다. 여기서 한 번만 정합니다.
+            VisualSeed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
 
             // 프리팹은 깃발을 꺼 둔 상태로 저장되어 있습니다. 지휘관일 때만 켭니다.
             if (_commanderFlag != null)

@@ -300,8 +300,19 @@ namespace SRPG.Gameplay.Enemies
         // ====================================================================================================
 
         /// <summary>
-        /// 병사들에게 향할 지점을 배정합니다. 플레이어 분대와 같은 규칙입니다.
-        /// 이동 중에는 전원이 앵커를 향하는 느슨한 무리이고, 도착한 뒤에야 동심원 진형을 잡습니다.
+        /// 병사들에게 향할 지점을 배정합니다.
+        ///
+        /// <b>플레이어 분대와 일부러 다르게 만듭니다.</b>
+        ///
+        /// 이 게임의 시각적 뼈대는 "질서 대 혼돈"입니다. 플레이어는 격자 위에서 정연하게 움직이고,
+        /// 침략자는 그리드를 무시하고 사방에서 각기 다른 각도로 들이닥칩니다.
+        /// 그 대비가 곧 "누가 지키고 누가 쳐들어오는가"를 말해 줍니다.
+        ///
+        /// 그런데 적 분대를 플레이어와 같은 구조로 만들면서 그 대비가 사라졌습니다.
+        /// 같은 동심원, 같은 간격, 같은 경로라 화면에는 정연한 두 무리가 마주 설 뿐이었습니다.
+        ///
+        /// 그렇다고 진형을 통째로 뺄 수는 없습니다. 응집이 없으면 하나씩 도착해 방어가 너무 쉬워집니다.
+        /// <b>뭉치되 줄 서지 않게</b> — 간격을 넓히고 각자에게 고정된 어긋남을 줍니다.
         /// </summary>
         private void AssignUnitTargets()
         {
@@ -311,17 +322,31 @@ namespace SRPG.Gameplay.Enemies
                 return;
             }
 
+            var tuning = _context.Tuning;
+
+            // 돌격 중에는 슬롯을 주지 않습니다. 전원이 앵커로 몰려가는 무리입니다.
             if (!_motor.HasArrived)
             {
                 for (int i = 0; i < count; i++)
                 {
-                    _units[i]?.SetSlotTarget(_motor.Anchor);
+                    var unit = _units[i];
+                    if (unit == null)
+                    {
+                        continue;
+                    }
+
+                    // 앵커 한 점으로 몰리면 서로 밀어내느라 뭉개집니다.
+                    // 각자 조금씩 다른 지점을 향하게 해 자연스러운 무리로 흘러가게 합니다.
+                    unit.SetSlotTarget(_motor.Anchor + ScatterFor(unit, tuning.EnemyChargeScatter));
                 }
 
                 return;
             }
 
-            FormationSolver.SolveRings(_motor.Anchor, count, _context.Tuning.FormationSpacing, _slots);
+            // 자리를 잡을 때도 플레이어보다 넓게 섭니다.
+            float spacing = tuning.FormationSpacing * Mathf.Max(0.1f, tuning.EnemyFormationLooseness);
+
+            FormationSolver.SolveRings(_motor.Anchor, count, spacing, _slots);
             FormationSolver.ClampToWalkable(_context.Grid, _motor.Anchor, _slots);
 
             // 가까운 병사에게 자리를 줍니다. 순서대로 나눠 주면 대열을 가로질러 걸어갑니다.
@@ -329,14 +354,26 @@ namespace SRPG.Gameplay.Enemies
 
             for (int i = 0; i < count; i++)
             {
-                if (i >= _slotOf.Count)
+                var unit = _units[i];
+                if (unit == null || i >= _slotOf.Count)
                 {
                     continue;
                 }
 
                 int slotIndex = Mathf.Clamp(_slotOf[i], 0, _slots.Count - 1);
-                _units[i]?.SetSlotTarget(_slots[slotIndex]);
+                unit.SetSlotTarget(_slots[slotIndex] + ScatterFor(unit, tuning.EnemyFormationJitter));
             }
+        }
+
+        /// <summary>
+        /// 이 병사가 늘 갖는 어긋남입니다.
+        ///
+        /// 태어날 때 정해진 고정 씨앗에서 만들어 내므로 매 프레임 같은 값이 나옵니다.
+        /// 무작위를 매번 새로 뽑으면 병사가 제자리에서 부들부들 떱니다.
+        /// </summary>
+        private static Vector3 ScatterFor(Unit unit, float radius)
+        {
+            return FormationScatter.Offset(unit.VisualSeed, radius);
         }
 
         /// <summary>
