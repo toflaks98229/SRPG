@@ -137,6 +137,7 @@ namespace SRPG.UI.HUD
             _builder.AppendLine("좌클릭(분대 근처): 선택");
             _builder.AppendLine("좌클릭(지형): 이동 명령");
             _builder.AppendLine("우클릭 / Esc: 선택 해제");
+            _builder.AppendLine("WASD / 방향키: 시점 이동");
             _builder.AppendLine("Q / E: 카메라 회전");
             _builder.AppendLine("휠: 확대·축소");
             _builder.AppendLine("<i>선택 중에는 시간이 느려집니다</i>");

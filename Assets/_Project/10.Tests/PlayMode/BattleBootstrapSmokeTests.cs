@@ -2,6 +2,7 @@
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Composition;
+using SRPG.Gameplay.CameraControl;
 using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Selection;
 using SRPG.Gameplay.Squads;
@@ -44,6 +45,80 @@ namespace SRPG.Tests.PlayMode
         // ====================================================================================================
         // 3. Tests
         // ====================================================================================================
+
+        /// <summary>
+        /// 카메라가 피벗의 자식으로 붙고, 그 피벗을 정확히 바라보는지 확인합니다.
+        ///
+        /// 예전 구성(리그가 카메라 자신에게 붙음)으로 구워진 씬이 남아 있어서,
+        /// 부트스트랩이 그것을 새 구조로 옮깁니다. 그 마이그레이션이 도는지도 여기서 함께 봅니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 카메라가_피벗의_자식이_되어_피벗을_바라본다()
+        {
+            CreateBootstrap();
+            yield return null;
+
+            var rig = Object.FindFirstObjectByType<BattleCameraRig>();
+            Assert.IsNotNull(rig, "카메라 피벗이 만들어지지 않았습니다.");
+
+            var camera = Camera.main;
+            Assert.IsNotNull(camera, "메인 카메라가 없습니다.");
+
+            Assert.AreNotSame(
+                rig.transform,
+                camera.transform,
+                "리그가 카메라 자신에게 붙어 있습니다. 피벗과 카메라가 분리되지 않았습니다.");
+
+            Assert.AreSame(
+                rig.transform,
+                camera.transform.parent,
+                "카메라가 피벗의 자식이 아닙니다.");
+
+            // 카메라 시선이 피벗을 지나는지 확인합니다.
+            Vector3 toPivot = rig.FocusPoint - camera.transform.position;
+            Assert.Greater(toPivot.magnitude, 0.01f, "카메라가 피벗과 같은 자리에 있습니다.");
+
+            float alignment = Vector3.Dot(camera.transform.forward, toPivot.normalized);
+            Assert.Greater(alignment, 0.999f, $"카메라가 피벗을 바라보지 않습니다. (정렬도 {alignment:F4})");
+        }
+
+        /// <summary>
+        /// 피벗이 섬 밖으로 한없이 나가지 않는지 확인합니다.
+        /// 제한이 없으면 WASD로 빈 바다까지 나가 아무것도 보이지 않게 됩니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 카메라_피벗은_섬_범위를_벗어나지_않는다()
+        {
+            var bootstrap = CreateBootstrap();
+            yield return null;
+
+            var rig = Object.FindFirstObjectByType<BattleCameraRig>();
+            Assert.IsNotNull(rig);
+
+            var grid = bootstrap.Context.Grid;
+
+            // 섬 크기의 몇 배나 떨어진 곳으로 보내 봅니다.
+            float far = grid.Width * grid.CellSize * 10f;
+            rig.MoveTo(new Vector3(far, 0f, far));
+
+            Vector3 clamped = rig.FocusPoint;
+
+            // 통행 가능한 땅의 외곽 + 여유 범위 안에 잘려야 합니다.
+            float maxX = float.MinValue;
+            float maxZ = float.MinValue;
+
+            for (int i = 0; i < grid.WalkableTiles.Count; i++)
+            {
+                Vector3 center = grid.WalkableTiles[i].WorldCenter;
+                if (center.x > maxX) maxX = center.x;
+                if (center.z > maxZ) maxZ = center.z;
+            }
+
+            float margin = bootstrap.Context.Tuning.CameraBoundsMargin + 0.01f;
+
+            Assert.LessOrEqual(clamped.x, maxX + margin, "피벗이 섬 동쪽 밖으로 나갔습니다.");
+            Assert.LessOrEqual(clamped.z, maxZ + margin, "피벗이 섬 북쪽 밖으로 나갔습니다.");
+        }
 
         [UnityTest]
         public IEnumerator 부트스트랩이_섬과_분대를_생성한다()

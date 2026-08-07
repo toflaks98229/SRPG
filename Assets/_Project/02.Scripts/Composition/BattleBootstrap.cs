@@ -151,7 +151,7 @@ namespace SRPG.Composition
             // 대기 중인 화살이 전투 루트 아래 모이게 합니다. 전투가 끝나면 함께 사라집니다.
             _context.ProjectilePool.SetRoot(CreateChild("Arrows"));
 
-            var battleCamera = EnsureCamera(grid);
+            var battleCamera = EnsureCamera(grid, tuning);
             EnsureLight();
 
             BuildSelectionController(battleCamera);
@@ -496,7 +496,7 @@ namespace SRPG.Composition
         /// <summary>
         /// 전투 카메라를 준비합니다. 씬에 배치된 카메라를 우선 쓰고, 없으면 만듭니다.
         /// </summary>
-        private Camera EnsureCamera(IslandGrid grid)
+        private Camera EnsureCamera(IslandGrid grid, BattleTuning tuning)
         {
             var camera = _battleCamera != null ? _battleCamera : Camera.main;
 
@@ -515,22 +515,51 @@ namespace SRPG.Composition
                 return null;
             }
 
-            var rig = camera.GetComponent<BattleCameraRig>();
-            if (rig == null)
-            {
-                rig = camera.gameObject.AddComponent<BattleCameraRig>();
-            }
+            var rig = ResolveCameraRig(camera);
+
+            rig.AttachCamera(camera);
+            rig.Configure(grid, tuning);
 
             Vector3 center = new Vector3(
                 grid.Origin.x + grid.Width * grid.CellSize * 0.5f,
                 0f,
                 grid.Origin.z + grid.Depth * grid.CellSize * 0.5f);
 
-            rig.SetFocus(center);
+            rig.MoveTo(center);
             rig.FrameArea(Mathf.Max(grid.Width, grid.Depth) * grid.CellSize);
 
             _battleCamera = camera;
             return camera;
+        }
+
+        /// <summary>
+        /// 카메라 피벗을 확보합니다.
+        ///
+        /// <b>예전 구성을 함께 처리합니다.</b>
+        /// 리그가 카메라 자신에게 붙어 있던 시절에 구워진 씬이 있습니다.
+        /// 그대로 두면 카메라가 자기 자신의 자식이 되려다 깨지므로, 그 리그는 걷어 내고
+        /// 부모 피벗을 새로 만듭니다. 씬을 다시 굽지 않아도 실행이 되게 하려는 것입니다.
+        /// </summary>
+        private BattleCameraRig ResolveCameraRig(Camera camera)
+        {
+            var onCamera = camera.GetComponent<BattleCameraRig>();
+            if (onCamera != null)
+            {
+                // Destroy는 프레임 끝에 처리되므로, 한 프레임 더 도는 것을 막으려 즉시 꺼 둡니다.
+                onCamera.enabled = false;
+                Destroy(onCamera);
+            }
+
+            var inParent = camera.GetComponentInParent<BattleCameraRig>();
+            if (inParent != null && inParent.transform != camera.transform)
+            {
+                return inParent;
+            }
+
+            var pivotObject = new GameObject("CameraPivot");
+            pivotObject.transform.SetParent(_runtimeRoot, false);
+
+            return pivotObject.AddComponent<BattleCameraRig>();
         }
 
         /// <summary>

@@ -1,10 +1,28 @@
-﻿using UnityEngine;
+using SRPG.Data;
+using SRPG.Systems.Grid;
+using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace SRPG.Gameplay.CameraControl
 {
     /// <summary>
-    /// 전투 카메라입니다. 섬 하나가 한 화면에 들어오는 것을 전제로 한 궤도형 카메라입니다.
+    /// 전투 카메라의 <b>피벗</b>입니다. 이 컴포넌트가 붙은 오브젝트가 카메라의 부모이자 초점입니다.
+    ///
+    /// <b>구조</b>
+    /// <code>
+    /// CameraPivot   ← 이 컴포넌트. WASD로 섬 위를 훑고 다닙니다
+    ///   └ Camera    ← 자식. 피벗을 바라보며 그 둘레를 돕니다
+    /// </code>
+    ///
+    /// <b>왜 피벗과 카메라를 나누는가</b>
+    ///
+    /// 예전에는 이 컴포넌트가 카메라 자신에게 붙어 있었고, 초점은 <c>_focusPoint</c> 라는 필드였습니다.
+    /// 초점이 씬에 실체가 없으니 눈으로 볼 수도, 손으로 끌어 볼 수도, 다른 것을 붙일 수도 없었습니다.
+    /// 초점을 실제 오브젝트로 만들면 그 자리에 마커나 미니맵 기준점을 붙일 수 있고,
+    /// 무엇보다 <b>"카메라를 움직인다"가 아니라 "보고 있는 지점을 옮긴다"</b>가 되어 조작이 자연스러워집니다.
+    ///
+    /// <b>피벗은 회전하지 않습니다.</b> 이동만 합니다.
+    /// 회전은 자식 카메라의 로컬 변환이 전담하므로, 피벗의 월드 좌표가 곧 화면 중앙이 봅니다.
     ///
     /// 모든 입력과 보간에 <c>unscaledDeltaTime</c>을 씁니다.
     /// 슬로우모션 중에 카메라까지 느려지면 조작감이 무너지기 때문입니다.
@@ -22,9 +40,20 @@ namespace SRPG.Gameplay.CameraControl
         private const float ZoomSpeed = 6f;
         private const float SmoothSpeed = 10f;
 
+        /// <summary>피벗이 지면 높이를 따라가는 속도입니다. 계단형 지형에서 튀지 않게 부드럽게 붙습니다.</summary>
+        private const float GroundFollowSpeed = 6f;
+
+        /// <summary>이동 입력이 이보다 작으면 없는 것으로 봅니다.</summary>
+        private const float InputDeadZone = 0.01f;
+
         // ====================================================================================================
-        // 2. Fields
+        // 2. Inspector
         // ====================================================================================================
+
+        [Header("카메라")]
+        [SerializeField]
+        [Tooltip("이 피벗을 바라볼 자식 카메라입니다. 비워 두면 자식에서 찾습니다.")]
+        private Transform _cameraTransform;
 
         [Header("궤도")]
         [SerializeField]
@@ -36,48 +65,128 @@ namespace SRPG.Gameplay.CameraControl
         private float _yaw = 35f;
 
         [SerializeField]
-        [Tooltip("초점으로부터의 거리입니다.")]
+        [Tooltip("피벗으로부터의 거리입니다.")]
         private float _distance = 34f;
 
-        private Vector3 _focusPoint;
+        [Header("이동")]
+        [SerializeField]
+        [Min(1f)]
+        [Tooltip("WASD 이동 속도입니다. 부트스트랩이 전투 튜닝 값으로 덮어씁니다.")]
+        private float _panSpeed = 18f;
+
+        // ====================================================================================================
+        // 3. Fields
+        // ====================================================================================================
+
+        private IslandGrid _grid;
+
         private float _targetDistance;
         private float _targetYaw;
 
+        // 피벗이 벗어날 수 없는 XZ 범위입니다.
+        private bool _hasBounds;
+        private float _minX;
+        private float _maxX;
+        private float _minZ;
+        private float _maxZ;
+
         // ====================================================================================================
-        // 3. Unity Lifecycle
+        // 4. Properties
+        // ====================================================================================================
+
+        /// <summary>피벗의 현재 월드 좌표입니다. 화면 중앙이 보는 지점입니다.</summary>
+        public Vector3 FocusPoint => transform.position;
+
+        // ====================================================================================================
+        // 5. Unity Lifecycle
         // ====================================================================================================
 
         private void Awake()
         {
             _targetDistance = _distance;
             _targetYaw = _yaw;
+
+            if (_cameraTransform == null)
+            {
+                var childCamera = GetComponentInChildren<Camera>();
+                if (childCamera != null)
+                {
+                    _cameraTransform = childCamera.transform;
+                }
+            }
         }
 
         private void LateUpdate()
         {
             float deltaTime = UnityEngine.Time.unscaledDeltaTime;
 
-            ReadInput(deltaTime);
+            ReadOrbitInput(deltaTime);
+            ReadPanInput(deltaTime);
 
             _yaw = Mathf.LerpAngle(_yaw, _targetYaw, SmoothSpeed * deltaTime);
             _distance = Mathf.Lerp(_distance, _targetDistance, SmoothSpeed * deltaTime);
 
-            var rotation = Quaternion.Euler(_pitch, _yaw, 0f);
-            transform.SetPositionAndRotation(
-                _focusPoint - rotation * Vector3.forward * _distance,
-                rotation);
+            FollowGround(deltaTime);
+            PlaceCamera();
         }
 
         // ====================================================================================================
-        // 4. Public Methods
+        // 6. Public Methods
         // ====================================================================================================
 
         /// <summary>
-        /// 카메라가 바라볼 초점을 지정합니다. 보통 섬의 중심입니다.
+        /// 카메라를 이 피벗의 자식으로 붙입니다.
+        ///
+        /// 피벗의 회전은 항상 기본값으로 되돌립니다. 회전은 자식 카메라가 전담해야
+        /// 피벗의 월드 좌표가 곧 초점이라는 관계가 유지됩니다.
         /// </summary>
-        public void SetFocus(Vector3 focusPoint)
+        public void AttachCamera(Camera battleCamera)
         {
-            _focusPoint = focusPoint;
+            if (battleCamera == null)
+            {
+                return;
+            }
+
+            transform.rotation = Quaternion.identity;
+
+            _cameraTransform = battleCamera.transform;
+            _cameraTransform.SetParent(transform, worldPositionStays: false);
+
+            // 즉시 배치합니다. LateUpdate를 기다리면 첫 프레임 동안 카메라가
+            // 피벗과 같은 자리, 즉 지형 속에 박힌 채로 한 장이 그려집니다.
+            PlaceCamera();
+        }
+
+        /// <summary>
+        /// 지형을 연결하고 이동 범위를 잡습니다.
+        /// </summary>
+        /// <param name="grid">섬 지형입니다. 이동 범위와 지면 높이의 근거가 됩니다.</param>
+        /// <param name="tuning">전투 튜닝입니다. null이면 인스펙터 값을 그대로 씁니다.</param>
+        public void Configure(IslandGrid grid, BattleTuning tuning)
+        {
+            _grid = grid;
+
+            float margin = 6f;
+
+            if (tuning != null)
+            {
+                _panSpeed = tuning.CameraPanSpeed;
+                margin = tuning.CameraBoundsMargin;
+            }
+
+            ComputeBounds(grid, margin);
+        }
+
+        /// <summary>
+        /// 피벗을 지정 위치로 즉시 옮깁니다. 초기 배치에 씁니다.
+        /// </summary>
+        public void MoveTo(Vector3 world)
+        {
+            Vector3 clamped = ClampToBounds(world);
+            clamped.y = _grid != null ? _grid.SampleGroundHeight(clamped) : world.y;
+
+            transform.position = clamped;
+            PlaceCamera();
         }
 
         /// <summary>
@@ -87,16 +196,18 @@ namespace SRPG.Gameplay.CameraControl
         {
             _targetDistance = Mathf.Clamp(areaSize * 0.85f, MinDistance, MaxDistance);
             _distance = _targetDistance;
+
+            PlaceCamera();
         }
 
         // ====================================================================================================
-        // 5. Private Methods
+        // 7. Private Methods - Input
         // ====================================================================================================
 
         /// <summary>
         /// Q/E로 회전하고 마우스 휠로 확대·축소합니다.
         /// </summary>
-        private void ReadInput(float deltaTime)
+        private void ReadOrbitInput(float deltaTime)
         {
             var keyboard = Keyboard.current;
             if (keyboard != null)
@@ -125,6 +236,150 @@ namespace SRPG.Gameplay.CameraControl
                         MaxDistance);
                 }
             }
+        }
+
+        /// <summary>
+        /// WASD(또는 방향키)로 피벗을 옮깁니다.
+        ///
+        /// 이동 방향은 <b>월드 축이 아니라 카메라가 보는 방향</b> 기준입니다.
+        /// W를 누르면 항상 "화면 위쪽"으로 갑니다. 월드 축을 쓰면 카메라를 돌린 뒤
+        /// W가 옆으로 가 버려서, 회전과 이동을 함께 쓸 수가 없습니다.
+        /// </summary>
+        private void ReadPanInput(float deltaTime)
+        {
+            var keyboard = Keyboard.current;
+            if (keyboard == null)
+            {
+                return;
+            }
+
+            float x = 0f;
+            float z = 0f;
+
+            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) x -= 1f;
+            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) x += 1f;
+            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) z -= 1f;
+            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) z += 1f;
+
+            Vector3 input = new Vector3(x, 0f, z);
+            if (input.sqrMagnitude < InputDeadZone)
+            {
+                return;
+            }
+
+            // 현재 화면에 보이는 방향을 기준으로 삼습니다.
+            // 목표 각도가 아니라 보간된 현재 각도를 쓰는 이유는, 회전이 끝나기 전에 눌러도
+            // 눈에 보이는 대로 움직여야 하기 때문입니다.
+            Vector3 direction = Quaternion.Euler(0f, _yaw, 0f) * input.normalized;
+
+            Vector3 next = transform.position + direction * (_panSpeed * deltaTime);
+            transform.position = ClampToBounds(next);
+        }
+
+        // ====================================================================================================
+        // 8. Private Methods - Placement
+        // ====================================================================================================
+
+        /// <summary>
+        /// 피벗을 지면 높이에 부드럽게 붙입니다.
+        ///
+        /// 즉시 맞추지 않고 보간하는 이유는 지형이 계단형이기 때문입니다.
+        /// 고도가 한 단계 바뀌는 경계를 지날 때마다 화면이 툭툭 튀어 오르면 훑어보기가 불편합니다.
+        /// </summary>
+        private void FollowGround(float deltaTime)
+        {
+            if (_grid == null)
+            {
+                return;
+            }
+
+            Vector3 position = transform.position;
+            float targetY = _grid.SampleGroundHeight(position);
+
+            position.y = Mathf.Lerp(position.y, targetY, GroundFollowSpeed * deltaTime);
+            transform.position = position;
+        }
+
+        /// <summary>
+        /// 자식 카메라를 궤도 위에 놓고 피벗을 바라보게 합니다.
+        ///
+        /// 피벗이 회전하지 않으므로 로컬 방향이 곧 월드 방향입니다.
+        /// 카메라를 피벗 뒤쪽으로 <c>distance</c>만큼 밀고 같은 회전을 주면,
+        /// 시선이 정확히 피벗의 원점을 지납니다.
+        /// </summary>
+        private void PlaceCamera()
+        {
+            if (_cameraTransform == null)
+            {
+                return;
+            }
+
+            var rotation = Quaternion.Euler(_pitch, _yaw, 0f);
+
+            _cameraTransform.SetLocalPositionAndRotation(
+                -(rotation * Vector3.forward) * _distance,
+                rotation);
+        }
+
+        // ====================================================================================================
+        // 9. Private Methods - Bounds
+        // ====================================================================================================
+
+        /// <summary>
+        /// 통행 가능한 타일의 외곽에 여유를 더해 이동 범위를 잡습니다.
+        ///
+        /// 격자 전체가 아니라 <b>육지 기준</b>인 것이 핵심입니다.
+        /// 격자에는 섬을 둘러싼 바다가 넓게 포함되어 있어서, 그 기준으로 잡으면
+        /// 카메라가 아무것도 없는 빈 바다까지 한참 나갈 수 있습니다.
+        ///
+        /// 사각형으로 자르는 이유는 부드럽기 때문입니다. 실제 해안선 모양대로 자르면
+        /// 들쭉날쭉한 경계에 걸려 이동이 턱턱 끊깁니다.
+        /// </summary>
+        private void ComputeBounds(IslandGrid grid, float margin)
+        {
+            _hasBounds = false;
+
+            if (grid == null || grid.WalkableTiles.Count == 0)
+            {
+                return;
+            }
+
+            float minX = float.MaxValue;
+            float maxX = float.MinValue;
+            float minZ = float.MaxValue;
+            float maxZ = float.MinValue;
+
+            for (int i = 0; i < grid.WalkableTiles.Count; i++)
+            {
+                Vector3 center = grid.WalkableTiles[i].WorldCenter;
+
+                if (center.x < minX) minX = center.x;
+                if (center.x > maxX) maxX = center.x;
+                if (center.z < minZ) minZ = center.z;
+                if (center.z > maxZ) maxZ = center.z;
+            }
+
+            _minX = minX - margin;
+            _maxX = maxX + margin;
+            _minZ = minZ - margin;
+            _maxZ = maxZ + margin;
+            _hasBounds = true;
+        }
+
+        /// <summary>
+        /// 이동 범위 안으로 자릅니다. 범위가 없으면 그대로 돌려줍니다.
+        /// </summary>
+        private Vector3 ClampToBounds(Vector3 world)
+        {
+            if (!_hasBounds)
+            {
+                return world;
+            }
+
+            world.x = Mathf.Clamp(world.x, _minX, _maxX);
+            world.z = Mathf.Clamp(world.z, _minZ, _maxZ);
+
+            return world;
         }
     }
 }

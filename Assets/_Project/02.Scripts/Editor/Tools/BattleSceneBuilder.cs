@@ -113,10 +113,20 @@ namespace SRPG.Editor.Tools
         // 3. Private Methods - Scene Objects
         // ====================================================================================================
 
+        /// <summary>
+        /// 카메라 피벗과 그 자식 카메라를 만듭니다.
+        ///
+        /// 리그는 <b>피벗</b>에 붙습니다. 피벗이 초점이자 WASD로 움직이는 주체이고,
+        /// 카메라는 그 둘레를 도는 자식입니다.
+        /// </summary>
         private static Camera CreateCamera(Transform parent)
         {
+            var pivotObject = new GameObject("CameraPivot");
+            pivotObject.transform.SetParent(parent, false);
+            pivotObject.AddComponent<BattleCameraRig>();
+
             var cameraObject = new GameObject("BattleCamera");
-            cameraObject.transform.SetParent(parent, false);
+            cameraObject.transform.SetParent(pivotObject.transform, false);
             cameraObject.tag = "MainCamera";
 
             var camera = cameraObject.AddComponent<Camera>();
@@ -126,11 +136,10 @@ namespace SRPG.Editor.Tools
 
             // 실제 위치와 각도는 BattleCameraRig가 런타임에 섬 크기에 맞춰 잡습니다.
             // 여기 값은 편집 중 씬 뷰에서 대략의 구도를 보기 위한 것입니다.
-            cameraObject.transform.SetPositionAndRotation(
-                new Vector3(0f, 30f, -26f),
+            cameraObject.transform.SetLocalPositionAndRotation(
+                new Vector3(0f, 25f, -23f),
                 Quaternion.Euler(47f, 0f, 0f));
 
-            cameraObject.AddComponent<BattleCameraRig>();
             cameraObject.AddComponent<AudioListener>();
 
             return camera;
