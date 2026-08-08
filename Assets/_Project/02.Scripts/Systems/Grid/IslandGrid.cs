@@ -213,9 +213,14 @@ namespace SRPG.Systems.Grid
                 return 0f;
             }
 
+            // 표본의 단계를 씁니다. 타일의 단계가 아닙니다.
+            //
+            // BoundaryWarp 가 단 경계를 타일 격자에서 떼어냈으므로, 경계 근처에서는
+            // 보이는 땅의 높이가 타일의 고도 단계와 다릅니다.
+            // 타일 쪽을 쓰면 그 자리에서 유닛이 땅에 박히거나 공중에 뜹니다.
             return Height == null
                 ? tile.WorldCenter.y
-                : tile.WorldCenter.y + Height.SampleRelief(world.x, world.z);
+                : Height.SampleSurface(world.x, world.z);
         }
 
         /// <summary>

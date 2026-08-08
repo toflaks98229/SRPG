@@ -36,10 +36,8 @@ namespace SRPG.Editor.Tools
 
         private const string GraphicsSettingsPath = "ProjectSettings/GraphicsSettings.asset";
         private const string MaterialDirectory = "Assets/_Project/04.Art/03.Shaders/Materials";
-        private const string MeshDirectory = "Assets/_Project/04.Art/02.Models";
         private const string ConfigDirectory = "Assets/_Project/03.DataAssets/Configs";
 
-        private const string GroundedQuadPath = MeshDirectory + "/SRPG_GroundedQuad.mesh";
         private const string TuningPath = ConfigDirectory + "/BattleTuning_Default.asset";
         private const string IslandSettingsPath = "Assets/_Project/03.DataAssets/Islands/IslandSettings_Default.asset";
 
@@ -253,7 +251,6 @@ namespace SRPG.Editor.Tools
                 return;
             }
 
-            var quad = LoadOrCreateGroundedQuad();
             int converted = 0;
 
             foreach (var definition in LoadAllUnitDefinitions())
@@ -263,7 +260,7 @@ namespace SRPG.Editor.Tools
                     continue;
                 }
 
-                if (ConvertPrefabBody(definition, quad, shader))
+                if (ConvertPrefabBody(definition))
                 {
                     converted++;
                 }
@@ -396,7 +393,7 @@ namespace SRPG.Editor.Tools
         /// 프리팹 하나의 몸체를 빌보드로 바꿉니다. 이미 바뀌어 있으면 아무것도 하지 않습니다.
         /// </summary>
         /// <returns>실제로 바꿨으면 true입니다.</returns>
-        private static bool ConvertPrefabBody(UnitDefinition definition, Mesh quad, Shader shader)
+        private static bool ConvertPrefabBody(UnitDefinition definition)
         {
             string path = AssetDatabase.GetAssetPath(definition.Prefab);
             if (string.IsNullOrEmpty(path))
@@ -408,53 +405,27 @@ namespace SRPG.Editor.Tools
 
             try
             {
+                if (UnitBodyBuilder.IsBillboard(root))
+                {
+                    return false;
+                }
+
                 var body = root.transform.Find("Body");
-                if (body == null)
+                var renderer = body != null ? body.GetComponent<MeshRenderer>() : null;
+
+                if (renderer == null)
                 {
-                    Debug.LogWarning($"[BattleWiring] '{root.name}' 에 Body 오브젝트가 없습니다.");
+                    Debug.LogWarning($"[BattleWiring] '{root.name}' 의 Body에 렌더러가 없습니다.");
                     return false;
                 }
 
-                var filter = body.GetComponent<MeshFilter>();
-                var renderer = body.GetComponent<MeshRenderer>();
-
-                if (filter == null || renderer == null)
-                {
-                    Debug.LogWarning($"[BattleWiring] '{root.name}' 의 Body에 메시나 렌더러가 없습니다.");
-                    return false;
-                }
-
-                bool alreadyDone =
-                    filter.sharedMesh == quad &&
-                    renderer.sharedMaterial != null &&
-                    renderer.sharedMaterial.shader == shader &&
-                    root.GetComponent<UnitBillboard>() != null;
-
-                if (alreadyDone)
+                // 몸체를 만드는 규칙은 UnitBodyBuilder 하나에만 둡니다.
+                // 여기서 따로 구현하면 프리팹 빌더와 갈라지고, 그 갈라짐이
+                // "메뉴 한 번에 빌보드가 캡슐로 돌아가는" 사고를 냅니다.
+                if (UnitBodyBuilder.Build(root, definition.Radius, definition.DebugHeight, renderer.sharedMaterial) == null)
                 {
                     return false;
                 }
-
-                filter.sharedMesh = quad;
-
-                // 쿼드의 원점이 밑변이므로 발밑에 놓기만 하면 정확히 섭니다.
-                // 캡슐은 원점이 가운데라 절반 높이만큼 띄워 두었습니다. 그 보정을 걷어냅니다.
-                body.localPosition = Vector3.zero;
-                body.localScale = new Vector3(definition.Radius * 2.2f, definition.DebugHeight, 1f);
-
-                renderer.sharedMaterial = RetargetToBillboard(renderer.sharedMaterial, shader, definition);
-
-                var billboard = root.GetComponent<UnitBillboard>();
-                if (billboard == null)
-                {
-                    billboard = root.AddComponent<UnitBillboard>();
-                }
-
-                // 렌더러를 명시적으로 물려 줍니다.
-                // 비워 두면 GetComponentInChildren이 무기나 깃발의 렌더러를 집을 수 있습니다.
-                var serialized = new SerializedObject(billboard);
-                serialized.FindProperty("_renderer").objectReferenceValue = renderer;
-                serialized.ApplyModifiedPropertiesWithoutUndo();
 
                 PrefabUtility.SaveAsPrefabAsset(root, path);
                 return true;
@@ -463,64 +434,6 @@ namespace SRPG.Editor.Tools
             {
                 PrefabUtility.UnloadPrefabContents(root);
             }
-        }
-
-        /// <summary>
-        /// 몸체 머티리얼을 빌보드 셰이더로 바꿉니다. 색은 유지합니다.
-        ///
-        /// 새 머티리얼을 만들지 않고 기존 것을 바꿉니다.
-        /// 이미 프리팹이 참조하고 있으니 참조를 새로 이을 필요가 없고,
-        /// 무엇보다 <b>병종별로 하나</b>라는 성질이 그대로 유지됩니다.
-        /// </summary>
-        private static Material RetargetToBillboard(Material material, Shader shader, UnitDefinition definition)
-        {
-            if (material == null)
-            {
-                return null;
-            }
-
-            Color color = material.HasProperty("_BaseColor")
-                ? material.GetColor("_BaseColor")
-                : definition.DebugColor;
-
-            material.shader = shader;
-            material.SetColor("_BaseColor", color);
-            material.SetFloat("_AmbientBoost", BattleLighting.AmbientBoost);
-
-            EditorUtility.SetDirty(material);
-            return material;
-        }
-
-        /// <summary>
-        /// 프리팹이 참조할 수 있는 빌보드 쿼드를 에셋으로 만듭니다.
-        ///
-        /// 런타임 생성 메시는 <see cref="HideFlags.DontSave"/>라 프리팹이 참조할 수 없습니다.
-        /// 프리팹에는 디스크에 있는 메시가 필요합니다.
-        /// </summary>
-        private static Mesh LoadOrCreateGroundedQuad()
-        {
-            var existing = AssetDatabase.LoadAssetAtPath<Mesh>(GroundedQuadPath);
-            if (existing != null)
-            {
-                return existing;
-            }
-
-            EnsureFolder(MeshDirectory);
-
-            // 코드가 쓰는 것과 같은 모양이어야 합니다. 형태 정의는 한 곳에만 있어야 합니다.
-            var source = PrototypeVisuals.GetGroundedQuadMesh();
-
-            var asset = new Mesh { name = "SRPG_GroundedQuad" };
-            asset.SetVertices(source.vertices);
-            asset.SetUVs(0, new List<Vector2>(source.uv));
-            asset.SetTriangles(source.triangles, 0);
-            asset.RecalculateNormals();
-            asset.RecalculateBounds();
-
-            AssetDatabase.CreateAsset(asset, GroundedQuadPath);
-            AssetDatabase.SaveAssets();
-
-            return asset;
         }
 
         // ====================================================================================================

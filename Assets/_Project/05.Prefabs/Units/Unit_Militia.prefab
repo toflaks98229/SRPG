@@ -99,10 +99,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6286600932773865451}
+  - component: {fileID: 5614055437105603596}
   - component: {fileID: 5558002831520163715}
   - component: {fileID: 4601672502155861486}
   - component: {fileID: 6380548066044201905}
-  - component: {fileID: 7038541060341771462}
   m_Layer: 9
   m_Name: Unit_Militia
   m_TagString: Untagged
@@ -128,6 +128,21 @@ Transform:
   - {fileID: 6915191200275187327}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5614055437105603596
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2281822561148482709}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ebde095863adfb4cac39978799eff8e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: SRPG.Gameplay::SRPG.Gameplay.Visual.UnitBillboard
+  _renderer: {fileID: 4714480526107628198}
+  _directionCount: 8
+  _useMirroring: 0
 --- !u!136 &5558002831520163715
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -179,21 +194,6 @@ MonoBehaviour:
   _commanderFlag: {fileID: 3784764445834486294}
   _bodyRenderer: {fileID: 4714480526107628198}
   _bodyCollider: {fileID: 5558002831520163715}
---- !u!114 &7038541060341771462
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2281822561148482709}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8ebde095863adfb4cac39978799eff8e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: SRPG.Gameplay::SRPG.Gameplay.Visual.UnitBillboard
-  _renderer: {fileID: 4714480526107628198}
-  _directionCount: 8
-  _useMirroring: 0
 --- !u!1 &3473841574049838611
 GameObject:
   m_ObjectHideFlags: 0

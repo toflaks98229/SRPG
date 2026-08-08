@@ -52,9 +52,10 @@ namespace SRPG.Systems.Landform
         // ====================================================================================================
 
         private readonly float[] _relief;
-        private readonly float[] _baseHeight;
+        private readonly int[] _level;
         private readonly bool[] _land;
         private readonly float[] _talus;
+        private readonly float _heightStep;
 
         // ====================================================================================================
         // 3. Properties
@@ -99,9 +100,10 @@ namespace SRPG.Systems.Landform
             int count = SamplesX * SamplesY;
 
             _relief = new float[count];
-            _baseHeight = new float[count];
+            _level = new int[count];
             _land = new bool[count];
             _talus = new float[count];
+            _heightStep = grid.HeightStep;
 
             FillBaseFrom(grid);
         }
@@ -134,10 +136,47 @@ namespace SRPG.Systems.Landform
             _relief[Index(sx, sy)] = Mathf.Clamp(value, -ReliefLimit, ReliefLimit);
         }
 
-        /// <summary>표본의 고도 단계 기준 높이입니다. 조각 대상이 아닙니다.</summary>
+        /// <summary>표본의 고도 단계 기준 높이입니다.</summary>
         public float GetBase(int sx, int sy)
         {
-            return IsInside(sx, sy) ? _baseHeight[Index(sx, sy)] : 0f;
+            return IsInside(sx, sy) ? _level[Index(sx, sy)] * _heightStep : 0f;
+        }
+
+        /// <summary>
+        /// 표본의 고도 단계입니다.
+        ///
+        /// <b>타일의 단계와 다를 수 있습니다.</b>
+        /// <see cref="BoundaryWarp"/>가 단 경계를 타일 격자에서 떼어내면,
+        /// 어떤 표본은 이웃 타일의 단계를 따르게 됩니다. 그것이 구불구불한 등고선을 만듭니다.
+        ///
+        /// 통행 판정과 길찾기는 여전히 타일을 봅니다. 이 값은 <b>보이는 땅과 발 높이</b>만 정합니다.
+        /// </summary>
+        public int GetLevel(int sx, int sy)
+        {
+            return IsInside(sx, sy) ? _level[Index(sx, sy)] : 0;
+        }
+
+        /// <summary>표본의 고도 단계를 바꿉니다.</summary>
+        public void SetLevel(int sx, int sy, int level)
+        {
+            if (IsInside(sx, sy))
+            {
+                _level[Index(sx, sy)] = Mathf.Max(0, level);
+            }
+        }
+
+        /// <summary>
+        /// 월드 좌표에서의 지표면 높이입니다. 단계와 기복을 함께 봅니다.
+        ///
+        /// 메시가 이 값으로 그려지므로 유닛의 발 높이도 여기서 읽어야 합니다.
+        /// 출처가 다르면 유닛이 땅에 박히거나 뜹니다.
+        /// </summary>
+        public float SampleSurface(float worldX, float worldZ)
+        {
+            int sx = Mathf.Clamp(Mathf.RoundToInt((worldX - Origin.x) / Spacing), 0, SamplesX - 1);
+            int sy = Mathf.Clamp(Mathf.RoundToInt((worldZ - Origin.z) / Spacing), 0, SamplesY - 1);
+
+            return GetLevel(sx, sy) * _heightStep + SampleRelief(worldX, worldZ);
         }
 
         /// <summary>표본이 육지 위인지 여부입니다.</summary>
@@ -192,7 +231,7 @@ namespace SRPG.Systems.Landform
             }
 
             int i = Index(sx, sy);
-            return _baseHeight[i] + _relief[i];
+            return _level[i] * _heightStep + _relief[i];
         }
 
         // ====================================================================================================
@@ -281,7 +320,7 @@ namespace SRPG.Systems.Landform
                     bool onEdgeX = sx % Resolution == 0;
                     bool onEdgeY = sy % Resolution == 0;
 
-                    float best = 0f;
+                    int best = 0;
                     bool land = false;
 
                     for (int ox = onEdgeX ? -1 : 0; ox <= 0; ox++)
@@ -295,18 +334,16 @@ namespace SRPG.Systems.Landform
                                 continue;
                             }
 
-                            float height = tile.Height * grid.HeightStep;
-
-                            if (!land || height > best)
+                            if (!land || tile.Height > best)
                             {
-                                best = height;
+                                best = tile.Height;
                                 land = true;
                             }
                         }
                     }
 
                     int i = Index(sx, sy);
-                    _baseHeight[i] = best;
+                    _level[i] = best;
                     _land[i] = land;
                 }
             }

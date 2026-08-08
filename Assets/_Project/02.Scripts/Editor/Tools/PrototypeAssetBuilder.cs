@@ -3,6 +3,7 @@ using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Units;
+using SRPG.Gameplay.Visual;
 using SRPG.Gameplay.Weapons;
 using UnityEditor;
 using UnityEngine;
@@ -443,10 +444,24 @@ namespace SRPG.Editor.Tools
                 string path = $"{spec.Dir}/{spec.Prefab}.prefab";
                 var root = new GameObject(spec.Prefab);
 
-                // 몸체
-                var body = CreateMeshChild(root.transform, "Body", capsule, materials[spec.Material]);
-                body.transform.localPosition = new Vector3(0f, height * 0.5f, 0f);
-                body.transform.localScale = new Vector3(radius * 2f, height * 0.5f, radius * 2f);
+                // 몸체 — 2.5D 빌보드입니다.
+                //
+                // 여기서 캡슐을 구우면 안 됩니다. 프리팹이 있으면 부트스트랩은 프리팹을 쓰므로,
+                // 런타임 폴백이 아무리 빌보드를 만들어도 실제 게임에는 캡슐이 나옵니다.
+                // 이 메뉴를 한 번 누를 때마다 빌보드 작업이 통째로 사라지던 원인이 여기였습니다.
+                var body = UnitBodyBuilder.Build(root, radius, height, materials[spec.Material]);
+
+                if (body == null)
+                {
+                    // 빌보드 셰이더가 없습니다. 셰이더 하나 때문에 프리팹이 안 만들어지면 안 됩니다.
+                    body = CreateMeshChild(root.transform, "Body", capsule, materials[spec.Material]);
+                    body.transform.localPosition = new Vector3(0f, height * 0.5f, 0f);
+                    body.transform.localScale = new Vector3(radius * 2f, height * 0.5f, radius * 2f);
+
+                    Debug.LogWarning(
+                        $"[PrototypeAssetBuilder] 셰이더 '{PrototypeVisuals.BillboardShaderName}' 를 찾지 못해 " +
+                        $"'{spec.Prefab}' 의 몸체를 캡슐로 만들었습니다.");
+                }
 
                 // 무기 판정에 걸릴 몸체 콜라이더입니다.
                 // 트리거로 둡니다. 유닛끼리 물리로 밀어내면 분리 조향과 싸우게 됩니다.

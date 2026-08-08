@@ -492,10 +492,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4958779284064716943}
+  - component: {fileID: 2442184072324118027}
   - component: {fileID: 6191842671836544876}
   - component: {fileID: 8525329357525645543}
   - component: {fileID: 2274455522831037972}
-  - component: {fileID: 414427130431703858}
   m_Layer: 9
   m_Name: Unit_Pike
   m_TagString: Untagged
@@ -521,6 +521,21 @@ Transform:
   - {fileID: 3422774651491596094}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2442184072324118027
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6144880831287192797}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ebde095863adfb4cac39978799eff8e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: SRPG.Gameplay::SRPG.Gameplay.Visual.UnitBillboard
+  _renderer: {fileID: 5688728851012624268}
+  _directionCount: 8
+  _useMirroring: 0
 --- !u!136 &6191842671836544876
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -572,21 +587,6 @@ MonoBehaviour:
   _commanderFlag: {fileID: 6426865733970982796}
   _bodyRenderer: {fileID: 5688728851012624268}
   _bodyCollider: {fileID: 6191842671836544876}
---- !u!114 &414427130431703858
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6144880831287192797}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8ebde095863adfb4cac39978799eff8e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: SRPG.Gameplay::SRPG.Gameplay.Visual.UnitBillboard
-  _renderer: {fileID: 5688728851012624268}
-  _directionCount: 8
-  _useMirroring: 0
 --- !u!1 &6426865733970982796
 GameObject:
   m_ObjectHideFlags: 0

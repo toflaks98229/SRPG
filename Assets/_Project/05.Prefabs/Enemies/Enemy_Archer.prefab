@@ -189,10 +189,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6118717888532727798}
+  - component: {fileID: 4349920231055112277}
   - component: {fileID: 3741587733507915118}
   - component: {fileID: 7340794545242352713}
   - component: {fileID: 1107598748471150001}
-  - component: {fileID: 3595072194068766279}
   m_Layer: 9
   m_Name: Enemy_Archer
   m_TagString: Untagged
@@ -218,6 +218,21 @@ Transform:
   - {fileID: 8719803080466510910}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4349920231055112277
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2913468294941734987}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ebde095863adfb4cac39978799eff8e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: SRPG.Gameplay::SRPG.Gameplay.Visual.UnitBillboard
+  _renderer: {fileID: 3407764341770926109}
+  _directionCount: 8
+  _useMirroring: 0
 --- !u!136 &3741587733507915118
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -269,21 +284,6 @@ MonoBehaviour:
   _commanderFlag: {fileID: 4006502360955256443}
   _bodyRenderer: {fileID: 3407764341770926109}
   _bodyCollider: {fileID: 3741587733507915118}
---- !u!114 &3595072194068766279
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2913468294941734987}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8ebde095863adfb4cac39978799eff8e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: SRPG.Gameplay::SRPG.Gameplay.Visual.UnitBillboard
-  _renderer: {fileID: 3407764341770926109}
-  _directionCount: 8
-  _useMirroring: 0
 --- !u!1 &3684797384990692725
 GameObject:
   m_ObjectHideFlags: 0

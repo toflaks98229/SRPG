@@ -183,7 +183,7 @@ namespace SRPG.Systems.Props
 
             if (grid.Height != null)
             {
-                position.y = tile.WorldCenter.y + grid.Height.SampleRelief(position.x, position.z);
+                position.y = grid.Height.SampleSurface(position.x, position.z);
 
                 // 지표면을 따라 기웁니다. 전부 수직으로 세우면 경사면에서 즉시 티가 납니다.
                 //

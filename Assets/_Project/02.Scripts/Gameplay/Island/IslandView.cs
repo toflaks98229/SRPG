@@ -152,17 +152,14 @@ namespace SRPG.Gameplay.Island
         private void BuildTopLayer(string layerName, TileType type, Color fallbackColor, Material authoredMaterial)
         {
             var buffer = new MeshBuffer();
-            float half = _grid.CellSize * 0.5f;
 
-            for (int i = 0; i < _grid.AllTiles.Count; i++)
+            ForEachSurfaceCell((tile, cx, cy) =>
             {
-                var tile = _grid.AllTiles[i];
-
                 if (tile.Type == type)
                 {
-                    AddTopSurface(buffer, tile, half);
+                    AddCellTop(buffer, cx, cy);
                 }
-            }
+            });
 
             CreateMeshObject(layerName, buffer, fallbackColor, authoredMaterial);
         }
@@ -179,24 +176,16 @@ namespace SRPG.Gameplay.Island
         private void BuildRockLayer()
         {
             var buffer = new MeshBuffer();
-            float half = _grid.CellSize * 0.5f;
 
-            for (int i = 0; i < _grid.AllTiles.Count; i++)
+            ForEachSurfaceCell((tile, cx, cy) =>
             {
-                var tile = _grid.AllTiles[i];
-
-                if (tile.IsWater)
-                {
-                    continue;
-                }
-
                 if (tile.Type == TileType.Cliff)
                 {
-                    AddTopSurface(buffer, tile, half);
+                    AddCellTop(buffer, cx, cy);
                 }
 
-                AddSideWalls(buffer, tile, tile.WorldCenter, half);
-            }
+                AddCellWalls(buffer, cx, cy);
+            });
 
             CreateMeshObject("Terrain_Rock", buffer, RockColor, _materials.Cliff);
         }
@@ -209,17 +198,19 @@ namespace SRPG.Gameplay.Island
             var buffer = new MeshBuffer();
             float half = _grid.CellSize * 0.5f;
 
-            for (int i = 0; i < _grid.AllTiles.Count; i++)
+            ForEachSurfaceCell((tile, cx, cy) =>
             {
-                var tile = _grid.AllTiles[i];
-
-                if (tile.Type != TileType.House)
+                if (tile.Type == TileType.House)
                 {
-                    continue;
+                    AddCellTop(buffer, cx, cy);
                 }
+            });
 
-                AddTopSurface(buffer, tile, half);
-                AddHouseBox(buffer, tile.WorldCenter, half);
+            // 상자는 타일 단위입니다. 실루엣으로 알아보는 것이라 잘게 나눌 이유가 없습니다.
+            for (int i = 0; i < _grid.HouseTiles.Count; i++)
+            {
+                var tile = _grid.HouseTiles[i];
+                AddHouseBox(buffer, SurfaceCenterOf(tile), half);
             }
 
             CreateMeshObject("Terrain_House", buffer, ObjectiveColor, _materials.House);
@@ -322,145 +313,193 @@ namespace SRPG.Gameplay.Island
         // ====================================================================================================
 
         /// <summary>
-        /// 타일 상단 면을 추가합니다.
+        /// 육지 표본 셀을 전부 훑습니다.
         ///
-        /// <b>한 장이 아니라 여러 장입니다.</b>
-        /// 타일당 평면 쿼드 하나를 굽는 한, 지형은 각진 사각형 계단일 수밖에 없습니다.
-        /// 하이트필드의 표본만큼 잘라 굴곡을 따라가게 합니다.
+        /// <b>왜 타일이 아니라 셀인가</b>
         ///
-        /// 하이트필드가 없으면 예전처럼 평면 한 장으로 물러납니다.
+        /// 타일 단위로 그리면 단 경계가 <b>타일 변을 따라 90도로 꺾입니다.</b>
+        /// 기복과 침식과 붕괴를 아무리 얹어도 그 선은 안 움직입니다 — 전부 한 단 안쪽만
+        /// 건드리기 때문입니다. 그 선이 사각형으로 보이는 원인의 전부입니다.
+        ///
+        /// 셀 단위로 내려오면 <see cref="BoundaryWarp"/>가 휘어 놓은 경계가 그대로 드러납니다.
+        /// 어느 셀이 몇 단인지는 표본이 알고 있고, 타일은 그 셀의 <b>재질</b>만 정합니다.
         /// </summary>
-        private void AddTopSurface(MeshBuffer buffer, Tile tile, float half)
-        {
-            var field = _grid.Height;
-            Vector3 center = tile.WorldCenter;
-
-            if (field == null)
-            {
-                Vector3 a = new Vector3(center.x - half, center.y, center.z - half);
-                Vector3 b = new Vector3(center.x - half, center.y, center.z + half);
-                Vector3 c = new Vector3(center.x + half, center.y, center.z + half);
-                Vector3 d = new Vector3(center.x + half, center.y, center.z - half);
-
-                buffer.AddQuad(a, b, c, d, Vector3.up, TopShade);
-                return;
-            }
-
-            int steps = field.Resolution;
-            float cell = _grid.CellSize / steps;
-
-            float originX = center.x - half;
-            float originZ = center.z - half;
-
-            var corner = field.TileToSample(tile.Coord);
-
-            for (int j = 0; j < steps; j++)
-            {
-                for (int i = 0; i < steps; i++)
-                {
-                    float x0 = originX + i * cell;
-                    float x1 = x0 + cell;
-                    float z0 = originZ + j * cell;
-                    float z1 = z0 + cell;
-
-                    // 기준 높이는 타일의 고도 단계입니다. 여기에 표본의 기복만 얹습니다.
-                    // 표본의 기준 높이를 쓰면 이웃 타일의 층을 따라가 절벽이 무너집니다.
-                    float h00 = center.y + field.GetRelief(corner.X + i, corner.Y + j);
-                    float h10 = center.y + field.GetRelief(corner.X + i + 1, corner.Y + j);
-                    float h11 = center.y + field.GetRelief(corner.X + i + 1, corner.Y + j + 1);
-                    float h01 = center.y + field.GetRelief(corner.X + i, corner.Y + j + 1);
-
-                    buffer.AddQuad(
-                        new Vector3(x0, h00, z0),
-                        new Vector3(x0, h01, z1),
-                        new Vector3(x1, h11, z1),
-                        new Vector3(x1, h10, z0),
-                        Vector3.up,
-                        TopShade);
-                }
-            }
-        }
-
-        /// <summary>
-        /// 이웃보다 높은 쪽에 측면 벽을 세웁니다. 바다와 맞닿은 쪽은 수면 아래까지 내려 스커트를 만듭니다.
-        ///
-        /// <b>벽의 아래쪽을 어둡게 칠합니다.</b>
-        /// 벽과 윗면이 같은 밝기면 계단 고도가 눈에 들어오지 않습니다.
-        /// 텍스처를 붙이는 대신 경계에 음영을 넣는 것이 이 룩의 방식입니다.
-        /// </summary>
-        private void AddSideWalls(MeshBuffer buffer, Tile tile, Vector3 center, float half)
-        {
-            for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
-            {
-                var offset = GridCoord.Neighbors4[n];
-                var neighbor = _grid.GetTile(tile.Coord + offset);
-
-                float bottomY;
-                if (neighbor == null || neighbor.IsWater)
-                {
-                    bottomY = WaterLevelOffset - UnderwaterSkirtDepth;
-                }
-                else if (neighbor.Height < tile.Height)
-                {
-                    bottomY = neighbor.WorldCenter.y;
-                }
-                else
-                {
-                    continue;
-                }
-
-                Vector3 outward = new Vector3(offset.X, 0f, offset.Y);
-
-                // 이웃을 향한 변의 두 끝점을 구합니다. 변은 outward에 수직입니다.
-                Vector3 edgeDirection = new Vector3(-outward.z, 0f, outward.x);
-                Vector3 edgeCenter = center + outward * half;
-
-                Vector3 endA = edgeCenter + edgeDirection * half;
-                Vector3 endB = edgeCenter - edgeDirection * half;
-
-                AddWallStrip(buffer, tile, endA, endB, bottomY, outward);
-            }
-        }
-
-        /// <summary>
-        /// 벽 한 면을 세웁니다. 윗변은 지형의 굴곡을 따라갑니다.
-        ///
-        /// <b>왜 잘라야 하는가</b>
-        /// 윗면이 굴곡지는데 벽 윗변만 곧으면 둘 사이에 틈이 벌어집니다.
-        /// 위에서 내려다보는 게임이라 그 틈으로 바다가 비쳐 즉시 눈에 띕니다.
-        /// 윗면과 같은 표본을 읽어 같은 높이로 맞춥니다.
-        /// </summary>
-        private void AddWallStrip(
-            MeshBuffer buffer,
-            Tile tile,
-            Vector3 endA,
-            Vector3 endB,
-            float bottomY,
-            Vector3 outward)
+        private void ForEachSurfaceCell(System.Action<Tile, int, int> action)
         {
             var field = _grid.Height;
             int steps = field != null ? field.Resolution : 1;
 
-            for (int i = 0; i < steps; i++)
-            {
-                Vector3 a = Vector3.Lerp(endA, endB, (float)i / steps);
-                Vector3 b = Vector3.Lerp(endA, endB, (float)(i + 1) / steps);
+            int cellsX = _grid.Width * steps;
+            int cellsY = _grid.Depth * steps;
 
-                if (field != null)
+            for (int cy = 0; cy < cellsY; cy++)
+            {
+                for (int cx = 0; cx < cellsX; cx++)
                 {
-                    // 윗면과 같은 출처에서 읽습니다. 기준 높이는 이 타일의 고도 단계입니다.
-                    a.y = tile.WorldCenter.y + field.SampleRelief(a.x, a.z);
-                    b.y = tile.WorldCenter.y + field.SampleRelief(b.x, b.z);
+                    var tile = _grid.GetTile(new GridCoord(cx / steps, cy / steps));
+
+                    if (tile != null && !tile.IsWater)
+                    {
+                        action(tile, cx, cy);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 셀 하나의 윗면입니다. 네 모서리가 각자 표본의 높이를 따릅니다.
+        /// </summary>
+        private void AddCellTop(MeshBuffer buffer, int cx, int cy)
+        {
+            float size = CellSpacing;
+
+            float x0 = _grid.Origin.x + cx * size;
+            float z0 = _grid.Origin.z + cy * size;
+            float x1 = x0 + size;
+            float z1 = z0 + size;
+
+            float y = LevelHeightOf(cx, cy);
+
+            buffer.AddQuad(
+                new Vector3(x0, y + ReliefAt(cx, cy), z0),
+                new Vector3(x0, y + ReliefAt(cx, cy + 1), z1),
+                new Vector3(x1, y + ReliefAt(cx + 1, cy + 1), z1),
+                new Vector3(x1, y + ReliefAt(cx + 1, cy), z0),
+                Vector3.up,
+                TopShade);
+        }
+
+        /// <summary>
+        /// 셀의 측면 벽입니다. 이웃 셀이 낮은 쪽에만 세웁니다.
+        ///
+        /// 이웃이 <b>셀</b>이라 벽이 표본 해상도로 꺾입니다. 그것이 등고선을 구불구불하게 만듭니다.
+        /// </summary>
+        private void AddCellWalls(MeshBuffer buffer, int cx, int cy)
+        {
+            float size = CellSpacing;
+
+            float x0 = _grid.Origin.x + cx * size;
+            float z0 = _grid.Origin.z + cy * size;
+            float x1 = x0 + size;
+            float z1 = z0 + size;
+
+            float top = LevelHeightOf(cx, cy);
+
+            for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
+            {
+                var offset = GridCoord.Neighbors4[n];
+
+                int nx = cx + offset.X;
+                int ny = cy + offset.Y;
+
+                float bottom;
+
+                if (!IsLandCell(nx, ny))
+                {
+                    bottom = WaterLevelOffset - UnderwaterSkirtDepth;
+                }
+                else
+                {
+                    float neighborTop = LevelHeightOf(nx, ny);
+
+                    if (neighborTop >= top - 0.0001f)
+                    {
+                        continue;
+                    }
+
+                    bottom = neighborTop;
                 }
 
+                // 이웃을 향한 변의 두 끝점입니다.
+                Vector3 outward = new Vector3(offset.X, 0f, offset.Y);
+
+                float ax, az, bx, bz;
+                int sxA, syA, sxB, syB;
+
+                if (offset.X > 0) { ax = x1; az = z0; bx = x1; bz = z1; sxA = cx + 1; syA = cy; sxB = cx + 1; syB = cy + 1; }
+                else if (offset.X < 0) { ax = x0; az = z1; bx = x0; bz = z0; sxA = cx; syA = cy + 1; sxB = cx; syB = cy; }
+                else if (offset.Y > 0) { ax = x1; az = z1; bx = x0; bz = z1; sxA = cx + 1; syA = cy + 1; sxB = cx; syB = cy + 1; }
+                else { ax = x0; az = z0; bx = x1; bz = z0; sxA = cx; syA = cy; sxB = cx + 1; syB = cy; }
+
+                // 윗변은 윗면과 같은 표본을 읽습니다. 곧게 두면 그 사이로 바다가 비칩니다.
+                var topA = new Vector3(ax, top + ReliefAt(sxA, syA), az);
+                var topB = new Vector3(bx, top + ReliefAt(sxB, syB), bz);
+
                 buffer.AddQuad(
-                    a,
-                    b,
-                    new Vector3(b.x, bottomY, b.z),
-                    new Vector3(a.x, bottomY, a.z),
+                    topA,
+                    topB,
+                    new Vector3(bx, bottom, bz),
+                    new Vector3(ax, bottom, az),
                     outward,
                     WallTopShade, WallTopShade, WallBottomShade, WallBottomShade);
             }
+        }
+
+        // ====================================================================================================
+        // 5-1. Private Methods - Cell Sampling
+        // ====================================================================================================
+
+        /// <summary>표본 셀 한 변의 월드 크기입니다.</summary>
+        private float CellSpacing => _grid.Height != null ? _grid.Height.Spacing : _grid.CellSize;
+
+        /// <summary>셀이 육지인지 봅니다.</summary>
+        private bool IsLandCell(int cx, int cy)
+        {
+            var field = _grid.Height;
+            int steps = field != null ? field.Resolution : 1;
+
+            var tile = _grid.GetTile(new GridCoord(cx / steps, cy / steps));
+
+            return cx >= 0 && cy >= 0 && tile != null && !tile.IsWater;
+        }
+
+        /// <summary>
+        /// 셀의 고도 단계 높이입니다.
+        ///
+        /// 하이트필드가 있으면 <b>표본의 단계</b>를 씁니다. 타일의 단계가 아닙니다 —
+        /// 그래야 휘어 놓은 경계가 실제로 그려집니다.
+        /// </summary>
+        private float LevelHeightOf(int cx, int cy)
+        {
+            var field = _grid.Height;
+
+            if (field == null)
+            {
+                var tile = _grid.GetTile(new GridCoord(cx, cy));
+                return tile != null ? tile.WorldCenter.y : 0f;
+            }
+
+            // 셀의 단계는 그 네 모서리 중 가장 낮은 것을 따릅니다.
+            // 가장 높은 것을 따르면 경계 셀이 이웃 위로 튀어나와 벽이 겹칩니다.
+            int level = int.MaxValue;
+
+            for (int oy = 0; oy <= 1; oy++)
+            {
+                for (int ox = 0; ox <= 1; ox++)
+                {
+                    level = Mathf.Min(level, field.GetLevel(cx + ox, cy + oy));
+                }
+            }
+
+            return level * _grid.HeightStep;
+        }
+
+        private float ReliefAt(int sx, int sy)
+        {
+            return _grid.Height != null ? _grid.Height.GetRelief(sx, sy) : 0f;
+        }
+
+        /// <summary>타일 한가운데의 지표면 좌표입니다. 가옥 상자를 앉히는 데 씁니다.</summary>
+        private Vector3 SurfaceCenterOf(Tile tile)
+        {
+            var center = tile.WorldCenter;
+
+            if (_grid.Height != null)
+            {
+                center.y = _grid.Height.SampleSurface(center.x, center.z);
+            }
+
+            return center;
         }
 
         /// <summary>

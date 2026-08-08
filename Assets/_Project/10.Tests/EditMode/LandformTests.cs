@@ -90,6 +90,131 @@ namespace SRPG.Tests
         }
 
         /// <summary>
+        /// <b>단 경계가 타일 격자를 벗어나야 합니다.</b>
+        ///
+        /// 이 검사가 없어서 문제를 놓쳤습니다.
+        /// 기복도 침식도 붕괴도 전부 <b>한 단 안쪽</b>만 건드리므로, 그것들이 다 통과해도
+        /// 단 경계는 타일 변을 따라 90도로 꺾인 채 남습니다. 그 선이 눈에 들어오는 전부인데
+        /// 어떤 검사도 그것을 보고 있지 않았습니다.
+        ///
+        /// 경계가 격자를 벗어났다는 것은 곧 <b>한 타일 안에 두 단계가 함께 있다</b>는 뜻입니다.
+        /// </summary>
+        [Test]
+        public void 단_경계가_타일_격자를_벗어난다()
+        {
+            var grid = CreateIsland();
+            var field = grid.Height;
+
+            int mixed = 0;
+            int checkedTiles = 0;
+
+            for (int i = 0; i < grid.AllTiles.Count; i++)
+            {
+                var tile = grid.AllTiles[i];
+
+                if (tile.IsWater)
+                {
+                    continue;
+                }
+
+                var corner = field.TileToSample(tile.Coord);
+
+                int lowest = int.MaxValue;
+                int highest = int.MinValue;
+
+                for (int oy = 0; oy < field.Resolution; oy++)
+                {
+                    for (int ox = 0; ox < field.Resolution; ox++)
+                    {
+                        int level = field.GetLevel(corner.X + ox, corner.Y + oy);
+
+                        lowest = Mathf.Min(lowest, level);
+                        highest = Mathf.Max(highest, level);
+                    }
+                }
+
+                checkedTiles++;
+
+                if (highest > lowest)
+                {
+                    mixed++;
+                }
+            }
+
+            Assert.Greater(checkedTiles, 0, "육지 타일이 없습니다.");
+
+            Assert.Greater(
+                mixed,
+                checkedTiles * 0.08f,
+                $"{checkedTiles}칸 중 {mixed}칸만 두 단계를 걸칩니다. " +
+                "단 경계가 아직 타일 변을 따라갑니다 — 웨딩케이크로 보입니다.");
+        }
+
+        /// <summary>
+        /// 경계를 휘어도 <b>한 표본 폭에 두 단</b>이 떨어지면 안 됩니다.
+        /// 그러면 지형이 갈라진 것처럼 보이고, 유닛이 통과할 수 없는 벽이 생깁니다.
+        /// </summary>
+        [Test]
+        public void 이웃_표본의_단계_차이가_1을_넘지_않는다()
+        {
+            var field = CreateIsland().Height;
+
+            for (int sy = 0; sy < field.SamplesY; sy++)
+            {
+                for (int sx = 0; sx < field.SamplesX; sx++)
+                {
+                    if (!field.IsLand(sx, sy))
+                    {
+                        continue;
+                    }
+
+                    int here = field.GetLevel(sx, sy);
+
+                    for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
+                    {
+                        int nx = sx + GridCoord.Neighbors4[n].X;
+                        int ny = sy + GridCoord.Neighbors4[n].Y;
+
+                        if (!field.IsInside(nx, ny))
+                        {
+                            continue;
+                        }
+
+                        int there = field.IsLand(nx, ny) ? field.GetLevel(nx, ny) : 0;
+
+                        Assert.LessOrEqual(
+                            here - there,
+                            1,
+                            $"({sx},{sy}) 의 단계 {here} 와 이웃 {there} 의 차이가 1을 넘습니다.");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 보이는 면과 발 높이가 같은 출처에서 나와야 합니다.
+        ///
+        /// 경계를 휘어 놓고 발 높이만 타일 기준으로 두면, 경계 근처에서 유닛이
+        /// 땅에 박히거나 공중에 뜹니다.
+        /// </summary>
+        [Test]
+        public void 발_높이가_보이는_면과_같다()
+        {
+            var grid = CreateIsland();
+
+            for (int i = 0; i < grid.WalkableTiles.Count; i++)
+            {
+                var center = grid.WalkableTiles[i].WorldCenter;
+
+                Assert.AreEqual(
+                    grid.Height.SampleSurface(center.x, center.z),
+                    grid.SampleGroundHeight(center),
+                    0.0001f,
+                    $"{grid.WalkableTiles[i].Coord} 에서 발 높이가 지형과 어긋납니다.");
+            }
+        }
+
+        /// <summary>
         /// 굴곡이 <b>눈에 보일 만큼</b> 있어야 합니다.
         ///
         /// 잘게 나누기만 하고 진폭이 미미하면 여전히 평면 계단으로 보입니다.
