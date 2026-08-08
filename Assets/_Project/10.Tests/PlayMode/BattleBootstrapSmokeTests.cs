@@ -1,7 +1,9 @@
 using System.Collections;
+using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Composition;
+using SRPG.Data;
 using SRPG.Gameplay.CameraControl;
 using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Selection;
@@ -258,13 +260,139 @@ namespace SRPG.Tests.PlayMode
         }
 
         // ====================================================================================================
+        // 3-1. Tests - 전투 계약
+        // ====================================================================================================
+
+        /// <summary>
+        /// <b>주문서가 실제로 전장에 반영되는지</b> 봅니다.
+        ///
+        /// 순수 로직 검사는 주문서의 모양만 봅니다. 그것이 정말 분대 수와 인원으로
+        /// 이어지지 않으면, 캠페인이 아무리 정확한 주문서를 만들어도 소용이 없습니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 주문서가_지시한_분대가_그대로_배치된다()
+        {
+            var definition = UnitDefinition.CreateDefault(UnitRole.Infantry);
+
+            try
+            {
+                var request = new BattleRequest();
+                request.PlayerSquads.Add(new SquadOrder
+                {
+                    Id = 11, Definition = definition, SoldierCount = 4, DisplayName = "선봉대",
+                });
+                request.PlayerSquads.Add(new SquadOrder
+                {
+                    Id = 22, Definition = definition, SoldierCount = 2, DisplayName = "후위",
+                });
+
+                CreateBootstrap(request);
+                yield return null;
+
+                var squads = Object.FindObjectsByType<Squad>(FindObjectsSortMode.None);
+                var mine = new List<Squad>();
+
+                for (int i = 0; i < squads.Length; i++)
+                {
+                    if (squads[i].DisplayName == "선봉대" || squads[i].DisplayName == "후위")
+                    {
+                        mine.Add(squads[i]);
+                    }
+                }
+
+                Assert.AreEqual(2, mine.Count, "주문서가 지시한 분대 수와 다릅니다.");
+
+                for (int i = 0; i < mine.Count; i++)
+                {
+                    int expected = mine[i].DisplayName == "선봉대" ? 5 : 3;
+
+                    Assert.AreEqual(expected, mine[i].AliveCount,
+                        $"{mine[i].DisplayName} 의 인원이 주문서와 다릅니다. 지휘관을 포함해야 합니다.");
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(definition);
+            }
+        }
+
+        /// <summary>
+        /// <b>전투에 끝이 있어야 캠페인에 돌려줄 것이 생깁니다.</b>
+        ///
+        /// 지금까지 이 게임에는 끝이 없었습니다. 분대를 다 잃어도 그대로 계속 돌았습니다.
+        /// 여기서는 일부러 전멸시켜 패배 보고가 실제로 발행되는지 봅니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 분대를_모두_잃으면_패배_보고가_발행된다()
+        {
+            var bootstrap = CreateBootstrap();
+            yield return null;
+
+            BattleResult received = null;
+            bootstrap.BattleConcluded += r => received = r;
+
+            var squads = Object.FindObjectsByType<Squad>(FindObjectsSortMode.None);
+            Assert.Greater(squads.Length, 0, "분대가 배치되지 않았습니다.");
+
+            int deployedTotal = 0;
+
+            for (int i = 0; i < squads.Length; i++)
+            {
+                deployedTotal += squads[i].AliveCount;
+                squads[i].Commander.Kill();
+            }
+
+            // 분대 소멸은 다음 갱신에서 처리됩니다.
+            yield return null;
+            yield return null;
+
+            Assert.IsNotNull(received, "분대를 모두 잃었는데 보고가 발행되지 않았습니다.");
+            Assert.AreEqual(BattleOutcome.Defeat, received.Outcome);
+
+            Assert.AreEqual(0, received.SurvivingSquads, "전멸했는데 생존 분대가 있습니다.");
+            Assert.AreEqual(deployedTotal, received.TotalLosses, "손실 인원이 배치 인원과 맞지 않습니다.");
+
+            for (int i = 0; i < received.Squads.Count; i++)
+            {
+                Assert.IsTrue(received.Squads[i].Destroyed, $"{received.Squads[i].Id} 번 분대가 소멸로 보고되지 않았습니다.");
+            }
+        }
+
+        /// <summary>
+        /// 결말은 한 번만 나야 합니다. 보고가 두 번 가면 캠페인이 손실을 두 번 반영합니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 보고는_한_번만_발행된다()
+        {
+            var bootstrap = CreateBootstrap();
+            yield return null;
+
+            int received = 0;
+            bootstrap.BattleConcluded += _ => received++;
+
+            var squads = Object.FindObjectsByType<Squad>(FindObjectsSortMode.None);
+
+            for (int i = 0; i < squads.Length; i++)
+            {
+                squads[i].Commander.Kill();
+            }
+
+            for (int frame = 0; frame < 6; frame++)
+            {
+                yield return null;
+            }
+
+            Assert.AreEqual(1, received, "보고가 여러 번 발행되었습니다.");
+        }
+
+        // ====================================================================================================
         // 4. Private Methods
         // ====================================================================================================
 
         /// <summary>
         /// 부트스트랩을 만듭니다. 시드를 고정해 테스트가 흔들리지 않게 합니다.
         /// </summary>
-        private BattleBootstrap CreateBootstrap()
+        private BattleBootstrap CreateBootstrap(BattleRequest request = null)
         {
             _bootstrapObject = new GameObject("TestBootstrap");
             _bootstrapObject.SetActive(false);
@@ -276,6 +404,9 @@ namespace SRPG.Tests.PlayMode
             // 오브젝트를 꺼 둔 채로 붙였다가 연결한 뒤 켭니다.
             // 켜져 있으면 Start 가 먼저 돌아 섬 없이 조립을 시도합니다.
             bootstrap.IslandSource = seed => TestIsland.Create(seed == 0 ? 20260807 : seed);
+
+            // 무엇을 데리고 나가는지도 바깥이 정합니다. 비우면 인스펙터 기본값이 쓰입니다.
+            bootstrap.Request = request;
 
             _bootstrapObject.SetActive(true);
 

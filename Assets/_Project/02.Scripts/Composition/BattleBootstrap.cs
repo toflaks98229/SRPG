@@ -10,6 +10,7 @@ using SRPG.Gameplay.Selection;
 using SRPG.Gameplay.Squads;
 using SRPG.Gameplay.Units;
 using SRPG.Gameplay.Visual;
+using SRPG.Systems.Battle;
 using SRPG.Systems.Grid;
 using SRPG.Systems.Time;
 using SRPG.UI.HUD;
@@ -91,6 +92,12 @@ namespace SRPG.Composition
         private UnitDefinition[] _playerRoster;
         private UnitDefinition[] _enemyRoster;
 
+        private readonly List<DeployedSquad> _deployed = new List<DeployedSquad>();
+        private readonly BattleConclusion _conclusion = new BattleConclusion();
+
+        private BattleRequest _activeRequest;
+        private int _enemiesSeen;
+
         // ====================================================================================================
         // 3. Properties
         // ====================================================================================================
@@ -102,6 +109,26 @@ namespace SRPG.Composition
         /// 지금은 맵 생성기가 없으므로 비어 있고, 그래서 전투도 시작되지 않습니다.
         /// </summary>
         public System.Func<int, IslandGrid> IslandSource { get; set; }
+
+        /// <summary>
+        /// 이 전투의 주문서입니다. 무엇을 데리고 나가는지를 <b>바깥이</b> 정합니다.
+        ///
+        /// <b>Start 가 돌기 전에 연결해야 합니다.</b>
+        /// 비워 두면 인스펙터 값으로 간단한 주문서를 만들어 씁니다 —
+        /// 캠페인이 아직 없는 지금의 프로토타입 경로입니다.
+        /// </summary>
+        public BattleRequest Request { get; set; }
+
+        /// <summary>
+        /// 전투가 끝나면 한 번 발행됩니다.
+        ///
+        /// 캠페인은 이 보고를 받아 분대의 인원을 줄이고, 무너진 분대를 지웁니다.
+        /// 전투는 그 뒤의 일을 알지 못합니다 — 알 필요도 없습니다.
+        /// </summary>
+        public event System.Action<BattleResult> BattleConcluded;
+
+        /// <summary>이 전투의 결말입니다. 아직 끝나지 않았으면 <c>Undecided</c> 입니다.</summary>
+        public BattleOutcome Outcome => _conclusion.Outcome;
 
         /// <summary>이 전투의 런타임 컨텍스트입니다.</summary>
         public BattleContext Context => _context;
@@ -122,6 +149,8 @@ namespace SRPG.Composition
         {
             // 스케일되지 않은 시간으로 갱신해야 슬로우모션 전환이 정상 속도로 진행됩니다.
             _timeController?.Tick(UnityEngine.Time.unscaledDeltaTime);
+
+            TickConclusion();
         }
 
         private void OnDestroy()
@@ -139,7 +168,6 @@ namespace SRPG.Composition
         /// </summary>
         private void BuildBattle()
         {
-            var waves = ResolveWaveDefinition();
             var tuning = ResolveTuning();
 
             var grid = BuildIslandGrid();
@@ -156,6 +184,15 @@ namespace SRPG.Composition
             _context = new BattleContext(grid, _timeController, tuning);
 
             ResolveRosters();
+
+            _activeRequest = ResolveRequest();
+
+            if (!_activeRequest.IsValid(out string problem))
+            {
+                Debug.LogError($"[Bootstrap] 주문서가 온전하지 않아 전투를 시작하지 못했습니다: {problem}");
+                return;
+            }
+
             EnsureRuntimeRoot();
             BuildIslandView(grid);
 
@@ -168,8 +205,8 @@ namespace SRPG.Composition
             EnsureLight();
 
             BuildSelectionController(battleCamera);
-            SpawnPlayerSquads(grid);
-            BuildSpawner(waves);
+            SpawnPlayerSquads(grid, _activeRequest);
+            BuildSpawner(_activeRequest.EnemyWaves ?? ResolveWaveDefinition());
             BuildHud();
             BuildAiOverlay();
         }
@@ -190,6 +227,112 @@ namespace SRPG.Composition
         private IslandGrid BuildIslandGrid()
         {
             return IslandSource?.Invoke(_seedOverride);
+        }
+
+        /// <summary>
+        /// 이 전투의 주문서를 정합니다.
+        ///
+        /// 바깥이 꽂아 준 것이 있으면 그것을 쓰고, 없으면 인스펙터 값으로 간단히 만듭니다.
+        /// 캠페인이 붙으면 후자는 쓰이지 않습니다.
+        /// </summary>
+        private BattleRequest ResolveRequest()
+        {
+            if (Request != null)
+            {
+                return Request;
+            }
+
+            return BattleRequest.CreateSimple(_playerRoster, _playerSquadCount, _soldiersPerSquad, _seedOverride);
+        }
+
+        // ====================================================================================================
+        // 5-1. Private Methods - Conclusion
+        // ====================================================================================================
+
+        /// <summary>
+        /// 전투가 끝났는지 살피고, 끝났으면 보고서를 발행합니다.
+        ///
+        /// <b>판정은 여기서 하지 않습니다.</b>
+        /// 규칙은 <see cref="BattleConclusion"/>이 들고 있고, 여기서는 관측값만 모아 넘깁니다.
+        /// 그래야 "왜 승리 처리가 안 됐는가"를 씬을 재생하지 않고도 확인할 수 있습니다.
+        /// </summary>
+        private void TickConclusion()
+        {
+            if (_context == null || _conclusion.IsDecided)
+            {
+                return;
+            }
+
+            int enemiesAlive = _context.EnemyUnits.Count;
+
+            // 처치 수는 "지금까지 본 적의 최대치 - 지금 남은 수"로 셉니다.
+            // 파도로 나뉘어 들어오므로 처음에 총원을 알 수 없고,
+            // 유닛마다 죽음을 구독하면 조립 지점이 전투 세부를 알게 됩니다.
+            _enemiesSeen = Mathf.Max(_enemiesSeen, enemiesAlive + CountEnemyLosses());
+
+            bool decided = _conclusion.Tick(
+                UnityEngine.Time.deltaTime,
+                CountLivingSquads(),
+                enemiesAlive,
+                _spawner == null || _spawner.Scheduler == null || _spawner.Scheduler.IsFinished);
+
+            if (decided)
+            {
+                PublishResult();
+            }
+        }
+
+        private int CountLivingSquads()
+        {
+            int alive = 0;
+
+            for (int i = 0; i < _deployed.Count; i++)
+            {
+                if (_deployed[i].IsAlive)
+                {
+                    alive++;
+                }
+            }
+
+            return alive;
+        }
+
+        private int CountEnemyLosses()
+        {
+            return _enemiesSeen > 0 ? _enemiesSeen - _context.EnemyUnits.Count : 0;
+        }
+
+        /// <summary>
+        /// 분대별 전황을 모아 보고서를 발행합니다.
+        /// </summary>
+        private void PublishResult()
+        {
+            var result = new BattleResult
+            {
+                Outcome = _conclusion.Outcome,
+                Duration = _conclusion.Elapsed,
+                EnemiesKilled = Mathf.Max(0, _enemiesSeen - _context.EnemyUnits.Count),
+            };
+
+            for (int i = 0; i < _deployed.Count; i++)
+            {
+                var entry = _deployed[i];
+
+                result.Squads.Add(new SquadReport
+                {
+                    Id = entry.Id,
+                    Deployed = entry.Deployed,
+
+                    // 분대가 무너지면 남은 병사도 함께 사라집니다.
+                    // 지휘관을 잃은 분대는 흩어지므로 생존자로 세지 않습니다.
+                    Survivors = entry.IsAlive ? entry.Squad.AliveCount : 0,
+                    Destroyed = !entry.IsAlive,
+                });
+            }
+
+            Debug.Log($"[Bootstrap] 전투 종료 — {result}");
+
+            BattleConcluded?.Invoke(result);
         }
 
         /// <summary>
@@ -338,34 +481,68 @@ namespace SRPG.Composition
         }
 
         // ====================================================================================================
+        // 7-1. Nested Types
+        // ====================================================================================================
+
+        /// <summary>
+        /// 전장에 세운 분대 하나의 기록입니다.
+        ///
+        /// 주문서의 식별자와 실제 분대를 이어 둡니다.
+        /// 전투가 끝나면 이 짝으로 보고서를 씁니다 — 분대가 파괴되어 오브젝트가
+        /// 사라져도 <see cref="Id"/>와 <see cref="Deployed"/>는 남아 있어야 합니다.
+        /// </summary>
+        private struct DeployedSquad
+        {
+            public int Id;
+            public Squad Squad;
+            public int Deployed;
+
+            /// <summary>분대가 아직 싸우고 있는지 여부입니다.</summary>
+            public bool IsAlive => Squad != null && !Squad.IsDestroyed;
+        }
+
+        // ====================================================================================================
         // 8. Private Methods - Squads
         // ====================================================================================================
 
         /// <summary>
-        /// 플레이어 분대를 섬 안쪽에 배치합니다.
+        /// 주문서가 지시한 분대를 섬 안쪽에 배치합니다.
         /// 분대끼리 겹치지 않도록 간격을 두고, 중심에 가까운 타일부터 채웁니다.
+        ///
+        /// <b>무엇을 데려가는지는 여기서 정하지 않습니다.</b>
+        /// 주문서가 이미 정해 놓은 것을 전장에 세우기만 합니다.
         /// </summary>
-        private void SpawnPlayerSquads(IslandGrid grid)
+        private void SpawnPlayerSquads(IslandGrid grid, BattleRequest request)
         {
-            var spawnTiles = SelectSquadSpawnTiles(grid, _playerSquadCount);
+            var spawnTiles = SelectSquadSpawnTiles(grid, request.PlayerSquads.Count);
 
-            for (int i = 0; i < spawnTiles.Count; i++)
+            for (int i = 0; i < spawnTiles.Count && i < request.PlayerSquads.Count; i++)
             {
-                var definition = _playerRoster[i % _playerRoster.Length];
+                var order = request.PlayerSquads[i];
 
-                var squadObject = new GameObject($"Squad_{i + 1}_{definition.DisplayName}");
+                var squadObject = new GameObject($"Squad_{order.Id}_{order.Definition.DisplayName}");
                 squadObject.transform.SetParent(_runtimeRoot, false);
 
                 var squad = squadObject.AddComponent<Squad>();
                 squad.Initialize(
                     _context,
-                    definition,
+                    order.Definition,
                     spawnTiles[i].Coord,
-                    _soldiersPerSquad,
-                    $"{i + 1}. {definition.DisplayName}",
-                    CreateUnit);
+                    order.SoldierCount,
+                    order.ResolveName(),
+                    CreateUnit,
+                    order.ClampedRank());
 
                 _selectionController.RegisterSquad(squad);
+
+                // 주문서의 식별자와 배치 인원을 기억해 둡니다.
+                // 전투가 끝나면 이 짝으로 보고서를 만듭니다.
+                _deployed.Add(new DeployedSquad
+                {
+                    Id = order.Id,
+                    Squad = squad,
+                    Deployed = squad.AliveCount,
+                });
             }
         }
 
