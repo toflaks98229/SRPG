@@ -26,6 +26,7 @@ namespace SRPG.UI.HUD
         private readonly StringBuilder _builder = new StringBuilder(512);
 
         private IUnitRoster _roster;
+        private IEnemySquadRoster _enemySquads;
         private TacticalTimeController _clock;
         private SquadSelectionController _selection;
         private EnemySpawner _spawner;
@@ -73,11 +74,13 @@ namespace SRPG.UI.HUD
         /// </summary>
         public void Initialize(
             IUnitRoster roster,
+            IEnemySquadRoster enemySquads,
             TacticalTimeController clock,
             SquadSelectionController selection,
             EnemySpawner spawner)
         {
             _roster = roster;
+            _enemySquads = enemySquads;
             _clock = clock;
             _selection = selection;
             _spawner = spawner;
@@ -169,18 +172,23 @@ namespace SRPG.UI.HUD
         /// </summary>
         private void AppendEnemySquads()
         {
-            var squads = Object.FindObjectsByType<EnemySquad>(FindObjectsSortMode.None);
-
-            _builder.AppendLine();
-            _builder.AppendLine($"<b>── 적 분대 ({squads.Length}) ──</b>");
-
-            if (squads.Length == 0)
+            if (_enemySquads == null)
             {
-                _builder.AppendLine("상륙한 적이 없습니다.");
                 return;
             }
 
-            for (int i = 0; i < squads.Length; i++)
+            var squads = _enemySquads.EnemySquads;
+
+            _builder.AppendLine();
+            _builder.AppendLine($"<b>── 적 분대 ({squads.Count}) ──</b>");
+
+            if (squads.Count == 0)
+            {
+                _builder.AppendLine("전장에 선 적이 없습니다.");
+                return;
+            }
+
+            for (int i = 0; i < squads.Count; i++)
             {
                 var squad = squads[i];
                 if (squad == null || squad.IsDisbanded)

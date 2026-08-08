@@ -137,6 +137,9 @@ namespace SRPG.Gameplay.Enemies
             var coord = context.Grid.WorldToCoord(beachhead);
             _motor.Teleport(beachhead, coord);
 
+            // 명부에 스스로 올립니다. 이게 없으면 표시하는 쪽이 씬 전체를 훑어야 합니다.
+            context.RegisterEnemySquad(this);
+
             // 분대마다 재판단 시점을 흩뜨립니다. 안 그러면 모든 분대가 같은 프레임에 A*를 돌립니다.
             _replanTimer = Random.Range(0f, ReplanJitter);
         }
@@ -423,8 +426,17 @@ namespace SRPG.Gameplay.Enemies
 
             IsDisbanded = true;
             _context?.EnemyOccupancy.Release(this);
+            _context?.UnregisterEnemySquad(this);
 
             Destroy(gameObject);
+        }
+
+        /// <summary>
+        /// 해산을 거치지 않고 사라지는 경우(씬 전환 등)에도 명부를 정리합니다.
+        /// </summary>
+        private void OnDestroy()
+        {
+            _context?.UnregisterEnemySquad(this);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
+using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Units;
 using SRPG.Gameplay.Weapons;
 using SRPG.Systems.AI;
@@ -63,6 +64,25 @@ namespace SRPG.Gameplay.Battle
 
         /// <summary>지정 진영의 유닛 목록을 반환합니다.</summary>
         IReadOnlyList<Unit> GetUnits(Team team);
+    }
+
+    /// <summary>
+    /// 상륙해 있는 적 분대의 명부입니다.
+    ///
+    /// <b>왜 레지스트리가 필요한가</b>
+    ///
+    /// 디버그 HUD 와 AI 오버레이가 <c>FindObjectsByType</c> 으로 씬 전체를 훑고 있었습니다.
+    /// 그 자체도 싸지 않지만, <b>부르는 자리가 나빴습니다</b> —
+    /// <c>OnGUI</c> 는 한 프레임에 레이아웃과 리페인트로 두 번 이상 돕니다.
+    /// 그래서 씬 전체 스캔이 프레임당 두 번씩, 매 프레임 일어났습니다.
+    ///
+    /// 분대가 스스로 등록하면 목록을 읽는 일이 됩니다.
+    /// <c>Squad</c>가 선택 컨트롤러에 등록하는 것과 같은 방식입니다.
+    /// </summary>
+    public interface IEnemySquadRoster
+    {
+        /// <summary>상륙한 적 분대 목록입니다. 해산한 분대가 잠시 남아 있을 수 있습니다.</summary>
+        IReadOnlyList<EnemySquad> EnemySquads { get; }
     }
 
     /// <summary>

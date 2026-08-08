@@ -61,7 +61,7 @@ namespace SRPG.Gameplay.Debugging
 
         private IslandGrid _grid;
         private IThreatProvider _threat;
-        private readonly List<EnemySquad> _squadBuffer = new List<EnemySquad>(16);
+        private IEnemySquadRoster _enemySquads;
 
         // ====================================================================================================
         // 3. Public Methods
@@ -73,10 +73,11 @@ namespace SRPG.Gameplay.Debugging
         /// 그릴 지형과 그릴 판단, 둘뿐입니다. 표시 코드가 전투 상태를 바꿀 수 있으면
         /// 디버그 도구가 디버그 대상을 흔드는 일이 생깁니다.
         /// </summary>
-        public void Initialize(IslandGrid grid, IThreatProvider threat)
+        public void Initialize(IslandGrid grid, IThreatProvider threat, IEnemySquadRoster enemySquads)
         {
             _grid = grid;
             _threat = threat;
+            _enemySquads = enemySquads;
         }
 
         // ====================================================================================================
@@ -183,12 +184,16 @@ namespace SRPG.Gameplay.Debugging
         /// </summary>
         private void DrawEnemyGoals()
         {
-            _squadBuffer.Clear();
-            GetComponentsInChildrenSafe(_squadBuffer);
-
-            for (int i = 0; i < _squadBuffer.Count; i++)
+            if (_enemySquads == null)
             {
-                var squad = _squadBuffer[i];
+                return;
+            }
+
+            var squads = _enemySquads.EnemySquads;
+
+            for (int i = 0; i < squads.Count; i++)
+            {
+                var squad = squads[i];
                 if (squad == null || squad.IsDisbanded || !squad.GoalCoord.IsValid)
                 {
                     continue;
@@ -209,19 +214,5 @@ namespace SRPG.Gameplay.Debugging
             }
         }
 
-        /// <summary>
-        /// 씬 전체에서 적 분대를 모읍니다.
-        ///
-        /// 기즈모는 에디터에서만 도는 표시 코드라 전역 탐색을 써도 됩니다.
-        /// 런타임 코드였다면 레지스트리를 두었을 자리입니다.
-        /// </summary>
-        private static void GetComponentsInChildrenSafe(List<EnemySquad> buffer)
-        {
-            var found = FindObjectsByType<EnemySquad>(FindObjectsSortMode.None);
-            for (int i = 0; i < found.Length; i++)
-            {
-                buffer.Add(found[i]);
-            }
-        }
     }
 }

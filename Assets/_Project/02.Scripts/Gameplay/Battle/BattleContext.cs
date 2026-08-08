@@ -31,7 +31,7 @@ namespace SRPG.Gameplay.Battle
     /// 그때 등록 단위가 되는 것이 위 인터페이스들이고, 소비자는 지금 받는 것을 그대로 받게 됩니다.
     /// 지금은 패키지가 없으므로 부트스트랩이 직접 생성해 주입합니다.
     /// </summary>
-    public sealed class BattleContext : IUnitContext, IUnitRoster, IThreatProvider
+    public sealed class BattleContext : IUnitContext, IUnitRoster, IThreatProvider, IEnemySquadRoster
     {
         // ====================================================================================================
         // 1. Fields
@@ -39,6 +39,9 @@ namespace SRPG.Gameplay.Battle
 
         private readonly List<Unit> _playerUnits = new List<Unit>(64);
         private readonly List<Unit> _enemyUnits = new List<Unit>(128);
+
+        /// <summary>상륙한 적 분대입니다. 분대가 태어나고 해산할 때 스스로 넣고 뺍니다.</summary>
+        private readonly List<EnemySquad> _enemySquads = new List<EnemySquad>(8);
 
         private readonly SpatialGrid<Unit> _playerIndex;
         private readonly SpatialGrid<Unit> _enemyIndex;
@@ -107,6 +110,9 @@ namespace SRPG.Gameplay.Battle
 
         /// <summary>적 유닛 목록입니다.</summary>
         public IReadOnlyList<Unit> EnemyUnits => _enemyUnits;
+
+        /// <summary>상륙한 적 분대 목록입니다.</summary>
+        public IReadOnlyList<EnemySquad> EnemySquads => _enemySquads;
 
         // ====================================================================================================
         // 3. Constructor
@@ -189,6 +195,28 @@ namespace SRPG.Gameplay.Battle
         public IReadOnlyList<Unit> GetUnits(Team team)
         {
             return team == Team.Player ? _playerUnits : _enemyUnits;
+        }
+
+        /// <summary>
+        /// 적 분대를 명부에 넣습니다. 상륙정이 첫 병력을 내릴 때 분대가 스스로 부릅니다.
+        /// </summary>
+        public void RegisterEnemySquad(EnemySquad squad)
+        {
+            if (squad != null && !_enemySquads.Contains(squad))
+            {
+                _enemySquads.Add(squad);
+            }
+        }
+
+        /// <summary>
+        /// 적 분대를 명부에서 뺍니다. 해산할 때와 오브젝트가 사라질 때 부릅니다.
+        ///
+        /// 두 번 불려도 안전합니다. 해산과 파괴는 한 프레임 떨어져 일어나므로
+        /// 양쪽에서 부르지 않으면 씬을 벗어날 때 빠진 항목이 남습니다.
+        /// </summary>
+        public void UnregisterEnemySquad(EnemySquad squad)
+        {
+            _enemySquads.Remove(squad);
         }
 
         /// <summary>
