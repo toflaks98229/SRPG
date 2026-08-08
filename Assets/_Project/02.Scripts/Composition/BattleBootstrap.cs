@@ -470,7 +470,8 @@ namespace SRPG.Composition
 
             _selectionController = selectionObject.AddComponent<SquadSelectionController>();
             _selectionController.Initialize(
-                _context,
+                _context.Grid,
+                _context.TimeController,
                 battleCamera,
                 _setup != null ? _setup.SelectionMarkerPrefab : null,
                 _setup != null ? _setup.OrderMarkerPrefab : null);
@@ -501,7 +502,7 @@ namespace SRPG.Composition
             hudObject.transform.SetParent(_runtimeRoot, false);
 
             var hud = hudObject.AddComponent<BattleDebugHud>();
-            hud.Initialize(_context, _selectionController, _spawner);
+            hud.Initialize(_context, _context.TimeController, _selectionController, _spawner);
         }
 
         /// <summary>
@@ -518,7 +519,7 @@ namespace SRPG.Composition
             var overlayObject = new GameObject("AiDebugOverlay");
             overlayObject.transform.SetParent(_runtimeRoot, false);
 
-            overlayObject.AddComponent<AiDebugOverlay>().Initialize(_context);
+            overlayObject.AddComponent<AiDebugOverlay>().Initialize(_context.Grid, _context);
         }
 
         // ====================================================================================================

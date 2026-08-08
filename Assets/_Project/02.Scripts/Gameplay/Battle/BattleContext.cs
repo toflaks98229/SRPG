@@ -18,10 +18,20 @@ namespace SRPG.Gameplay.Battle
     /// 한 전투가 공유하는 런타임 상태입니다.
     /// 지형·경로탐색기·시간 제어기·유닛 레지스트리를 한곳에 모아, 액터들이 서로를 직접 찾아다니지 않게 합니다.
     ///
+    /// <b>소비자는 이것을 통째로 받지 않습니다</b>
+    ///
+    /// 이 클래스는 역할별 인터페이스(<see cref="ISpatialQuery"/>, <see cref="IUnitRegistry"/>,
+    /// <see cref="IUnitRoster"/>, <see cref="IThreatProvider"/>, <see cref="IUnitContext"/>)를
+    /// <b>모아 구현할 뿐</b>이고, 각 소비자는 자기가 실제로 쓰는 역할만 받습니다.
+    ///
+    /// 그러지 않으면 여기에 필드를 하나 더할 때마다, 그것을 쓸 이유가 없는 모든 곳이
+    /// 함께 접근 가능해집니다. 싱글턴이 아닌데도 사실상 서비스 로케이터처럼 굳는 경로입니다.
+    ///
     /// DI 컨테이너(VContainer)를 도입하면 이 클래스는 컨테이너 등록으로 대체됩니다.
+    /// 그때 등록 단위가 되는 것이 위 인터페이스들이고, 소비자는 지금 받는 것을 그대로 받게 됩니다.
     /// 지금은 패키지가 없으므로 부트스트랩이 직접 생성해 주입합니다.
     /// </summary>
-    public sealed class BattleContext
+    public sealed class BattleContext : IUnitContext, IUnitRoster, IThreatProvider
     {
         // ====================================================================================================
         // 1. Fields

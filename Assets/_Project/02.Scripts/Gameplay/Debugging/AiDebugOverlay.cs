@@ -3,6 +3,7 @@ using SRPG.Common;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Enemies;
 using SRPG.Systems.AI;
+using SRPG.Systems.Grid;
 using UnityEngine;
 
 namespace SRPG.Gameplay.Debugging
@@ -58,7 +59,8 @@ namespace SRPG.Gameplay.Debugging
         // 2. Fields
         // ====================================================================================================
 
-        private BattleContext _context;
+        private IslandGrid _grid;
+        private IThreatProvider _threat;
         private readonly List<EnemySquad> _squadBuffer = new List<EnemySquad>(16);
 
         // ====================================================================================================
@@ -67,10 +69,14 @@ namespace SRPG.Gameplay.Debugging
 
         /// <summary>
         /// 오버레이를 초기화합니다.
+        ///
+        /// 그릴 지형과 그릴 판단, 둘뿐입니다. 표시 코드가 전투 상태를 바꿀 수 있으면
+        /// 디버그 도구가 디버그 대상을 흔드는 일이 생깁니다.
         /// </summary>
-        public void Initialize(BattleContext context)
+        public void Initialize(IslandGrid grid, IThreatProvider threat)
         {
-            _context = context;
+            _grid = grid;
+            _threat = threat;
         }
 
         // ====================================================================================================
@@ -79,7 +85,7 @@ namespace SRPG.Gameplay.Debugging
 
         private void OnDrawGizmos()
         {
-            if (_context == null || _context.Grid == null)
+            if (_grid == null)
             {
                 return;
             }
@@ -110,13 +116,18 @@ namespace SRPG.Gameplay.Debugging
         /// </summary>
         private void DrawThreatMap()
         {
-            var map = _context.GetThreatMap(Team.Player);
+            if (_threat == null)
+            {
+                return;
+            }
+
+            var map = _threat.GetThreatMap(Team.Player);
             if (map.IsEmpty)
             {
                 return;
             }
 
-            var grid = _context.Grid;
+            var grid = _grid;
             Vector3 size = new Vector3(grid.CellSize * 0.9f, 0.05f, grid.CellSize * 0.9f);
 
             for (int i = 0; i < grid.AllTiles.Count; i++)
@@ -144,7 +155,7 @@ namespace SRPG.Gameplay.Debugging
         /// </summary>
         private void DrawChokePoints()
         {
-            var grid = _context.Grid;
+            var grid = _grid;
             Vector3 size = new Vector3(grid.CellSize * 0.55f, 0.05f, grid.CellSize * 0.55f);
 
             for (int i = 0; i < grid.AllTiles.Count; i++)
@@ -184,14 +195,14 @@ namespace SRPG.Gameplay.Debugging
                 }
 
                 Vector3 from = squad.AnchorPosition + Vector3.up * 0.5f;
-                Vector3 to = _context.Grid.CoordToWorld(squad.GoalCoord) + Vector3.up * 0.5f;
+                Vector3 to = _grid.CoordToWorld(squad.GoalCoord) + Vector3.up * 0.5f;
 
                 Gizmos.color = squad.GoalKind == GoalKind.House
                     ? new Color(1f, 0.4f, 0.2f)
                     : new Color(1f, 0.85f, 0.2f);
 
                 Gizmos.DrawLine(from, to);
-                Gizmos.DrawWireSphere(to, _context.Grid.CellSize * 0.35f);
+                Gizmos.DrawWireSphere(to, _grid.CellSize * 0.35f);
 
                 // 분대 규모를 구로 표시합니다. 커질수록 위협적입니다.
                 Gizmos.DrawWireSphere(from, 0.25f + squad.AliveCount * 0.06f);

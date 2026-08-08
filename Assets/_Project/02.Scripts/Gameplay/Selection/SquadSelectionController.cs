@@ -1,8 +1,9 @@
 ﻿using System.Collections.Generic;
 using SRPG.Common;
-using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Squads;
 using SRPG.Gameplay.Visual;
+using SRPG.Systems.Grid;
+using SRPG.Systems.Time;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -39,7 +40,8 @@ namespace SRPG.Gameplay.Selection
 
         private readonly List<Squad> _squads = new List<Squad>(8);
 
-        private BattleContext _context;
+        private IslandGrid _grid;
+        private TacticalTimeController _clock;
         private Camera _camera;
         private Squad _selected;
 
@@ -70,7 +72,7 @@ namespace SRPG.Gameplay.Selection
 
         private void Update()
         {
-            if (_context == null || _camera == null)
+            if (_grid == null || _camera == null)
             {
                 return;
             }
@@ -85,7 +87,7 @@ namespace SRPG.Gameplay.Selection
             // 그러면 판단이 끝났는데도 화면이 느리게 흘러 답답하고, 무엇보다
             // 아무것도 선택하지 않는 것이 가장 유리한 플레이가 되어 버립니다.
             // 명령을 내리는 순간 시간이 돌아와야, 결정에 대한 결과를 제 속도로 마주하게 됩니다.
-            _context.TimeController.SetSlowMotion(
+            _clock?.SetSlowMotion(
                 _slowMotionArmed && _selected != null && !_selected.IsDestroyed);
         }
 
@@ -96,17 +98,20 @@ namespace SRPG.Gameplay.Selection
         /// <summary>
         /// 컨트롤러를 초기화합니다.
         /// </summary>
-        /// <param name="context">전투 컨텍스트입니다.</param>
+        /// <param name="grid">클릭 지점을 타일로 옮기는 데 쓰는 지형입니다.</param>
+        /// <param name="clock">명령 입력 중 시간을 늦추는 제어기입니다.</param>
         /// <param name="battleCamera">클릭 레이캐스트에 사용할 카메라입니다.</param>
         /// <param name="selectionMarkerPrefab">선택 표시 프리팹입니다. null이면 프리미티브로 대체합니다.</param>
         /// <param name="orderMarkerPrefab">명령 지점 표시 프리팹입니다. null이면 프리미티브로 대체합니다.</param>
         public void Initialize(
-            BattleContext context,
+            IslandGrid grid,
+            TacticalTimeController clock,
             Camera battleCamera,
             GameObject selectionMarkerPrefab = null,
             GameObject orderMarkerPrefab = null)
         {
-            _context = context;
+            _grid = grid;
+            _clock = clock;
             _camera = battleCamera;
             _selectionMarkerPrefab = selectionMarkerPrefab;
             _orderMarkerPrefab = orderMarkerPrefab;
@@ -178,7 +183,7 @@ namespace SRPG.Gameplay.Selection
             // 선택된 분대가 있으면 그 지점으로 이동 명령을 내립니다.
             if (_selected != null && !_selected.IsDestroyed)
             {
-                var coord = _context.Grid.WorldToCoord(worldPoint);
+                var coord = _grid.WorldToCoord(worldPoint);
                 if (_selected.IssueMoveOrder(coord))
                 {
                     // 명령이 나갔으니 시간을 정상으로 돌립니다.
@@ -325,7 +330,7 @@ namespace SRPG.Gameplay.Selection
 
                 if (showOrder)
                 {
-                    Vector3 position = _context.Grid.CoordToWorld(_selected.OrderedCoord);
+                    Vector3 position = _grid.CoordToWorld(_selected.OrderedCoord);
                     position.y += 0.14f;
                     _orderMarker.position = position;
                 }

@@ -70,7 +70,7 @@ namespace SRPG.Gameplay.Units
         private readonly AttackerSlots _attackerSlots = new AttackerSlots();
 
         private UnitDefinition _definition;
-        private BattleContext _context;
+        private IUnitContext _context;
         private Team _team;
         private WeaponBase _weapon;
         private Transform _transform;
@@ -215,8 +215,12 @@ namespace SRPG.Gameplay.Units
 
         /// <summary>
         /// 유닛을 초기화합니다. 생성 직후 반드시 호출해야 합니다.
+        ///
+        /// <b>전투 컨텍스트 전체가 아니라 <see cref="IUnitContext"/>를 받습니다.</b>
+        /// 경로 탐색기·타일 점유·전군 명부는 여기 들어오지 않습니다.
+        /// 병사가 그것들을 만지는 코드는 아예 컴파일되지 않습니다.
         /// </summary>
-        public void Initialize(UnitDefinition definition, Team team, BattleContext context, bool isCommander = false)
+        public void Initialize(UnitDefinition definition, Team team, IUnitContext context, bool isCommander = false)
         {
             _transform = transform;
             _definition = definition;
@@ -230,9 +234,10 @@ namespace SRPG.Gameplay.Units
             _staggerTimer = 0f;
             _rootTimer = 0f;
 
+            // 협력자들은 각자 필요한 것만 받습니다. 병사가 받은 것보다 더 좁습니다.
             _targeting.Configure(this, context, definition);
-            _locomotion.Configure(this, context, definition);
-            _facing.Configure(this, _transform, context, definition);
+            _locomotion.Configure(this, context.Grid, context, context.Tuning, definition);
+            _facing.Configure(this, _transform, context, context.Tuning, definition);
             _attackerSlots.Clear();
 
             // 같은 프레임에 생성된 유닛들이 동시에 공격하지 않도록 첫 쿨다운을 흩뜨립니다.

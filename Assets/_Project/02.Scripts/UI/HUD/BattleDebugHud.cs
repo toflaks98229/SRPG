@@ -4,6 +4,7 @@ using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Selection;
 using SRPG.Systems.AI;
+using SRPG.Systems.Time;
 using UnityEngine;
 
 namespace SRPG.UI.HUD
@@ -24,7 +25,8 @@ namespace SRPG.UI.HUD
 
         private readonly StringBuilder _builder = new StringBuilder(512);
 
-        private BattleContext _context;
+        private IUnitRoster _roster;
+        private TacticalTimeController _clock;
         private SquadSelectionController _selection;
         private EnemySpawner _spawner;
 
@@ -38,7 +40,7 @@ namespace SRPG.UI.HUD
 
         private void OnGUI()
         {
-            if (_context == null)
+            if (_roster == null)
             {
                 return;
             }
@@ -64,10 +66,19 @@ namespace SRPG.UI.HUD
 
         /// <summary>
         /// HUD를 초기화합니다.
+        ///
+        /// <b>세는 데 필요한 것만 받습니다.</b>
+        /// 표시용 화면이 경로 탐색기나 타일 점유에 손댈 일은 없고,
+        /// 받을 수 있게 두면 언젠가 손댑니다.
         /// </summary>
-        public void Initialize(BattleContext context, SquadSelectionController selection, EnemySpawner spawner)
+        public void Initialize(
+            IUnitRoster roster,
+            TacticalTimeController clock,
+            SquadSelectionController selection,
+            EnemySpawner spawner)
         {
-            _context = context;
+            _roster = roster;
+            _clock = clock;
             _selection = selection;
             _spawner = spawner;
         }
@@ -102,9 +113,13 @@ namespace SRPG.UI.HUD
                 _builder.AppendLine($"상륙정: {_spawner.ActiveShipCount}척");
             }
 
-            _builder.AppendLine($"적 병력: {_context.EnemyUnits.Count}명");
-            _builder.AppendLine($"아군 병력: {_context.PlayerUnits.Count}명");
-            _builder.AppendLine($"타임스케일: {_context.TimeController.CurrentScale:F2}");
+            _builder.AppendLine($"적 병력: {_roster.EnemyUnits.Count}명");
+            _builder.AppendLine($"아군 병력: {_roster.PlayerUnits.Count}명");
+
+            if (_clock != null)
+            {
+                _builder.AppendLine($"타임스케일: {_clock.CurrentScale:F2}");
+            }
             _builder.AppendLine();
 
             _builder.AppendLine("<b>── 분대 ──</b>");

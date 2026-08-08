@@ -46,7 +46,9 @@ namespace SRPG.Gameplay.Units
         private readonly List<Unit> _neighborBuffer = new List<Unit>(16);
 
         private Unit _owner;
-        private BattleContext _context;
+        private IslandGrid _grid;
+        private ISpatialQuery _spatial;
+        private BattleTuning _tuning;
         private UnitDefinition _definition;
 
         // ====================================================================================================
@@ -60,11 +62,25 @@ namespace SRPG.Gameplay.Units
         // 4. Public Methods - Setup
         // ====================================================================================================
 
-        /// <summary>필요한 것을 연결하고 외력을 지웁니다. 유닛 초기화 때 부릅니다.</summary>
-        public void Configure(Unit owner, BattleContext context, UnitDefinition definition)
+        /// <summary>
+        /// 필요한 것을 연결하고 외력을 지웁니다. 유닛 초기화 때 부릅니다.
+        ///
+        /// <b>지형·공간 질의·튜닝, 셋뿐입니다.</b>
+        /// 어디에 설 수 있는지(지형), 옆에 누가 있는지(질의), 얼마나 세게 밀어낼지(튜닝).
+        /// 경로 탐색기가 없는 것이 중요합니다 — 길을 잡는 것은 분대의 일이고,
+        /// 병사는 가리키는 곳으로 조향할 뿐입니다.
+        /// </summary>
+        public void Configure(
+            Unit owner,
+            IslandGrid grid,
+            ISpatialQuery spatial,
+            BattleTuning tuning,
+            UnitDefinition definition)
         {
             _owner = owner;
-            _context = context;
+            _grid = grid;
+            _spatial = spatial;
+            _tuning = tuning;
             _definition = definition;
 
             Velocity = Vector3.zero;
@@ -159,7 +175,7 @@ namespace SRPG.Gameplay.Units
             Vector3 desired = position + _impulses.CombineWith(steering) * deltaTime;
 
             var step = GroundMotion.TryStep(
-                _context != null ? _context.Grid : null,
+                _grid,
                 position,
                 desired,
                 _impulses.IsPushedFasterThan(DrownKnockbackThreshold),
@@ -181,22 +197,21 @@ namespace SRPG.Gameplay.Units
         /// </summary>
         private Vector3 SolveSeparation(Vector3 position, float deltaTime)
         {
-            var tuning = _context.Tuning;
             float radius = _definition.Radius * SeparationRadiusFactor;
 
             Vector3 separation = ComputeSeparation(
-                position, radius, _owner.Team, _owner, tuning.AllySeparationWeight);
+                position, radius, _owner.Team, _owner, _tuning.AllySeparationWeight);
 
             var enemyTeam = _owner.Team == Team.Player ? Team.Enemy : Team.Player;
 
             separation += ComputeSeparation(
-                position, radius, enemyTeam, null, tuning.EnemySeparationWeight);
+                position, radius, enemyTeam, null, _tuning.EnemySeparationWeight);
 
             // 분리 성분만 따로 부드럽게 따라갑니다.
             // 계산된 값을 그대로 더하면 이웃이 반경에 드나들 때마다 속도가 계단처럼 튀어,
             // 옆 사람이 다가왔을 뿐인데 홱 밀려나는 것처럼 보입니다.
             // 도착 조향은 원래 부드러우므로 여기만 눌러 주면 됩니다.
-            _impulses.FollowSeparation(separation, tuning.SeparationSmoothing, deltaTime);
+            _impulses.FollowSeparation(separation, _tuning.SeparationSmoothing, deltaTime);
 
             return _impulses.Separation;
         }
@@ -211,7 +226,7 @@ namespace SRPG.Gameplay.Units
                 return Vector3.zero;
             }
 
-            int count = _context.QueryTeam(position, radius, team, exclude, _neighborBuffer);
+            int count = _spatial.QueryTeam(position, radius, team, exclude, _neighborBuffer);
             if (count == 0)
             {
                 return Vector3.zero;

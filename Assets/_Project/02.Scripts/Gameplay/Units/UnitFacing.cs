@@ -40,7 +40,8 @@ namespace SRPG.Gameplay.Units
 
         private Unit _owner;
         private Transform _transform;
-        private BattleContext _context;
+        private ISpatialQuery _spatial;
+        private BattleTuning _tuning;
         private UnitDefinition _definition;
 
         /// <summary>방패병이 몸을 돌릴 위협 대상입니다. 공격 대상과는 별개입니다.</summary>
@@ -58,12 +59,22 @@ namespace SRPG.Gameplay.Units
         // 3. Public Methods - Setup
         // ====================================================================================================
 
-        /// <summary>필요한 것을 연결합니다. 유닛 초기화 때 부릅니다.</summary>
-        public void Configure(Unit owner, Transform ownerTransform, BattleContext context, UnitDefinition definition)
+        /// <summary>
+        /// 필요한 것을 연결합니다. 유닛 초기화 때 부릅니다.
+        ///
+        /// 위협을 찾는 공간 질의와, 얼마나 넓게 살필지를 정하는 튜닝뿐입니다.
+        /// </summary>
+        public void Configure(
+            Unit owner,
+            Transform ownerTransform,
+            ISpatialQuery spatial,
+            BattleTuning tuning,
+            UnitDefinition definition)
         {
             _owner = owner;
             _transform = ownerTransform;
-            _context = context;
+            _spatial = spatial;
+            _tuning = tuning;
             _definition = definition;
 
             _threatSource = null;
@@ -171,7 +182,7 @@ namespace SRPG.Gameplay.Units
         {
             threatPosition = Vector3.zero;
 
-            if (_definition == null || _definition.ProjectileResistance <= 0f || _context == null)
+            if (_definition == null || _definition.ProjectileResistance <= 0f || _spatial == null)
             {
                 return false;
             }
@@ -180,9 +191,9 @@ namespace SRPG.Gameplay.Units
             {
                 _threatScanTimer = ThreatScanInterval;
 
-                float radius = _context.Tuning.ShieldThreatRadius;
+                float radius = _tuning.ShieldThreatRadius;
                 _threatSource = radius > 0f
-                    ? _context.FindNearestEnemy(position, _owner.Team, radius)
+                    ? _spatial.FindNearestEnemy(position, _owner.Team, radius)
                     : null;
             }
 

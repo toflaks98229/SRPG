@@ -37,7 +37,7 @@ namespace SRPG.Gameplay.Units
         private readonly List<Unit> _candidateBuffer = new List<Unit>(16);
 
         private Unit _owner;
-        private BattleContext _context;
+        private ISpatialQuery _spatial;
         private UnitDefinition _definition;
 
         private Unit _target;
@@ -62,11 +62,15 @@ namespace SRPG.Gameplay.Units
 
         /// <summary>
         /// 판단에 필요한 것을 연결합니다. 유닛 초기화 때 한 번 부릅니다.
+        ///
+        /// <b>받는 것이 공간 질의 하나뿐입니다.</b>
+        /// 표적을 고르는 데 필요한 것은 "내 주변에 누가 있는가"가 전부입니다.
+        /// 지형도 경로 탐색기도 타일 점유도 여기서는 손댈 수 없습니다.
         /// </summary>
-        public void Configure(Unit owner, BattleContext context, UnitDefinition definition)
+        public void Configure(Unit owner, ISpatialQuery spatial, UnitDefinition definition)
         {
             _owner = owner;
-            _context = context;
+            _spatial = spatial;
             _definition = definition;
 
             _target = null;
@@ -91,7 +95,7 @@ namespace SRPG.Gameplay.Units
         /// <param name="maxAttackers">한 적에게 붙을 수 있는 인원의 상한입니다.</param>
         public void Refresh(bool usesAttackQueue, float targetLockSeconds, int maxAttackers)
         {
-            if (_owner == null || _context == null || _definition == null)
+            if (_owner == null || _spatial == null || _definition == null)
             {
                 return;
             }
@@ -135,7 +139,7 @@ namespace SRPG.Gameplay.Units
 
             var found = usesAttackQueue
                 ? FindUnclaimedEnemy(maxAttackers)
-                : _context.FindNearestEnemy(_owner.Position, _owner.Team, _definition.EngageRadius);
+                : _spatial.FindNearestEnemy(_owner.Position, _owner.Team, _definition.EngageRadius);
 
             if (found == null)
             {
@@ -181,7 +185,7 @@ namespace SRPG.Gameplay.Units
         {
             var enemyTeam = _owner.Team == Team.Player ? Team.Enemy : Team.Player;
 
-            int count = _context.QueryTeam(
+            int count = _spatial.QueryTeam(
                 _owner.Position, _definition.EngageRadius, enemyTeam, null, _candidateBuffer);
 
             Unit best = null;
@@ -210,7 +214,7 @@ namespace SRPG.Gameplay.Units
             }
 
             // 전부 찼으면 평소대로 가장 가까운 적을 봅니다.
-            return best ?? _context.FindNearestEnemy(_owner.Position, _owner.Team, _definition.EngageRadius);
+            return best ?? _spatial.FindNearestEnemy(_owner.Position, _owner.Team, _definition.EngageRadius);
         }
     }
 }
