@@ -118,7 +118,7 @@ namespace SRPG.Composition
         /// 월드맵이 붙으면 좌표가 고른 종류에 맞는 프로필이 여기 들어옵니다.
         /// </summary>
         [field: SerializeField]
-        [field: Tooltip("전장의 성격입니다. 비우면 코드 기본값을 씁니다.")]
+        [field: Tooltip("전장의 성격입니다. 비우면 구성 에셋의 프로필을, 그것도 없으면 코드 기본값을 씁니다.")]
         public BattlefieldProfile TerrainProfile { get; private set; }
 
         /// <summary>
@@ -256,9 +256,25 @@ namespace SRPG.Composition
                 spec.Seed = _seedOverride;
             }
 
-            _battlefield = BattlefieldGenerator.Generate(spec.WithDefaults(), TerrainProfile);
+            _battlefield = BattlefieldGenerator.Generate(spec.WithDefaults(), ResolveTerrainProfile());
 
             return _battlefield.Grid;
+        }
+
+        /// <summary>
+        /// 전장의 성격을 정합니다.
+        ///
+        /// 인스펙터에 직접 꽂은 것이 우선입니다 — 한 씬에서 지형만 바꿔 보는 경로입니다.
+        /// 비어 있으면 구성 에셋의 것을 쓰고, 그것도 없으면 생성기가 코드 기본값을 만듭니다.
+        /// </summary>
+        private BattlefieldProfile ResolveTerrainProfile()
+        {
+            if (TerrainProfile != null)
+            {
+                return TerrainProfile;
+            }
+
+            return _setup != null ? _setup.TerrainProfile : null;
         }
 
         /// <summary>

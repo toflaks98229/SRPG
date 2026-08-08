@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using SRPG.Data;
 using SRPG.Gameplay.Visual;
@@ -51,10 +51,8 @@ namespace SRPG.Editor.Tools
         /// <summary>지형 머티리얼과 외곽선 두께입니다. 물만 0입니다.</summary>
         private static readonly (string Name, float OutlineWidth)[] TerrainMaterials =
         {
-            ("M_Terrain_Beach", 0.06f),
             ("M_Terrain_Ground", 0.06f),
             ("M_Terrain_Cliff", 0.06f),
-            ("M_Terrain_House", 0.06f),
 
             // 물은 화면 밖까지 이어집니다. 뒤집힌 껍질을 씌우면 화면 가장자리에 검은 띠가 생깁니다.
             ("M_Terrain_Water", 0f),

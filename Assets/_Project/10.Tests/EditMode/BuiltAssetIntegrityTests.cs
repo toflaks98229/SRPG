@@ -59,7 +59,11 @@ namespace SRPG.Tests
         {
             var setup = LoadSetupOrIgnore();
 
-            Assert.IsTrue(setup.TerrainMaterials.IsComplete, "지형 머티리얼 5종 중 빠진 것이 있습니다.");
+            Assert.IsTrue(setup.TerrainMaterials.IsComplete, "지형 머티리얼 3종 중 빠진 것이 있습니다.");
+
+            // 전장 프로필이 없으면 코드 기본값(벌판)으로 조용히 떨어집니다.
+            // 강 전장을 구워 놓고도 물 없는 벌판에서 싸우게 되는 종류의 어긋남입니다.
+            Assert.IsNotNull(setup.TerrainProfile, "전장 프로필이 연결되지 않았습니다.");
             Assert.IsNotNull(setup.SelectionMarkerPrefab, "선택 마커가 연결되지 않았습니다.");
             Assert.IsNotNull(setup.OrderMarkerPrefab, "명령 마커가 연결되지 않았습니다.");
 
@@ -70,6 +74,45 @@ namespace SRPG.Tests
             Assert.Greater(setup.EnemyRoster.Length, 0, "적 병과 목록이 비어 있습니다.");
         }
 
+
+        /// <summary>
+        /// 지형 종류마다 프로필이 하나씩 있어야 합니다.
+        ///
+        /// 월드맵이 붙으면 좌표가 지형을 고르고 그에 맞는 프로필이 전장에 들어갑니다.
+        /// 하나라도 비면 그 좌표에서만 전장이 코드 기본값으로 떨어지는데,
+        /// 그건 "왜 이 지역만 다르게 생겼지"로만 보입니다.
+        /// </summary>
+        [Test]
+        public void 지형_종류마다_프로필_에셋이_있다()
+        {
+            LoadSetupOrIgnore();
+
+            foreach (TerrainKind kind in System.Enum.GetValues(typeof(TerrainKind)))
+            {
+                var path = $"Assets/_Project/03.DataAssets/Battlefields/Battlefield_{kind}.asset";
+                var profile = AssetDatabase.LoadAssetAtPath<BattlefieldProfile>(path);
+
+                Assert.IsNotNull(profile, $"{kind} 전장 프로필이 없습니다: {path}");
+                Assert.AreEqual(kind, profile.Kind, $"{path} 의 종류가 파일 이름과 다릅니다.");
+            }
+        }
+
+        /// <summary>
+        /// 강 전장에는 반드시 여울이 있어야 합니다.
+        /// 건널 수 없는 강은 두 부대가 영영 만나지 못하게 만들고, 아무 예외도 내지 않습니다.
+        /// </summary>
+        [Test]
+        public void 강_전장에는_여울이_있다()
+        {
+            LoadSetupOrIgnore();
+
+            var river = AssetDatabase.LoadAssetAtPath<BattlefieldProfile>(
+                "Assets/_Project/03.DataAssets/Battlefields/Battlefield_River.asset");
+
+            Assert.IsNotNull(river, "강 전장 프로필이 없습니다.");
+            Assert.Greater(river.FordCount, 0, "여울이 없어 강을 건널 수 없습니다.");
+            Assert.Greater(river.RiverWidth, 0f, "강폭이 0이라 물이 생기지 않습니다.");
+        }
 
         // ====================================================================================================
         // 3. Definition Integrity

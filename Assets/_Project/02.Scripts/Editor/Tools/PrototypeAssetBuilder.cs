@@ -35,6 +35,7 @@ namespace SRPG.Editor.Tools
         private const string UnitDataDir = "Assets/_Project/03.DataAssets/Units";
         private const string EnemyDataDir = "Assets/_Project/03.DataAssets/Enemies";
         private const string ConfigDataDir = "Assets/_Project/03.DataAssets/Configs";
+        private const string TerrainDataDir = "Assets/_Project/03.DataAssets/Battlefields";
 
         /// <summary>전투 구성 에셋의 경로입니다. 씬 빌더가 이 경로를 참조합니다.</summary>
         public const string BattleSetupPath = ConfigDataDir + "/BattleSetup_Prototype.asset";
@@ -70,8 +71,9 @@ namespace SRPG.Editor.Tools
             var definitions = BuildUnitDefinitions(unitPrefabs, arrowPrefab);
 
             var tuning = LoadOrCreate(ConfigDataDir + "/BattleTuning_Default.asset", BattleTuning.CreateDefault);
+            var profiles = BuildTerrainProfiles();
 
-            BuildBattleSetup(materials, definitions, markers, tuning);
+            BuildBattleSetup(materials, definitions, markers, tuning, profiles);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -111,7 +113,7 @@ namespace SRPG.Editor.Tools
             }
 
             if (setup.Tuning == null) problems.Add("BattleSetup.Tuning");
-            if (!setup.TerrainMaterials.IsComplete) problems.Add("BattleSetup.TerrainMaterials (5개 중 일부 누락)");
+            if (!setup.TerrainMaterials.IsComplete) problems.Add("BattleSetup.TerrainMaterials (3개 중 일부 누락)");
             if (setup.SelectionMarkerPrefab == null) problems.Add("BattleSetup.SelectionMarkerPrefab");
             if (setup.OrderMarkerPrefab == null) problems.Add("BattleSetup.OrderMarkerPrefab");
 
@@ -298,10 +300,8 @@ namespace SRPG.Editor.Tools
             var palette = new (string Name, Color Color, float Smoothness)[]
             {
                 // 지형
-                ("M_Terrain_Beach",  new Color(0.85f, 0.79f, 0.60f), 0.05f),
                 ("M_Terrain_Ground", new Color(0.44f, 0.62f, 0.36f), 0.05f),
                 ("M_Terrain_Cliff",  new Color(0.44f, 0.42f, 0.43f), 0.10f),
-                ("M_Terrain_House",  new Color(0.62f, 0.47f, 0.33f), 0.05f),
                 ("M_Terrain_Water",  new Color(0.18f, 0.35f, 0.52f), 0.65f),
 
                 // 아군 병과 (조사에서 정리한 역할 구분이 색으로 읽히도록 한색 계열)
@@ -319,7 +319,6 @@ namespace SRPG.Editor.Tools
                 ("M_Flag_Player", new Color(0.95f, 0.92f, 0.85f), 0.05f),
                 ("M_Flag_Enemy",  new Color(0.35f, 0.10f, 0.12f), 0.05f),
                 ("M_FlagPole",    new Color(0.25f, 0.20f, 0.16f), 0.05f),
-                ("M_Ship_Hull",   new Color(0.30f, 0.22f, 0.18f), 0.05f),
 
                 // 무기 (금속은 반짝여야 휘두르는 궤적이 눈에 들어옵니다)
                 ("M_Weapon_Steel", new Color(0.78f, 0.80f, 0.84f), 0.72f),
@@ -723,11 +722,39 @@ namespace SRPG.Editor.Tools
         /// <summary>
         /// 전투 구성 에셋을 만들고 모든 참조를 연결합니다.
         /// </summary>
+        /// <summary>
+        /// 지형 종류마다 프로필 에셋을 하나씩 굽습니다.
+        ///
+        /// <b>왜 전부 만드는가</b>
+        ///
+        /// 월드맵이 붙으면 좌표가 지형을 고르고, 그 지형에 맞는 프로필이 전장에 들어갑니다.
+        /// 종류가 하나라도 비어 있으면 그 좌표에서만 전장이 코드 기본값으로 떨어지는데,
+        /// 그건 "왜 이 지역만 다르게 생겼지"로만 보입니다.
+        ///
+        /// 지금은 그 연결이 없으므로 구성 에셋이 하나를 골라 씁니다.
+        /// </summary>
+        private static Dictionary<TerrainKind, BattlefieldProfile> BuildTerrainProfiles()
+        {
+            var profiles = new Dictionary<TerrainKind, BattlefieldProfile>();
+
+            foreach (TerrainKind kind in System.Enum.GetValues(typeof(TerrainKind)))
+            {
+                var captured = kind;
+
+                profiles[kind] = LoadOrCreate(
+                    $"{TerrainDataDir}/Battlefield_{kind}.asset",
+                    () => BattlefieldProfile.CreateDefault(captured));
+            }
+
+            return profiles;
+        }
+
         private static void BuildBattleSetup(
             Dictionary<string, Material> materials,
             Dictionary<string, UnitDefinition> definitions,
             (GameObject Selection, GameObject Order) markers,
-            BattleTuning tuning)
+            BattleTuning tuning,
+            Dictionary<TerrainKind, BattlefieldProfile> profiles)
         {
             var setup = AssetDatabase.LoadAssetAtPath<BattleSetup>(BattleSetupPath);
             bool isNew = setup == null;
@@ -740,12 +767,16 @@ namespace SRPG.Editor.Tools
 
             setup.Tuning = tuning;
 
+            // 기본 전장을 강으로 둡니다.
+            //
+            // 이 게임의 주요 사망 수단이 익사인데, 물이 없는 전장에서는 그 설계가 통째로 잠듭니다.
+            // 다른 지형 프로필도 모두 구워 두었으니 인스펙터에서 갈아 끼우면 됩니다.
+            setup.TerrainProfile = profiles[TerrainKind.River];
+
             setup.TerrainMaterials = new TerrainMaterialSet
             {
-                Beach = materials["M_Terrain_Beach"],
                 Ground = materials["M_Terrain_Ground"],
                 Cliff = materials["M_Terrain_Cliff"],
-                House = materials["M_Terrain_House"],
                 Water = materials["M_Terrain_Water"],
             };
 
@@ -849,6 +880,7 @@ namespace SRPG.Editor.Tools
                 UnitDataDir,
                 EnemyDataDir,
                 ConfigDataDir,
+                TerrainDataDir,
             };
 
             foreach (string folder in folders)
