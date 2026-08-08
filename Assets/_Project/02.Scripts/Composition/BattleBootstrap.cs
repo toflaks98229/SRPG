@@ -11,6 +11,7 @@ using SRPG.Gameplay.Squads;
 using SRPG.Gameplay.Units;
 using SRPG.Gameplay.Visual;
 using SRPG.Systems.Battle;
+using SRPG.Systems.Battlefield;
 using SRPG.Systems.Grid;
 using SRPG.Systems.Time;
 using SRPG.UI.HUD;
@@ -96,6 +97,7 @@ namespace SRPG.Composition
         private readonly BattleConclusion _conclusion = new BattleConclusion();
 
         private BattleRequest _activeRequest;
+        private Battlefield _battlefield;
         private int _enemiesSeen;
 
         // ====================================================================================================
@@ -109,6 +111,15 @@ namespace SRPG.Composition
         /// 지금은 맵 생성기가 없으므로 비어 있고, 그래서 전투도 시작되지 않습니다.
         /// </summary>
         public System.Func<int, IslandGrid> IslandSource { get; set; }
+
+        /// <summary>
+        /// 지형 프로필입니다. 비우면 코드 기본값을 씁니다.
+        ///
+        /// 월드맵이 붙으면 좌표가 고른 종류에 맞는 프로필이 여기 들어옵니다.
+        /// </summary>
+        [field: SerializeField]
+        [field: Tooltip("전장의 성격입니다. 비우면 코드 기본값을 씁니다.")]
+        public BattlefieldProfile TerrainProfile { get; private set; }
 
         /// <summary>
         /// 이 전투의 주문서입니다. 무엇을 데리고 나가는지를 <b>바깥이</b> 정합니다.
@@ -135,6 +146,11 @@ namespace SRPG.Composition
 
         /// <summary>사용 중인 전투 구성 에셋입니다. 없을 수 있습니다.</summary>
         public BattleSetup Setup => _setup;
+
+        /// <summary>
+        /// 이번 판에 만들어진 전장입니다. 바깥이 격자만 꽂아 준 경우에는 비어 있습니다.
+        /// </summary>
+        public Battlefield Battlefield => _battlefield;
 
         // ====================================================================================================
         // 4. Unity Lifecycle
@@ -170,21 +186,9 @@ namespace SRPG.Composition
         {
             var tuning = ResolveTuning();
 
-            var grid = BuildIslandGrid();
-
-            if (grid == null)
-            {
-                Debug.LogError(
-                    "[Bootstrap] 섬을 만들 수 없어 전투를 시작하지 못했습니다. " +
-                    "맵 생성이 제거된 상태입니다. 새 생성기를 IslandSource 에 연결하세요.");
-                return;
-            }
-
-            _timeController = new TacticalTimeController(tuning.SlowMotionScale, tuning.SlowMotionTransitionSpeed);
-            _context = new BattleContext(grid, _timeController, tuning);
-
             ResolveRosters();
 
+            // 주문서를 먼저 풉니다. 어디서 싸우는지가 거기 적혀 있습니다.
             _activeRequest = ResolveRequest();
 
             if (!_activeRequest.IsValid(out string problem))
@@ -193,8 +197,19 @@ namespace SRPG.Composition
                 return;
             }
 
+            var grid = BuildIslandGrid();
+
+            if (grid == null)
+            {
+                Debug.LogError("[Bootstrap] 전장을 만들지 못해 전투를 시작하지 못했습니다.");
+                return;
+            }
+
+            _timeController = new TacticalTimeController(tuning.SlowMotionScale, tuning.SlowMotionTransitionSpeed);
+            _context = new BattleContext(grid, _timeController, tuning);
+
             EnsureRuntimeRoot();
-            BuildIslandView(grid);
+            BuildBattlefieldView();
 
             _unitRoot = CreateChild("Units");
 
@@ -226,7 +241,22 @@ namespace SRPG.Composition
         /// </summary>
         private IslandGrid BuildIslandGrid()
         {
-            return IslandSource?.Invoke(_seedOverride);
+            // 바깥이 꽂아 준 것이 우선입니다. 테스트가 고정된 지형을 넣을 때 씁니다.
+            if (IslandSource != null)
+            {
+                return IslandSource(_seedOverride);
+            }
+
+            var spec = _activeRequest != null ? _activeRequest.Battlefield : default;
+
+            if (spec.Seed == 0)
+            {
+                spec.Seed = _seedOverride;
+            }
+
+            _battlefield = BattlefieldGenerator.Generate(spec.WithDefaults(), TerrainProfile);
+
+            return _battlefield.Grid;
         }
 
         /// <summary>
@@ -413,13 +443,24 @@ namespace SRPG.Composition
         // 7. Private Methods - Sub-systems
         // ====================================================================================================
 
-        private void BuildIslandView(IslandGrid grid)
+        /// <summary>
+        /// 전장을 화면에 세웁니다.
+        ///
+        /// 바깥이 격자만 꽂아 준 경우에는 그릴 지형이 없습니다.
+        /// 테스트가 그 경로를 쓰므로 오류가 아니라 조용히 넘어갑니다.
+        /// </summary>
+        private void BuildBattlefieldView()
         {
-            var islandObject = new GameObject("Island");
-            islandObject.transform.SetParent(_runtimeRoot, false);
+            if (_battlefield == null)
+            {
+                return;
+            }
 
-            var view = islandObject.AddComponent<IslandView>();
-            view.Build(grid, _setup != null ? _setup.TerrainMaterials : default);
+            var fieldObject = new GameObject("Battlefield");
+            fieldObject.transform.SetParent(_runtimeRoot, false);
+
+            var view = fieldObject.AddComponent<BattlefieldView>();
+            view.Build(_battlefield, _setup != null ? _setup.TerrainMaterials : default);
         }
 
         private void BuildSelectionController(Camera battleCamera)

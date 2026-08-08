@@ -36,6 +36,13 @@ namespace SRPG.Data
         /// <summary>지형과 배치를 재현하는 시드입니다. 0이면 매번 달라집니다.</summary>
         public int Seed;
 
+        /// <summary>
+        /// 어디서 싸우는지입니다.
+        ///
+        /// 월드맵이 붙으면 좌표가 이 값을 채웁니다 — 숲에서 만났으면 숲 전장이 나옵니다.
+        /// </summary>
+        public BattlefieldSpec Battlefield;
+
         /// <summary>데리고 나가는 분대들입니다.</summary>
         public List<SquadOrder> PlayerSquads = new List<SquadOrder>();
 

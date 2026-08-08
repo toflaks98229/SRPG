@@ -174,7 +174,8 @@ namespace SRPG.Editor.Tools
         /// 지형 머티리얼을 <c>SRPG/Terrain</c> 셰이더로 바꿉니다.
         ///
         /// <b>왜 필요한가</b>
-        /// <see cref="SRPG.Gameplay.Island.IslandView"/>는 연결된 머티리얼이 있으면 그것을 씁니다.
+        /// <see cref="SRPG.Gameplay.Island.BattlefieldView"/>는 연결된 머티리얼이 있으면 그것을 씁니다.
+        /// 다만 지면은 예외입니다 — 터레인은 전용 셰이더를 요구하므로 뷰가 따로 만듭니다.
         /// 지금 연결된 것은 URP/Lit이라 <b>외곽선도, 정점 컬러 접지 음영도 나오지 않습니다</b>.
         /// 메시에 접지 음영을 써 넣는 코드는 이미 돌고 있는데 읽는 쪽이 없는 상태입니다.
         /// </summary>

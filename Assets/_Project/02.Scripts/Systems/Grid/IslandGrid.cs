@@ -38,6 +38,20 @@ namespace SRPG.Systems.Grid
         /// <summary>이 섬을 만들 때 사용한 시드입니다. 동일 시드는 동일 섬을 재현합니다.</summary>
         public int Seed { get; set; }
 
+        /// <summary>
+        /// 지면 높이를 실제 지형에서 읽어 오는 함수입니다. 인자는 월드 x, z 입니다.
+        ///
+        /// <b>왜 필요한가</b>
+        ///
+        /// 격자는 원래 고도 단계로 높이를 계산했습니다 — 타일이 지형을 <b>만들던</b> 시절의 방식입니다.
+        /// 이제 지형은 유니티 터레인이고, 타일은 그것을 <b>읽습니다</b>.
+        /// 이 함수를 연결하지 않으면 타일이 계단으로 계산한 값을 쓰고,
+        /// 유닛이 보이는 지면과 다른 높이에 서게 됩니다.
+        ///
+        /// 비어 있으면 예전처럼 고도 단계로 계산합니다.
+        /// </summary>
+        public System.Func<float, float, float> SurfaceSampler { get; set; }
+
         /// <summary>통행 가능한 모든 타일입니다.</summary>
         public List<Tile> WalkableTiles { get; } = new List<Tile>();
 
@@ -193,6 +207,15 @@ namespace SRPG.Systems.Grid
         /// </summary>
         public float SampleGroundHeight(Vector3 world)
         {
+            // 지형이 연결되어 있으면 그 자리의 실제 높이를 씁니다.
+            //
+            // 타일 중심 높이를 그대로 쓰면 유닛이 칸 경계에서 툭툭 튑니다.
+            // 터레인은 연속면이므로 발 높이도 연속이어야 합니다.
+            if (SurfaceSampler != null)
+            {
+                return SurfaceSampler(world.x, world.z);
+            }
+
             var tile = GetTile(WorldToCoord(world));
 
             return tile != null && tile.IsWalkable ? tile.WorldCenter.y : 0f;
@@ -253,6 +276,14 @@ namespace SRPG.Systems.Grid
             {
                 var tile = _tiles[i];
                 tile.WorldCenter = ComputeWorldCenter(tile.Coord, tile.Height);
+
+                // 지형이 연결되어 있으면 높이는 거기서 읽습니다.
+                if (SurfaceSampler != null)
+                {
+                    var center = tile.WorldCenter;
+                    center.y = SurfaceSampler(center.x, center.z);
+                    tile.WorldCenter = center;
+                }
                 tile.IsWalkable = tile.Type != TileType.Water && tile.Type != TileType.Cliff;
             }
 

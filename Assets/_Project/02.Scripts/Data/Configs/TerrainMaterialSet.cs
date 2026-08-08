@@ -6,8 +6,9 @@ namespace SRPG.Data
     /// <summary>
     /// 지형 종류별 머티리얼 묶음입니다.
     ///
-    /// 지형 메시는 종류별로 하나씩 합쳐 굽기 때문에 머티리얼도 종류당 하나면 충분합니다.
-    /// 비워 두면 <c>IslandView</c>가 런타임에 임시 머티리얼을 만들어 대신 씁니다.
+    /// 지면은 유니티 터레인 하나이고 나머지는 종류별로 합쳐 굽기 때문에
+    /// 머티리얼도 종류당 하나면 충분합니다.
+    /// 비워 두면 <c>BattlefieldView</c>가 런타임에 임시 머티리얼을 만들어 대신 씁니다.
     /// </summary>
     [Serializable]
     public struct TerrainMaterialSet

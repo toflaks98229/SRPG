@@ -1,6 +1,8 @@
 using System.Collections;
 using NUnit.Framework;
+using SRPG.Common;
 using SRPG.Composition;
+using SRPG.Gameplay.Squads;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -10,21 +12,14 @@ namespace SRPG.Tests.PlayMode
     /// <summary>
     /// 실제 전투 씬의 배선을 확인합니다.
     ///
-    /// <b>지금은 맵 생성이 없습니다</b>
+    /// <b>왜 이 검사가 따로 필요한가</b>
     ///
-    /// 절차적 지형 생성을 걷어내면서 씬의 부트스트랩에는 섬을 공급할 것이 없습니다.
-    /// 그래서 씬을 열어도 전투가 조립되지 않습니다. 그건 <b>지금의 정상 상태</b>입니다.
+    /// 이 프로젝트에서 같은 종류의 결함이 반복해서 나왔습니다 — 코드는 맞는데
+    /// <b>씬이 그 코드를 타지 않는</b> 상태입니다. 생성기가 멀쩡히 돌아가고
+    /// 단위 검사가 전부 통과해도, 부트스트랩이 그것을 부르지 않으면 화면은 비어 있습니다.
     ///
-    /// 예전에는 여기서 지형 셰이더·빌보드·접지 그림자·지형지물이 실제로 나오는지를
-    /// 봤지만, 그 전부가 섬 하나를 전제로 하고 있었습니다.
-    /// 새 생성기가 붙으면 그 검사들을 git 이력에서 되살려야 합니다.
-    ///
-    /// 그때까지 여기서 지킬 수 있는 것은 둘입니다.
-    ///   · 씬 자체는 멀쩡히 열리고 부트스트랩과 구성 에셋이 연결되어 있는가
-    ///   · 맵이 없다는 사실을 <b>조용히</b> 넘기지 않고 분명히 알리는가
-    ///
-    /// 둘째가 중요합니다. 맵이 없어 아무것도 안 만들어졌는데 오류도 없으면,
-    /// 나중에 그 상태를 "왜 화면이 비었지"로 다시 헤매게 됩니다.
+    /// 그래서 여기서는 씬을 실제로 열고 <b>결과물이 씬에 있는지</b>를 봅니다.
+    /// 생성기가 옳은가는 EditMode 가 봅니다. 여기서 보는 것은 연결입니다.
     /// </summary>
     public sealed class BattleSceneWiringTests
     {
@@ -40,51 +35,106 @@ namespace SRPG.Tests.PlayMode
 
         /// <summary>
         /// 씬이 열리고 조립 지점과 구성 에셋이 연결되어 있는지 봅니다.
-        ///
-        /// 맵이 없어도 이 배선은 살아 있어야 합니다. 새 생성기를 꽂을 자리가 여기이기 때문입니다.
         /// </summary>
         [UnityTest]
         public IEnumerator 씬에_부트스트랩과_구성_에셋이_연결되어_있다()
         {
-            // 맵이 없다는 오류는 지금의 정상 상태입니다. 이 검사가 보려는 것은 그게 아닙니다.
-            LogAssert.ignoreFailingMessages = true;
-
-            yield return SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode.Single);
-            yield return null;
+            yield return LoadBattleScene();
 
             var bootstrap = Object.FindFirstObjectByType<BattleBootstrap>();
 
             Assert.IsNotNull(bootstrap, "씬에 BattleBootstrap 이 없습니다.");
             Assert.IsNotNull(bootstrap.Setup, "씬의 부트스트랩에 전투 구성 에셋이 연결되어 있지 않습니다.");
             Assert.IsNotNull(bootstrap.Setup.Tuning, "BattleSetup.Tuning 이 비어 있습니다. 수치가 코드 기본값으로 돌아갑니다.");
-
-            LogAssert.ignoreFailingMessages = false;
         }
 
         /// <summary>
-        /// 맵이 없다는 것을 <b>분명히 알리는지</b> 봅니다.
+        /// 씬을 열면 전투가 실제로 조립되는지 봅니다.
         ///
-        /// 조용히 아무것도 안 만들면 화면이 빈 이유를 나중에 다시 찾아야 합니다.
+        /// 컨텍스트가 있다는 것은 지형과 시간과 수치가 모두 자리를 잡았다는 뜻입니다.
         /// </summary>
         [UnityTest]
-        public IEnumerator 맵_공급자가_없으면_전투를_시작하지_않고_알린다()
+        public IEnumerator 씬을_열면_전투가_조립된다()
         {
-            LogAssert.ignoreFailingMessages = true;
-
-            yield return SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode.Single);
-            yield return null;
+            yield return LoadBattleScene();
 
             var bootstrap = Object.FindFirstObjectByType<BattleBootstrap>();
 
-            Assert.IsNull(
-                bootstrap.IslandSource,
-                "씬의 부트스트랩에 맵 공급자가 연결되어 있습니다. 이 검사를 갱신하세요.");
+            Assert.IsNotNull(bootstrap.Context, "전투 컨텍스트가 만들어지지 않았습니다. 조립이 도중에 멈췄습니다.");
+            Assert.IsNotNull(bootstrap.Battlefield, "전장이 만들어지지 않았습니다.");
+            Assert.Greater(bootstrap.Context.Grid.WalkableTiles.Count, 0, "걸을 수 있는 땅이 없습니다.");
+        }
 
-            Assert.IsNull(
-                bootstrap.Context,
-                "맵이 없는데 전투 컨텍스트가 만들어졌습니다. 조립이 절반만 진행된 상태입니다.");
+        /// <summary>
+        /// 지형이 <b>유니티 터레인</b>으로 서 있는지 봅니다.
+        ///
+        /// <b>왜 종류까지 보는가</b>
+        ///
+        /// 예전에는 타일마다 사각 발판을 구워 지형을 만들었고, 그것이 격자로 보인다는
+        /// 문제가 끝내 해결되지 않아 방식을 바꿨습니다. 이 검사는 그 결정이
+        /// 씬에서 지켜지고 있는지를 지킵니다 — 지면이 다시 메시로 돌아오면 여기서 걸립니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 지면이_유니티_터레인으로_서_있다()
+        {
+            yield return LoadBattleScene();
 
-            LogAssert.ignoreFailingMessages = false;
+            var terrain = Object.FindFirstObjectByType<Terrain>();
+
+            Assert.IsNotNull(terrain, "씬에 터레인이 없습니다. 지면이 만들어지지 않았거나 다시 메시로 돌아갔습니다.");
+            Assert.IsNotNull(terrain.terrainData, "터레인에 지형 데이터가 없습니다.");
+            Assert.Greater(terrain.terrainData.heightmapResolution, 1, "하이트맵이 비어 있습니다.");
+        }
+
+        /// <summary>
+        /// 지면을 클릭할 수 있는지 봅니다.
+        ///
+        /// 이동 명령은 지면 레이캐스트로 나갑니다. 콜라이더가 없거나 레이어가 틀리면
+        /// 화면은 멀쩡한데 <b>부대가 움직이지 않습니다</b>.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 지면을_클릭할_수_있다()
+        {
+            yield return LoadBattleScene();
+
+            var terrain = Object.FindFirstObjectByType<Terrain>();
+
+            Assert.IsNotNull(terrain.GetComponent<TerrainCollider>(), "터레인에 콜라이더가 없어 클릭이 지면을 잡지 못합니다.");
+
+            Assert.AreEqual(
+                GameLayers.Terrain,
+                terrain.gameObject.layer,
+                "터레인이 지형 레이어에 있지 않아 이동 명령 레이캐스트가 빗나갑니다.");
+        }
+
+        /// <summary>
+        /// 주문서에 적힌 분대가 실제로 전장에 섰는지 봅니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 주문서의_분대가_전장에_선다()
+        {
+            yield return LoadBattleScene();
+
+            var squads = Object.FindObjectsByType<Squad>(FindObjectsSortMode.None);
+
+            Assert.Greater(squads.Length, 0, "전장에 선 아군 분대가 없습니다.");
+        }
+
+        // ====================================================================================================
+        // 3. Helpers
+        // ====================================================================================================
+
+        /// <summary>
+        /// 전투 씬을 열고 조립이 끝날 때까지 기다립니다.
+        ///
+        /// <see cref="BattleBootstrap"/> 은 <c>Start</c> 에서 조립하므로 한 프레임으로는 모자랍니다.
+        /// </summary>
+        private static IEnumerator LoadBattleScene()
+        {
+            yield return SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode.Single);
+
+            yield return null;
+            yield return null;
         }
     }
 }
