@@ -35,6 +35,18 @@ namespace SRPG.Systems.Grid
         /// <summary>격자 (0,0) 타일의 좌하단 모서리에 해당하는 월드 좌표입니다.</summary>
         public Vector3 Origin { get; }
 
+        /// <summary>
+        /// 격자 전체의 중심 월드 좌표입니다. 높이는 0입니다.
+        ///
+        /// 섬 중심을 세 곳이 각자 같은 식으로 계산하고 있었습니다 —
+        /// 분대 초기 배치, 카메라 프레이밍, 상륙정 등장 지점.
+        /// 원점을 잡는 규칙이 바뀌면 그중 한 곳만 남습니다.
+        /// </summary>
+        public Vector3 WorldCenter => new Vector3(
+            Origin.x + Width * CellSize * 0.5f,
+            0f,
+            Origin.z + Depth * CellSize * 0.5f);
+
         /// <summary>이 섬을 만들 때 사용한 시드입니다. 동일 시드는 동일 섬을 재현합니다.</summary>
         public int Seed { get; set; }
 

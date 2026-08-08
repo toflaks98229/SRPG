@@ -27,7 +27,7 @@ namespace SRPG.Gameplay.Squads
     /// 실제로 병력이 대열을 갖추는 것은 자리를 잡고 난 다음입니다.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class Squad : MonoBehaviour
+    public sealed class Squad : MonoBehaviour, ISquadStatus
     {
         // ====================================================================================================
         // 1. Constants

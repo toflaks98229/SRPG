@@ -157,12 +157,7 @@ namespace SRPG.Gameplay.Enemies
             var landingTile = zone[UnityEngine.Random.Range(0, zone.Count)];
 
             // 섬 중심에서 해안을 향하는 방향의 연장선에 등장 지점을 잡습니다.
-            Vector3 islandCenter = new Vector3(
-                _context.Grid.Origin.x + _context.Grid.Width * _context.Grid.CellSize * 0.5f,
-                0f,
-                _context.Grid.Origin.z + _context.Grid.Depth * _context.Grid.CellSize * 0.5f);
-
-            Vector3 outward = landingTile.WorldCenter - islandCenter;
+            Vector3 outward = landingTile.WorldCenter - _context.Grid.WorldCenter;
             outward.y = 0f;
 
             if (outward.sqrMagnitude < 0.001f)

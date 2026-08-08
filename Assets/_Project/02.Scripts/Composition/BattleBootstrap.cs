@@ -10,8 +10,8 @@ using SRPG.Gameplay.Selection;
 using SRPG.Gameplay.Squads;
 using SRPG.Gameplay.Units;
 using SRPG.Gameplay.Visual;
-using SRPG.Systems.Battle;
 using SRPG.Systems.Battlefield;
+using SRPG.Systems.Formation;
 using SRPG.Systems.Grid;
 using SRPG.Systems.Time;
 using SRPG.UI.HUD;
@@ -93,12 +93,13 @@ namespace SRPG.Composition
         private UnitDefinition[] _playerRoster;
         private UnitDefinition[] _enemyRoster;
 
-        private readonly List<DeployedSquad> _deployed = new List<DeployedSquad>();
-        private readonly BattleConclusion _conclusion = new BattleConclusion();
+        /// <summary>전황을 관측해 결말을 판정하고 보고서를 씁니다. 조립 지점은 그 결과만 발행합니다.</summary>
+        private readonly BattleReporter _reporter = new BattleReporter();
+
+        private readonly List<Tile> _spawnTiles = new List<Tile>(8);
 
         private BattleRequest _activeRequest;
         private Battlefield _battlefield;
-        private int _enemiesSeen;
 
         // ====================================================================================================
         // 3. Properties
@@ -139,7 +140,7 @@ namespace SRPG.Composition
         public event System.Action<BattleResult> BattleConcluded;
 
         /// <summary>이 전투의 결말입니다. 아직 끝나지 않았으면 <c>Undecided</c> 입니다.</summary>
-        public BattleOutcome Outcome => _conclusion.Outcome;
+        public BattleOutcome Outcome => _reporter.Outcome;
 
         /// <summary>이 전투의 런타임 컨텍스트입니다.</summary>
         public BattleContext Context => _context;
@@ -282,82 +283,26 @@ namespace SRPG.Composition
         /// <summary>
         /// 전투가 끝났는지 살피고, 끝났으면 보고서를 발행합니다.
         ///
-        /// <b>판정은 여기서 하지 않습니다.</b>
-        /// 규칙은 <see cref="BattleConclusion"/>이 들고 있고, 여기서는 관측값만 모아 넘깁니다.
+        /// <b>관측도 판정도 여기서 하지 않습니다.</b>
+        /// 조립 지점이 하는 일은 관측값을 <see cref="BattleReporter"/>에 넘기고,
+        /// 돌아온 보고서를 바깥에 발행하는 것뿐입니다.
         /// 그래야 "왜 승리 처리가 안 됐는가"를 씬을 재생하지 않고도 확인할 수 있습니다.
         /// </summary>
         private void TickConclusion()
         {
-            if (_context == null || _conclusion.IsDecided)
+            if (_context == null)
             {
                 return;
             }
 
-            int enemiesAlive = _context.EnemyUnits.Count;
-
-            // 처치 수는 "지금까지 본 적의 최대치 - 지금 남은 수"로 셉니다.
-            // 파도로 나뉘어 들어오므로 처음에 총원을 알 수 없고,
-            // 유닛마다 죽음을 구독하면 조립 지점이 전투 세부를 알게 됩니다.
-            _enemiesSeen = Mathf.Max(_enemiesSeen, enemiesAlive + CountEnemyLosses());
-
-            bool decided = _conclusion.Tick(
+            var result = _reporter.Tick(
                 UnityEngine.Time.deltaTime,
-                CountLivingSquads(),
-                enemiesAlive,
+                _context.EnemyUnits.Count,
                 _spawner == null || _spawner.Scheduler == null || _spawner.Scheduler.IsFinished);
 
-            if (decided)
+            if (result == null)
             {
-                PublishResult();
-            }
-        }
-
-        private int CountLivingSquads()
-        {
-            int alive = 0;
-
-            for (int i = 0; i < _deployed.Count; i++)
-            {
-                if (_deployed[i].IsAlive)
-                {
-                    alive++;
-                }
-            }
-
-            return alive;
-        }
-
-        private int CountEnemyLosses()
-        {
-            return _enemiesSeen > 0 ? _enemiesSeen - _context.EnemyUnits.Count : 0;
-        }
-
-        /// <summary>
-        /// 분대별 전황을 모아 보고서를 발행합니다.
-        /// </summary>
-        private void PublishResult()
-        {
-            var result = new BattleResult
-            {
-                Outcome = _conclusion.Outcome,
-                Duration = _conclusion.Elapsed,
-                EnemiesKilled = Mathf.Max(0, _enemiesSeen - _context.EnemyUnits.Count),
-            };
-
-            for (int i = 0; i < _deployed.Count; i++)
-            {
-                var entry = _deployed[i];
-
-                result.Squads.Add(new SquadReport
-                {
-                    Id = entry.Id,
-                    Deployed = entry.Deployed,
-
-                    // 분대가 무너지면 남은 병사도 함께 사라집니다.
-                    // 지휘관을 잃은 분대는 흩어지므로 생존자로 세지 않습니다.
-                    Survivors = entry.IsAlive ? entry.Squad.AliveCount : 0,
-                    Destroyed = !entry.IsAlive,
-                });
+                return;
             }
 
             Debug.Log($"[Bootstrap] 전투 종료 — {result}");
@@ -524,27 +469,6 @@ namespace SRPG.Composition
         }
 
         // ====================================================================================================
-        // 7-1. Nested Types
-        // ====================================================================================================
-
-        /// <summary>
-        /// 전장에 세운 분대 하나의 기록입니다.
-        ///
-        /// 주문서의 식별자와 실제 분대를 이어 둡니다.
-        /// 전투가 끝나면 이 짝으로 보고서를 씁니다 — 분대가 파괴되어 오브젝트가
-        /// 사라져도 <see cref="Id"/>와 <see cref="Deployed"/>는 남아 있어야 합니다.
-        /// </summary>
-        private struct DeployedSquad
-        {
-            public int Id;
-            public Squad Squad;
-            public int Deployed;
-
-            /// <summary>분대가 아직 싸우고 있는지 여부입니다.</summary>
-            public bool IsAlive => Squad != null && !Squad.IsDestroyed;
-        }
-
-        // ====================================================================================================
         // 8. Private Methods - Squads
         // ====================================================================================================
 
@@ -557,9 +481,9 @@ namespace SRPG.Composition
         /// </summary>
         private void SpawnPlayerSquads(IslandGrid grid, BattleRequest request)
         {
-            var spawnTiles = SelectSquadSpawnTiles(grid, request.PlayerSquads.Count);
+            SpawnPlacement.SelectSquadTiles(grid, request.PlayerSquads.Count, _spawnTiles);
 
-            for (int i = 0; i < spawnTiles.Count && i < request.PlayerSquads.Count; i++)
+            for (int i = 0; i < _spawnTiles.Count && i < request.PlayerSquads.Count; i++)
             {
                 var order = request.PlayerSquads[i];
 
@@ -570,7 +494,7 @@ namespace SRPG.Composition
                 squad.Initialize(
                     _context,
                     order.Definition,
-                    spawnTiles[i].Coord,
+                    _spawnTiles[i].Coord,
                     order.SoldierCount,
                     order.ResolveName(),
                     CreateUnit,
@@ -579,81 +503,9 @@ namespace SRPG.Composition
                 _selectionController.RegisterSquad(squad);
 
                 // 주문서의 식별자와 배치 인원을 기억해 둡니다.
-                // 전투가 끝나면 이 짝으로 보고서를 만듭니다.
-                _deployed.Add(new DeployedSquad
-                {
-                    Id = order.Id,
-                    Squad = squad,
-                    Deployed = squad.AliveCount,
-                });
+                // 전투가 끝나면 이 짝으로 보고서가 만들어집니다.
+                _reporter.Track(order.Id, squad, squad.AliveCount);
             }
-        }
-
-        /// <summary>
-        /// 분대 초기 배치 타일을 고릅니다. 섬 중심에서 가까운 순으로, 서로 최소 간격을 두고 선택합니다.
-        /// </summary>
-        private List<Tile> SelectSquadSpawnTiles(IslandGrid grid, int count)
-        {
-            var result = new List<Tile>(count);
-
-            Vector3 center = new Vector3(
-                grid.Origin.x + grid.Width * grid.CellSize * 0.5f,
-                0f,
-                grid.Origin.z + grid.Depth * grid.CellSize * 0.5f);
-
-            var candidates = new List<Tile>(grid.WalkableTiles.Count);
-            for (int i = 0; i < grid.WalkableTiles.Count; i++)
-            {
-                var tile = grid.WalkableTiles[i];
-
-                // 가옥 위와 해안은 피해 안쪽 평지에 배치합니다.
-                if (tile.Type == TileType.Ground && !tile.IsCoastal)
-                {
-                    candidates.Add(tile);
-                }
-            }
-
-            // 안쪽 평지가 없을 만큼 섬이 작으면 통행 가능한 아무 타일이나 씁니다.
-            if (candidates.Count == 0)
-            {
-                candidates.AddRange(grid.WalkableTiles);
-            }
-
-            candidates.Sort((a, b) =>
-                (a.WorldCenter - center).sqrMagnitude.CompareTo((b.WorldCenter - center).sqrMagnitude));
-
-            const int MinSpacing = 3;
-
-            for (int i = 0; i < candidates.Count && result.Count < count; i++)
-            {
-                var tile = candidates[i];
-                bool tooClose = false;
-
-                for (int r = 0; r < result.Count; r++)
-                {
-                    if (GridCoord.ChebyshevDistance(tile.Coord, result[r].Coord) < MinSpacing)
-                    {
-                        tooClose = true;
-                        break;
-                    }
-                }
-
-                if (!tooClose)
-                {
-                    result.Add(tile);
-                }
-            }
-
-            // 간격 조건 때문에 자리를 못 찾았으면 조건을 풀고 채웁니다.
-            for (int i = 0; i < candidates.Count && result.Count < count; i++)
-            {
-                if (!result.Contains(candidates[i]))
-                {
-                    result.Add(candidates[i]);
-                }
-            }
-
-            return result;
         }
 
         // ====================================================================================================
@@ -783,12 +635,7 @@ namespace SRPG.Composition
             rig.AttachCamera(camera);
             rig.Configure(grid, tuning);
 
-            Vector3 center = new Vector3(
-                grid.Origin.x + grid.Width * grid.CellSize * 0.5f,
-                0f,
-                grid.Origin.z + grid.Depth * grid.CellSize * 0.5f);
-
-            rig.MoveTo(center);
+            rig.MoveTo(grid.WorldCenter);
             rig.FrameArea(Mathf.Max(grid.Width, grid.Depth) * grid.CellSize);
 
             _battleCamera = camera;
