@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Units;
@@ -59,9 +59,7 @@ namespace SRPG.Tests
         {
             var setup = LoadSetupOrIgnore();
 
-            Assert.IsNotNull(setup.Waves, "웨이브 구성이 연결되지 않았습니다.");
             Assert.IsTrue(setup.TerrainMaterials.IsComplete, "지형 머티리얼 5종 중 빠진 것이 있습니다.");
-            Assert.IsNotNull(setup.EnemyShipPrefab, "상륙정 프리팹이 연결되지 않았습니다.");
             Assert.IsNotNull(setup.SelectionMarkerPrefab, "선택 마커가 연결되지 않았습니다.");
             Assert.IsNotNull(setup.OrderMarkerPrefab, "명령 마커가 연결되지 않았습니다.");
 
@@ -72,15 +70,6 @@ namespace SRPG.Tests
             Assert.Greater(setup.EnemyRoster.Length, 0, "적 병과 목록이 비어 있습니다.");
         }
 
-        [Test]
-        public void 상륙정_프리팹에_EnemyShip_컴포넌트가_있다()
-        {
-            var setup = LoadSetupOrIgnore();
-
-            Assert.IsNotNull(
-                setup.EnemyShipPrefab.GetComponent<SRPG.Gameplay.Enemies.EnemyShip>(),
-                "상륙정 프리팹 루트에 EnemyShip 컴포넌트가 없습니다.");
-        }
 
         // ====================================================================================================
         // 3. Definition Integrity

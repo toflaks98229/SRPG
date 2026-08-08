@@ -43,36 +43,51 @@ namespace SRPG.Data
         /// </summary>
         public BattlefieldSpec Battlefield;
 
-        /// <summary>데리고 나가는 분대들입니다.</summary>
+        /// <summary>데리고 나가는 분대들입니다. 순서가 곧 투입 순서입니다.</summary>
         public List<SquadOrder> PlayerSquads = new List<SquadOrder>();
 
         /// <summary>
-        /// 적이 밀려오는 구성입니다.
+        /// 상대가 데리고 나온 분대들입니다. 순서가 곧 투입 순서입니다.
         ///
-        /// 아직은 웨이브 정의를 그대로 씁니다. 양측이 처음부터 배치되는 야전으로 바꾸는 것은
-        /// 전투 흐름 자체를 고치는 일이라 이 단계의 범위 밖입니다.
-        /// 여기서 중요한 것은 <b>그 선택을 바깥이 한다</b>는 사실입니다.
+        /// <b>양측을 같은 모양으로 적습니다.</b>
+        ///
+        /// 예전에는 적이 웨이브 정의로 왔습니다 — 몇 초 뒤에 배 몇 척, 척당 몇 명.
+        /// 상륙을 막는 게임에서는 그것이 곧 압박의 형태였습니다.
+        ///
+        /// 야전은 다릅니다. 상대도 <b>전투 서열을 가진 부대</b>입니다.
+        /// 월드맵에서 만난 그 군대가 그대로 전장에 서는 것이므로,
+        /// 이쪽과 다른 형식으로 적을 이유가 없습니다.
+        ///
+        /// 전장이 좁아 한 번에 다 붙지 못하면 나머지는 지원군으로 들어옵니다.
+        /// 그 상한과 간격은 전투 튜닝이 정합니다.
         /// </summary>
-        public WaveDefinition EnemyWaves;
+        public List<SquadOrder> EnemySquads = new List<SquadOrder>();
 
         // ====================================================================================================
         // 2. Properties
         // ====================================================================================================
 
         /// <summary>데리고 나가는 병사의 총수입니다. 지휘관을 포함합니다.</summary>
-        public int TotalSoldiers
+        public int TotalSoldiers => CountSoldiers(PlayerSquads);
+
+        /// <summary>상대가 데리고 나온 병사의 총수입니다. 지휘관을 포함합니다.</summary>
+        public int TotalEnemySoldiers => CountSoldiers(EnemySquads);
+
+        private static int CountSoldiers(List<SquadOrder> squads)
         {
-            get
+            if (squads == null)
             {
-                int total = 0;
-
-                for (int i = 0; i < PlayerSquads.Count; i++)
-                {
-                    total += PlayerSquads[i].SoldierCount + 1;
-                }
-
-                return total;
+                return 0;
             }
+
+            int total = 0;
+
+            for (int i = 0; i < squads.Count; i++)
+            {
+                total += squads[i].SoldierCount + 1;
+            }
+
+            return total;
         }
 
         // ====================================================================================================
@@ -95,19 +110,37 @@ namespace SRPG.Data
                 return false;
             }
 
-            for (int i = 0; i < PlayerSquads.Count; i++)
+            // 상대가 없으면 전투가 아닙니다. 예전에는 웨이브가 없어도 시작됐지만,
+            // 야전에서는 마주 설 부대가 곧 전투의 전제입니다.
+            if (EnemySquads == null || EnemySquads.Count == 0)
             {
-                var order = PlayerSquads[i];
+                reason = "맞설 상대 분대가 없습니다.";
+                return false;
+            }
+
+            if (!ValidateSquads(PlayerSquads, "아군", out reason))
+            {
+                return false;
+            }
+
+            return ValidateSquads(EnemySquads, "적", out reason);
+        }
+
+        private static bool ValidateSquads(List<SquadOrder> squads, string side, out string reason)
+        {
+            for (int i = 0; i < squads.Count; i++)
+            {
+                var order = squads[i];
 
                 if (order.Definition == null)
                 {
-                    reason = $"{i}번 분대에 병과가 지정되지 않았습니다.";
+                    reason = $"{side} {i}번 분대에 병과가 지정되지 않았습니다.";
                     return false;
                 }
 
                 if (order.SoldierCount < 0)
                 {
-                    reason = $"{i}번 분대의 인원이 음수입니다.";
+                    reason = $"{side} {i}번 분대의 인원이 음수입니다.";
                     return false;
                 }
             }
@@ -117,36 +150,56 @@ namespace SRPG.Data
         }
 
         /// <summary>
-        /// 같은 병과의 분대를 여럿 세워 간단한 주문서를 만듭니다.
+        /// 양측에 같은 병과를 돌려 간단한 주문서를 만듭니다.
         ///
         /// 캠페인이 아직 없을 때 프로토타입이 쓰는 경로입니다.
-        /// 캠페인이 붙으면 이 메서드는 쓰이지 않고, 로스터가 직접 주문서를 채웁니다.
+        /// 캠페인이 붙으면 이 메서드는 쓰이지 않고, 양쪽 군대가 직접 주문서를 채웁니다.
         /// </summary>
+        /// <param name="playerRoster">아군 병과 후보입니다. 분대마다 순서대로 배분됩니다.</param>
+        /// <param name="enemyRoster">적 병과 후보입니다.</param>
+        /// <param name="squadsPerSide">진영당 분대 수입니다.</param>
+        /// <param name="soldiersPerSquad">분대당 병사 수입니다. 지휘관은 별도로 한 명 더 붙습니다.</param>
+        /// <param name="seed">전장을 재현하는 시드입니다.</param>
         public static BattleRequest CreateSimple(
-            IReadOnlyList<UnitDefinition> roster,
-            int squadCount,
+            IReadOnlyList<UnitDefinition> playerRoster,
+            IReadOnlyList<UnitDefinition> enemyRoster,
+            int squadsPerSide,
             int soldiersPerSquad,
             int seed = 0)
         {
             var request = new BattleRequest { Seed = seed };
 
+            Fill(request.PlayerSquads, playerRoster, squadsPerSide, soldiersPerSquad, 1);
+
+            // 식별자를 겹치지 않게 띄웁니다. 보고서가 양측을 같은 목록으로 다루게 될 때
+            // 1번 분대가 둘이면 캠페인이 어느 쪽인지 알 수 없습니다.
+            Fill(request.EnemySquads, enemyRoster, squadsPerSide, soldiersPerSquad, 101);
+
+            return request;
+        }
+
+        private static void Fill(
+            List<SquadOrder> target,
+            IReadOnlyList<UnitDefinition> roster,
+            int squadCount,
+            int soldiersPerSquad,
+            int firstId)
+        {
             if (roster == null || roster.Count == 0)
             {
-                return request;
+                return;
             }
 
             for (int i = 0; i < squadCount; i++)
             {
-                request.PlayerSquads.Add(new SquadOrder
+                target.Add(new SquadOrder
                 {
-                    Id = i + 1,
+                    Id = firstId + i,
                     Definition = roster[i % roster.Count],
                     SoldierCount = soldiersPerSquad,
                     Rank = CombatConstants.MinRank,
                 });
             }
-
-            return request;
         }
     }
 

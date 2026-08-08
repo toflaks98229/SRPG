@@ -121,9 +121,14 @@ namespace SRPG.Gameplay.Battle
         /// </summary>
         /// <param name="deltaTime">지난 시간입니다.</param>
         /// <param name="enemiesAlive">지금 살아 있는 적 유닛 수입니다.</param>
-        /// <param name="allWavesSpawned">마지막 파도까지 전부 나왔는지 여부입니다.</param>
+        /// <param name="playerReserves">
+        /// 아직 전장에 나가지 않은 아군 분대 수입니다.
+        /// <b>전장이 비었어도 뒤에 부대가 남아 있으면 진 것이 아닙니다.</b>
+        /// </param>
+        /// <param name="enemyReinforcementsExhausted">더 올라올 적 지원군이 없는지 여부입니다.</param>
         /// <returns>이번 호출에서 결말이 <b>새로</b> 정해졌으면 보고서, 아니면 null 입니다.</returns>
-        public BattleResult Tick(float deltaTime, int enemiesAlive, bool allWavesSpawned)
+        public BattleResult Tick(
+            float deltaTime, int enemiesAlive, int playerReserves, bool enemyReinforcementsExhausted)
         {
             if (_conclusion.IsDecided)
             {
@@ -132,7 +137,11 @@ namespace SRPG.Gameplay.Battle
 
             ObserveEnemies(enemiesAlive);
 
-            bool decided = _conclusion.Tick(deltaTime, CountLivingSquads(), enemiesAlive, allWavesSpawned);
+            bool decided = _conclusion.Tick(
+                deltaTime,
+                CountLivingSquads() + Mathf.Max(0, playerReserves),
+                enemiesAlive,
+                enemyReinforcementsExhausted);
 
             return decided ? BuildResult() : null;
         }

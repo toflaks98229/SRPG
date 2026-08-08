@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
@@ -133,7 +133,8 @@ namespace SRPG.Tests.PlayMode
 
             Assert.IsNotNull(bootstrap.Context, "BattleContext가 만들어지지 않았습니다.");
             Assert.Greater(bootstrap.Context.Grid.WalkableTiles.Count, 0, "섬에 통행 가능한 땅이 없습니다.");
-            Assert.Greater(bootstrap.Context.Grid.LandingZones.Count, 0, "상륙 구역이 없습니다.");
+            Assert.Greater(bootstrap.Context.Grid.EnemyDeployment.Count, 0, "적 전개 구역이 없습니다.");
+            Assert.Greater(bootstrap.Context.Grid.PlayerDeployment.Count, 0, "아군 전개 구역이 없습니다.");
             Assert.Greater(bootstrap.Context.PlayerUnits.Count, 0, "플레이어 유닛이 생성되지 않았습니다.");
 
             var squads = Object.FindObjectsByType<Squad>(FindObjectsSortMode.None);
@@ -201,28 +202,27 @@ namespace SRPG.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator 웨이브가_시작되면_적_상륙정과_병력이_생성된다()
+        public IEnumerator 전투가_열리면_양측이_이미_전장에_서_있다()
         {
+            // 야전은 상륙을 기다리지 않습니다. 첫 프레임부터 두 부대가 대치해 있어야 합니다.
             var bootstrap = CreateBootstrap();
             yield return null;
-
-            var spawner = Object.FindFirstObjectByType<EnemySpawner>();
-            Assert.IsNotNull(spawner, "적 스포너가 없습니다.");
-            Assert.IsNotNull(spawner.Scheduler, "웨이브 스케줄러가 초기화되지 않았습니다.");
-
-            // 준비 시간 + 상륙정 접근 + 하선까지 기다립니다.
-            // 실제 시간이 아니라 프레임을 돌리며 최대 30초까지 기다립니다.
-            float elapsed = 0f;
-            while (elapsed < 30f && bootstrap.Context.EnemyUnits.Count == 0)
-            {
-                elapsed += UnityEngine.Time.deltaTime;
-                yield return null;
-            }
+            yield return null;
 
             Assert.Greater(
                 bootstrap.Context.EnemyUnits.Count,
                 0,
-                $"{elapsed:F1}초 동안 적 병력이 상륙하지 않았습니다. 웨이브 또는 상륙정 로직을 확인하세요.");
+                "적 부대가 전장에 서지 않았습니다. 전개기 배선을 확인하세요.");
+
+            Assert.Greater(
+                bootstrap.Context.PlayerUnits.Count,
+                0,
+                "아군 부대가 전장에 서지 않았습니다.");
+
+            Assert.Greater(
+                bootstrap.Context.CountLivingSquads(SRPG.Common.Team.Enemy),
+                0,
+                "적 분대가 명부에 오르지 않았습니다.");
         }
 
         [UnityTest]

@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using SRPG.Common;
+using SRPG.Data;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Units;
 using SRPG.Systems.AI;
@@ -126,45 +128,64 @@ namespace SRPG.Gameplay.Enemies
         // ====================================================================================================
 
         /// <summary>
-        /// 분대를 초기화합니다. 상륙정이 병력을 내리기 직전에 호출합니다.
+        /// 분대를 만들고 전개 지점에 병력을 세웁니다.
+        ///
+        /// <b>상륙정이 한 명씩 내려놓던 자리입니다.</b>
+        /// 야전에서는 부대가 이미 편성된 채로 전장에 들어서므로,
+        /// 플레이어 분대(<see cref="Squad.Initialize"/>)와 똑같이 한 번에 세웁니다.
         /// </summary>
         /// <param name="context">전투 컨텍스트입니다.</param>
-        /// <param name="beachhead">상륙 지점입니다. 앵커의 시작 위치가 됩니다.</param>
-        public void Initialize(BattleContext context, Vector3 beachhead)
+        /// <param name="definition">병사 정의입니다.</param>
+        /// <param name="deployCoord">전개 타일입니다. 앵커의 시작 위치가 됩니다.</param>
+        /// <param name="soldierCount">병사 수입니다.</param>
+        /// <param name="unitFactory">유닛을 만드는 함수입니다.</param>
+        /// <param name="rank">분대 숙련도입니다.</param>
+        public void Initialize(
+            BattleContext context,
+            UnitDefinition definition,
+            GridCoord deployCoord,
+            int soldierCount,
+            Func<UnitDefinition, Team, bool, Vector3, Unit> unitFactory,
+            int rank = CombatConstants.MinRank)
         {
             _context = context;
 
-            var coord = context.Grid.WorldToCoord(beachhead);
-            _motor.Teleport(beachhead, coord);
+            Vector3 anchor = context.Grid.CoordToWorld(deployCoord);
+            _motor.Teleport(anchor, deployCoord);
+
+            _anchorSpeed = definition.MoveSpeed * context.Tuning.AnchorSpeedFactor;
 
             // 명부에 스스로 올립니다. 이게 없으면 표시하는 쪽이 씬 전체를 훑어야 합니다.
             context.RegisterEnemySquad(this);
 
-            // 분대마다 재판단 시점을 흩뜨립니다. 안 그러면 모든 분대가 같은 프레임에 A*를 돌립니다.
-            _replanTimer = Random.Range(0f, ReplanJitter);
-        }
+            // 전개 칸을 점유해 두어야 다른 적 분대가 그 위로 겹쳐 서지 않습니다.
+            context.EnemyOccupancy.Claim(deployCoord, this);
 
-        /// <summary>
-        /// 병사를 분대에 넣습니다. 상륙정이 한 명씩 내릴 때마다 호출합니다.
-        /// </summary>
-        public void AddUnit(Unit unit)
-        {
-            if (unit == null || IsDisbanded)
+            int total = Mathf.Max(1, soldierCount);
+
+            // 플레이어보다 넓게 섭니다 — 질서 대 혼돈의 대비가 첫 화면부터 보여야 합니다.
+            float spacing = context.Tuning.FormationSpacing
+                            * Mathf.Max(0.1f, context.Tuning.EnemyFormationLooseness);
+
+            FormationSolver.SolveRings(anchor, total, spacing, _slots);
+            FormationSolver.ClampToWalkable(context.Grid, anchor, _slots);
+
+            for (int i = 0; i < total; i++)
             {
-                return;
+                var unit = unitFactory(definition, Team.Enemy, false, _slots[i]);
+                if (unit == null)
+                {
+                    continue;
+                }
+
+                unit.transform.SetParent(transform, worldPositionStays: true);
+                unit.SetRank(rank);
+
+                _units.Add(unit);
             }
 
-            _units.Add(unit);
-            unit.transform.SetParent(transform, worldPositionStays: true);
-
-            // 가장 느린 병사에 앵커 속도를 맞춥니다. 빠른 쪽에 맞추면 대열이 길게 늘어집니다.
-            float speed = unit.Definition != null ? unit.Definition.MoveSpeed : 3f;
-            float candidate = speed * _context.Tuning.AnchorSpeedFactor;
-
-            _anchorSpeed = _units.Count == 1 ? candidate : Mathf.Min(_anchorSpeed, candidate);
-
-            // 새 병력이 합류하면 목표를 즉시 다시 봅니다. 병력이 늘면 판단이 달라질 수 있습니다.
-            _replanTimer = 0f;
+            // 분대마다 재판단 시점을 흩뜨립니다. 안 그러면 모든 분대가 같은 프레임에 A*를 돌립니다.
+            _replanTimer = UnityEngine.Random.Range(0f, ReplanJitter);
         }
 
         // ====================================================================================================

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
@@ -16,6 +16,7 @@ using SRPG.Systems.Grid;
 using SRPG.Systems.Time;
 using SRPG.UI.HUD;
 using UnityEngine;
+using SRPG.Gameplay.Deployment;
 
 namespace SRPG.Composition
 {
@@ -86,7 +87,7 @@ namespace SRPG.Composition
         private BattleContext _context;
         private TacticalTimeController _timeController;
         private SquadSelectionController _selectionController;
-        private EnemySpawner _spawner;
+        private SquadDeployer _deployer;
         private Transform _unitRoot;
         private Transform _shadowRoot;
 
@@ -95,8 +96,6 @@ namespace SRPG.Composition
 
         /// <summary>전황을 관측해 결말을 판정하고 보고서를 씁니다. 조립 지점은 그 결과만 발행합니다.</summary>
         private readonly BattleReporter _reporter = new BattleReporter();
-
-        private readonly List<Tile> _spawnTiles = new List<Tile>(8);
 
         private BattleRequest _activeRequest;
         private Battlefield _battlefield;
@@ -221,8 +220,10 @@ namespace SRPG.Composition
             EnsureLight();
 
             BuildSelectionController(battleCamera);
-            SpawnPlayerSquads(grid, _activeRequest);
-            BuildSpawner(_activeRequest.EnemyWaves ?? ResolveWaveDefinition());
+
+            // 전개기가 양측을 한꺼번에 세웁니다. 예전에는 아군은 여기서, 적은 스포너가 따로 세웠습니다.
+            BuildDeployer(_activeRequest);
+
             BuildHud();
             BuildAiOverlay();
         }
@@ -273,7 +274,8 @@ namespace SRPG.Composition
                 return Request;
             }
 
-            return BattleRequest.CreateSimple(_playerRoster, _playerSquadCount, _soldiersPerSquad, _seedOverride);
+            return BattleRequest.CreateSimple(
+                _playerRoster, _enemyRoster, _playerSquadCount, _soldiersPerSquad, _seedOverride);
         }
 
         // ====================================================================================================
@@ -298,7 +300,8 @@ namespace SRPG.Composition
             var result = _reporter.Tick(
                 UnityEngine.Time.deltaTime,
                 _context.EnemyUnits.Count,
-                _spawner == null || _spawner.Scheduler == null || _spawner.Scheduler.IsFinished);
+                _deployer != null ? _deployer.PlayerReserves : 0,
+                _deployer == null || _deployer.EnemyReinforcementsExhausted);
 
             if (result == null)
             {
@@ -331,16 +334,6 @@ namespace SRPG.Composition
         // ====================================================================================================
         // 6. Private Methods - Asset Resolution
         // ====================================================================================================
-
-        private WaveDefinition ResolveWaveDefinition()
-        {
-            if (_setup != null && _setup.Waves != null)
-            {
-                return _setup.Waves;
-            }
-
-            return WaveDefinition.CreateDefault();
-        }
 
         /// <summary>
         /// 전투 튜닝을 확정합니다. 절대 null을 돌려주지 않으므로 이후 소비자는 검사할 필요가 없습니다.
@@ -423,18 +416,19 @@ namespace SRPG.Composition
                 _setup != null ? _setup.OrderMarkerPrefab : null);
         }
 
-        private void BuildSpawner(WaveDefinition waves)
+        /// <summary>
+        /// 양측 부대를 전장에 세우고 지원군을 관리할 전개기를 붙입니다.
+        ///
+        /// <b>무엇을 세울지는 주문서가, 어떻게 만들지는 여기가 압니다.</b>
+        /// 전개기는 순서와 자리만 정하고, 실제 생성은 아래 두 함수가 합니다.
+        /// </summary>
+        private void BuildDeployer(BattleRequest request)
         {
-            var spawnerObject = new GameObject("EnemySpawner");
-            spawnerObject.transform.SetParent(_runtimeRoot, false);
+            var deployerObject = new GameObject("SquadDeployer");
+            deployerObject.transform.SetParent(_runtimeRoot, false);
 
-            _spawner = spawnerObject.AddComponent<EnemySpawner>();
-            _spawner.Initialize(
-                _context,
-                waves,
-                _enemyRoster,
-                CreateUnit,
-                _setup != null ? _setup.EnemyShipPrefab : null);
+            _deployer = deployerObject.AddComponent<SquadDeployer>();
+            _deployer.Initialize(_context, request, CreatePlayerSquad, CreateEnemySquad);
         }
 
         private void BuildHud()
@@ -448,7 +442,7 @@ namespace SRPG.Composition
             hudObject.transform.SetParent(_runtimeRoot, false);
 
             var hud = hudObject.AddComponent<BattleDebugHud>();
-            hud.Initialize(_context, _context, _context.TimeController, _selectionController, _spawner);
+            hud.Initialize(_context, _context, _context.TimeController, _selectionController, _deployer);
         }
 
         /// <summary>
@@ -473,39 +467,51 @@ namespace SRPG.Composition
         // ====================================================================================================
 
         /// <summary>
-        /// 주문서가 지시한 분대를 섬 안쪽에 배치합니다.
-        /// 분대끼리 겹치지 않도록 간격을 두고, 중심에 가까운 타일부터 채웁니다.
+        /// 아군 분대 하나를 전장에 세웁니다. 전개기가 자리를 정해 부릅니다.
         ///
         /// <b>무엇을 데려가는지는 여기서 정하지 않습니다.</b>
-        /// 주문서가 이미 정해 놓은 것을 전장에 세우기만 합니다.
+        /// 주문서가 이미 정해 놓은 것을 세우기만 합니다.
         /// </summary>
-        private void SpawnPlayerSquads(IslandGrid grid, BattleRequest request)
+        private void CreatePlayerSquad(SquadOrder order, GridCoord coord)
         {
-            SpawnPlacement.SelectSquadTiles(grid, request.PlayerSquads.Count, _spawnTiles);
+            var squadObject = new GameObject($"Squad_{order.Id}_{order.Definition.DisplayName}");
+            squadObject.transform.SetParent(_runtimeRoot, false);
 
-            for (int i = 0; i < _spawnTiles.Count && i < request.PlayerSquads.Count; i++)
-            {
-                var order = request.PlayerSquads[i];
+            var squad = squadObject.AddComponent<Squad>();
+            squad.Initialize(
+                _context,
+                order.Definition,
+                coord,
+                order.SoldierCount,
+                order.ResolveName(),
+                CreateUnit,
+                order.ClampedRank());
 
-                var squadObject = new GameObject($"Squad_{order.Id}_{order.Definition.DisplayName}");
-                squadObject.transform.SetParent(_runtimeRoot, false);
+            _selectionController.RegisterSquad(squad);
 
-                var squad = squadObject.AddComponent<Squad>();
-                squad.Initialize(
-                    _context,
-                    order.Definition,
-                    _spawnTiles[i].Coord,
-                    order.SoldierCount,
-                    order.ResolveName(),
-                    CreateUnit,
-                    order.ClampedRank());
+            // 주문서의 식별자와 배치 인원을 기억해 둡니다.
+            // 전투가 끝나면 이 짝으로 보고서가 만들어집니다.
+            // 지원군으로 늦게 올라온 분대도 여기를 지나므로 함께 보고됩니다.
+            _reporter.Track(order.Id, squad, squad.AliveCount);
+        }
 
-                _selectionController.RegisterSquad(squad);
+        /// <summary>
+        /// 적 분대 하나를 전장에 세웁니다.
+        ///
+        /// 아군과 같은 자리에서 같은 방식으로 만듭니다 — 야전에서는 양측이 대칭입니다.
+        /// </summary>
+        private void CreateEnemySquad(SquadOrder order, GridCoord coord)
+        {
+            var squadObject = new GameObject($"EnemySquad_{order.Id}_{order.Definition.DisplayName}");
+            squadObject.transform.SetParent(_runtimeRoot, false);
 
-                // 주문서의 식별자와 배치 인원을 기억해 둡니다.
-                // 전투가 끝나면 이 짝으로 보고서가 만들어집니다.
-                _reporter.Track(order.Id, squad, squad.AliveCount);
-            }
+            squadObject.AddComponent<EnemySquad>().Initialize(
+                _context,
+                order.Definition,
+                coord,
+                order.SoldierCount,
+                CreateUnit,
+                order.ClampedRank());
         }
 
         // ====================================================================================================

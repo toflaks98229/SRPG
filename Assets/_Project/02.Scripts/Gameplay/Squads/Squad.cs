@@ -185,6 +185,9 @@ namespace SRPG.Gameplay.Squads
             // 초기 배치 칸도 점유해 두어야 다른 분대가 그 위로 명령받지 않습니다.
             context.Occupancy.Claim(spawnCoord, this);
 
+            // 명부에 스스로 오릅니다. 지원군이 "지금 몇 분대가 서 있는가"를 여기서 셉니다.
+            context.RegisterPlayerSquad(this);
+
             // 배치되자마자 해안을 봅니다. 첫 갱신을 기다리면 한순간 엉뚱한 쪽을 보고 서 있습니다.
             _lineFacing = ComputeFacing();
             _formationFacing = _lineFacing;
@@ -345,6 +348,7 @@ namespace SRPG.Gameplay.Squads
 
             // 점유하던 칸을 놓아 줍니다. 이걸 빠뜨리면 죽은 분대가 칸을 영원히 막습니다.
             _context?.Occupancy.Release(this);
+            _context?.UnregisterPlayerSquad(this);
 
             for (int i = _units.Count - 1; i >= 0; i--)
             {
@@ -361,6 +365,14 @@ namespace SRPG.Gameplay.Squads
 
             SquadDestroyed?.Invoke(this);
             Destroy(gameObject);
+        }
+
+        /// <summary>
+        /// 소멸을 거치지 않고 사라지는 경우(씬 전환 등)에도 명부를 정리합니다.
+        /// </summary>
+        private void OnDestroy()
+        {
+            _context?.UnregisterPlayerSquad(this);
         }
 
         // ====================================================================================================
@@ -513,16 +525,17 @@ namespace SRPG.Gameplay.Squads
                 return approach;
             }
 
-            var coast = _context.Grid.FindNearestCoastal(anchor);
-            if (coast != null)
-            {
-                Vector3 toCoast = coast.WorldCenter - anchor;
-                toCoast.y = 0f;
+            // 적이 안 보이면 전장 중심을 봅니다.
+            //
+            // 예전에는 해안을 봤습니다. 침공이 언제나 바다에서 왔기 때문입니다.
+            // 야전에서는 양측이 마주 보고 들어서므로, 서로가 <b>가운데를 사이에 두고</b> 섭니다.
+            // 각자 중심을 보면 그대로 상대를 보게 됩니다.
+            Vector3 toCenter = _context.Grid.WorldCenter - anchor;
+            toCenter.y = 0f;
 
-                if (toCoast.sqrMagnitude > 0.0001f)
-                {
-                    return toCoast.normalized;
-                }
+            if (toCenter.sqrMagnitude > 0.0001f)
+            {
+                return toCenter.normalized;
             }
 
             return _lineFacing;

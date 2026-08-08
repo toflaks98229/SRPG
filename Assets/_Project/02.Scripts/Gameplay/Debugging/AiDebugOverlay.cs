@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Enemies;
@@ -61,7 +61,7 @@ namespace SRPG.Gameplay.Debugging
 
         private IslandGrid _grid;
         private IThreatProvider _threat;
-        private IEnemySquadRoster _enemySquads;
+        private ISquadRoster _enemySquads;
 
         // ====================================================================================================
         // 3. Public Methods
@@ -73,7 +73,7 @@ namespace SRPG.Gameplay.Debugging
         /// 그릴 지형과 그릴 판단, 둘뿐입니다. 표시 코드가 전투 상태를 바꿀 수 있으면
         /// 디버그 도구가 디버그 대상을 흔드는 일이 생깁니다.
         /// </summary>
-        public void Initialize(IslandGrid grid, IThreatProvider threat, IEnemySquadRoster enemySquads)
+        public void Initialize(IslandGrid grid, IThreatProvider threat, ISquadRoster enemySquads)
         {
             _grid = grid;
             _threat = threat;

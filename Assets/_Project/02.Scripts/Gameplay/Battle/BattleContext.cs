@@ -31,7 +31,7 @@ namespace SRPG.Gameplay.Battle
     /// 그때 등록 단위가 되는 것이 위 인터페이스들이고, 소비자는 지금 받는 것을 그대로 받게 됩니다.
     /// 지금은 패키지가 없으므로 부트스트랩이 직접 생성해 주입합니다.
     /// </summary>
-    public sealed class BattleContext : IUnitContext, IUnitRoster, IThreatProvider, IEnemySquadRoster
+    public sealed class BattleContext : IUnitContext, IUnitRoster, IThreatProvider, ISquadRoster
     {
         // ====================================================================================================
         // 1. Fields
@@ -40,7 +40,8 @@ namespace SRPG.Gameplay.Battle
         private readonly List<Unit> _playerUnits = new List<Unit>(64);
         private readonly List<Unit> _enemyUnits = new List<Unit>(128);
 
-        /// <summary>상륙한 적 분대입니다. 분대가 태어나고 해산할 때 스스로 넣고 뺍니다.</summary>
+        /// <summary>전장의 분대입니다. 분대가 태어나고 사라질 때 스스로 넣고 뺍니다.</summary>
+        private readonly List<Squad> _playerSquads = new List<Squad>(8);
         private readonly List<EnemySquad> _enemySquads = new List<EnemySquad>(8);
 
         private readonly SpatialGrid<Unit> _playerIndex;
@@ -111,7 +112,10 @@ namespace SRPG.Gameplay.Battle
         /// <summary>적 유닛 목록입니다.</summary>
         public IReadOnlyList<Unit> EnemyUnits => _enemyUnits;
 
-        /// <summary>상륙한 적 분대 목록입니다.</summary>
+        /// <summary>전장의 플레이어 분대 목록입니다.</summary>
+        public IReadOnlyList<Squad> PlayerSquads => _playerSquads;
+
+        /// <summary>전장의 적 분대 목록입니다.</summary>
         public IReadOnlyList<EnemySquad> EnemySquads => _enemySquads;
 
         // ====================================================================================================
@@ -198,7 +202,56 @@ namespace SRPG.Gameplay.Battle
         }
 
         /// <summary>
-        /// 적 분대를 명부에 넣습니다. 상륙정이 첫 병력을 내릴 때 분대가 스스로 부릅니다.
+        /// 지정 진영에서 아직 싸우고 있는 분대 수입니다.
+        ///
+        /// 무너진 분대는 오브젝트가 사라지기 전 한 프레임 동안 명부에 남아 있으므로,
+        /// 세는 쪽이 상태를 확인해야 합니다. 지원군이 이 수를 보고 올라옵니다.
+        /// </summary>
+        public int CountLivingSquads(Team team)
+        {
+            int alive = 0;
+
+            if (team == Team.Player)
+            {
+                for (int i = 0; i < _playerSquads.Count; i++)
+                {
+                    if (_playerSquads[i] != null && !_playerSquads[i].IsDestroyed)
+                    {
+                        alive++;
+                    }
+                }
+
+                return alive;
+            }
+
+            for (int i = 0; i < _enemySquads.Count; i++)
+            {
+                if (_enemySquads[i] != null && !_enemySquads[i].IsDisbanded)
+                {
+                    alive++;
+                }
+            }
+
+            return alive;
+        }
+
+        /// <summary>플레이어 분대를 명부에 넣습니다. 분대가 초기화될 때 스스로 부릅니다.</summary>
+        public void RegisterPlayerSquad(Squad squad)
+        {
+            if (squad != null && !_playerSquads.Contains(squad))
+            {
+                _playerSquads.Add(squad);
+            }
+        }
+
+        /// <summary>플레이어 분대를 명부에서 뺍니다.</summary>
+        public void UnregisterPlayerSquad(Squad squad)
+        {
+            _playerSquads.Remove(squad);
+        }
+
+        /// <summary>
+        /// 적 분대를 명부에 넣습니다. 분대가 전장에 설 때 스스로 부릅니다.
         /// </summary>
         public void RegisterEnemySquad(EnemySquad squad)
         {

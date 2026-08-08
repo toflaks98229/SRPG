@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
 
@@ -43,7 +43,7 @@ namespace SRPG.Tests
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 6 }, 6);
 
-            Assert.IsNull(reporter.Tick(Step, enemiesAlive: 3, allWavesSpawned: false));
+            Assert.IsNull(reporter.Tick(Step, enemiesAlive: 3, playerReserves: 0, enemyReinforcementsExhausted: false));
             Assert.IsFalse(reporter.IsDecided);
             Assert.AreEqual(BattleOutcome.Undecided, reporter.Outcome);
         }
@@ -54,34 +54,34 @@ namespace SRPG.Tests
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { IsDestroyed = true }, 6);
 
-            var result = reporter.Tick(Step, enemiesAlive: 3, allWavesSpawned: false);
+            var result = reporter.Tick(Step, enemiesAlive: 3, playerReserves: 0, enemyReinforcementsExhausted: false);
 
             Assert.IsNotNull(result);
             Assert.AreEqual(BattleOutcome.Defeat, result.Outcome);
         }
 
         [Test]
-        public void 마지막_파도까지_나오고_적이_없으면_승리다()
+        public void 더_올라올_적이_없고_전장도_비면_승리다()
         {
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 4 }, 6);
 
-            var result = reporter.Tick(Step, enemiesAlive: 0, allWavesSpawned: true);
+            var result = reporter.Tick(Step, enemiesAlive: 0, playerReserves: 0, enemyReinforcementsExhausted: true);
 
             Assert.IsNotNull(result);
             Assert.AreEqual(BattleOutcome.Victory, result.Outcome);
         }
 
         /// <summary>
-        /// 배가 오는 사이의 빈 순간을 승리로 읽으면 전투가 시작하자마자 끝납니다.
+        /// 앞 부대를 갈아 낸 그 순간을 승리로 읽으면, 뒤에 두 배가 남아 있어도 전투가 끝납니다.
         /// </summary>
         [Test]
-        public void 파도가_남았으면_적이_없어도_승리가_아니다()
+        public void 지원군이_남았으면_적이_없어도_승리가_아니다()
         {
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 6 }, 6);
 
-            Assert.IsNull(reporter.Tick(Step, enemiesAlive: 0, allWavesSpawned: false));
+            Assert.IsNull(reporter.Tick(Step, enemiesAlive: 0, playerReserves: 0, enemyReinforcementsExhausted: false));
         }
 
         /// <summary>
@@ -94,7 +94,7 @@ namespace SRPG.Tests
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { IsDestroyed = true }, 6);
 
-            var result = reporter.Tick(Step, enemiesAlive: 0, allWavesSpawned: true);
+            var result = reporter.Tick(Step, enemiesAlive: 0, playerReserves: 0, enemyReinforcementsExhausted: true);
 
             Assert.AreEqual(BattleOutcome.Defeat, result.Outcome);
         }
@@ -105,8 +105,8 @@ namespace SRPG.Tests
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 4 }, 6);
 
-            Assert.IsNotNull(reporter.Tick(Step, 0, true), "첫 보고가 나오지 않았습니다.");
-            Assert.IsNull(reporter.Tick(Step, 0, true), "보고가 두 번 나갔습니다. 캠페인이 같은 전투를 두 번 정산합니다.");
+            Assert.IsNotNull(reporter.Tick(Step, 0, 0, true), "첫 보고가 나오지 않았습니다.");
+            Assert.IsNull(reporter.Tick(Step, 0, 0, true), "보고가 두 번 나갔습니다. 캠페인이 같은 전투를 두 번 정산합니다.");
         }
 
         [Test]
@@ -117,10 +117,10 @@ namespace SRPG.Tests
 
             for (int i = 0; i < 10; i++)
             {
-                reporter.Tick(Step, enemiesAlive: 2, allWavesSpawned: true);
+                reporter.Tick(Step, enemiesAlive: 2, playerReserves: 0, enemyReinforcementsExhausted: true);
             }
 
-            var result = reporter.Tick(Step, enemiesAlive: 0, allWavesSpawned: true);
+            var result = reporter.Tick(Step, enemiesAlive: 0, playerReserves: 0, enemyReinforcementsExhausted: true);
 
             Assert.AreEqual(1.1f, result.Duration, 0.001f);
         }
@@ -137,7 +137,7 @@ namespace SRPG.Tests
             reporter.Track(7, new FakeSquad { AliveCount = 3 }, 6);
             reporter.Track(42, new FakeSquad { AliveCount = 5 }, 6);
 
-            var result = reporter.Tick(Step, 0, true);
+            var result = reporter.Tick(Step, 0, 0, true);
 
             Assert.AreEqual(2, result.Squads.Count);
             Assert.AreEqual(7, result.Squads[0].Id);
@@ -150,7 +150,7 @@ namespace SRPG.Tests
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 3 }, 6);
 
-            var result = reporter.Tick(Step, 0, true);
+            var result = reporter.Tick(Step, 0, 0, true);
 
             Assert.AreEqual(6, result.Squads[0].Deployed);
             Assert.AreEqual(3, result.Squads[0].Survivors);
@@ -169,7 +169,7 @@ namespace SRPG.Tests
             reporter.Track(1, new FakeSquad { IsDestroyed = true, AliveCount = 4 }, 6);
 
             // 분대를 모두 잃었으므로 패배로 끝납니다.
-            var result = reporter.Tick(Step, 3, false);
+            var result = reporter.Tick(Step, 3, 0, false);
 
             Assert.IsTrue(result.Squads[0].Destroyed);
             Assert.AreEqual(0, result.Squads[0].Survivors, "무너진 분대의 병사를 생존자로 셌습니다.");
@@ -188,7 +188,7 @@ namespace SRPG.Tests
             reporter.Track(1, new FakeSquad { IsDestroyed = false, AliveCount = 0 }, 6);
             reporter.Track(2, new FakeSquad { AliveCount = 4 }, 6);
 
-            var result = reporter.Tick(Step, 0, true);
+            var result = reporter.Tick(Step, 0, 0, true);
 
             Assert.AreEqual(0, result.Squads[0].Survivors);
             Assert.IsFalse(result.Squads[0].Destroyed, "인원만 0인 분대를 소멸로 처리했습니다.");
@@ -200,14 +200,14 @@ namespace SRPG.Tests
         // ====================================================================================================
 
         [Test]
-        public void 한_파도만_있으면_쓰러진_수를_그대로_센다()
+        public void 한_무리만_있으면_쓰러진_수를_그대로_센다()
         {
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 6 }, 6);
 
-            reporter.Tick(Step, 0, false);   // 아직 아무도 오지 않았습니다
-            reporter.Tick(Step, 5, false);   // 다섯 명 상륙
-            reporter.Tick(Step, 3, false);   // 두 명 쓰러짐
+            reporter.Tick(Step, 0, 0, false);   // 아직 아무도 오지 않았습니다
+            reporter.Tick(Step, 5, 0, false);   // 다섯 명 상륙
+            reporter.Tick(Step, 3, 0, false);   // 두 명 쓰러짐
 
             Assert.AreEqual(2, reporter.EnemiesKilled);
         }
@@ -223,21 +223,21 @@ namespace SRPG.Tests
         /// 늘어난 만큼은 새로 나온 적이고, 줄어든 만큼은 쓰러진 적입니다.
         /// </summary>
         [Test]
-        public void 파도가_이어져도_처치_수가_누적된다()
+        public void 지원군이_이어져도_처치_수가_누적된다()
         {
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 6 }, 6);
 
-            reporter.Tick(Step, 0, false);
-            reporter.Tick(Step, 5, false);   // 1파도 5명
-            reporter.Tick(Step, 3, false);   // 2명 쓰러짐
-            reporter.Tick(Step, 9, false);   // 2파도 6명 추가 → 지금까지 11명이 나왔습니다
+            reporter.Tick(Step, 0, 0, false);
+            reporter.Tick(Step, 5, 0, false);   // 첫 무리 5명
+            reporter.Tick(Step, 3, 0, false);   // 2명 쓰러짐
+            reporter.Tick(Step, 9, 0, false);   // 지원군 6명 추가 → 지금까지 11명이 나왔습니다
 
-            Assert.AreEqual(2, reporter.EnemiesKilled, "2파도가 오자 처치 수가 흐트러졌습니다.");
+            Assert.AreEqual(2, reporter.EnemiesKilled, "지원군이 오자 처치 수가 흐트러졌습니다.");
 
-            var result = reporter.Tick(Step, 0, true);   // 전부 쓰러짐
+            var result = reporter.Tick(Step, 0, 0, true);   // 전부 쓰러짐
 
-            Assert.AreEqual(11, result.EnemiesKilled, "두 번째 파도의 적이 처치 수에 잡히지 않았습니다.");
+            Assert.AreEqual(11, result.EnemiesKilled, "뒤이어 올라온 적이 처치 수에 잡히지 않았습니다.");
         }
 
         [Test]
@@ -246,7 +246,7 @@ namespace SRPG.Tests
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 6 }, 6);
 
-            var result = reporter.Tick(Step, 0, true);
+            var result = reporter.Tick(Step, 0, 0, true);
 
             Assert.AreEqual(0, result.EnemiesKilled);
         }
@@ -261,8 +261,8 @@ namespace SRPG.Tests
             var reporter = new BattleReporter();
             reporter.Track(1, new FakeSquad { AliveCount = 4 }, 6);
 
-            reporter.Tick(Step, 3, false);
-            reporter.Tick(Step, 0, true);
+            reporter.Tick(Step, 3, 0, false);
+            reporter.Tick(Step, 0, 0, true);
 
             Assert.IsTrue(reporter.IsDecided);
 

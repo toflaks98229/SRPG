@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.Battle;
@@ -39,7 +39,7 @@ namespace SRPG.Tests
         {
             var conclusion = new BattleConclusion();
 
-            bool decided = conclusion.Tick(1f, playerSquadsAlive: 3, enemyUnitsAlive: 10, allWavesSpawned: false);
+            bool decided = conclusion.Tick(1f, playerSquadsAlive: 3, enemyUnitsAlive: 10, enemyReinforcementsExhausted: false);
 
             Assert.IsFalse(decided);
             Assert.AreEqual(BattleOutcome.Undecided, conclusion.Outcome);
@@ -56,7 +56,7 @@ namespace SRPG.Tests
         {
             var conclusion = new BattleConclusion();
 
-            bool decided = conclusion.Tick(1f, playerSquadsAlive: 3, enemyUnitsAlive: 0, allWavesSpawned: false);
+            bool decided = conclusion.Tick(1f, playerSquadsAlive: 3, enemyUnitsAlive: 0, enemyReinforcementsExhausted: false);
 
             Assert.IsFalse(decided, "다음 파도가 남았는데 승리로 판정했습니다.");
             Assert.AreEqual(BattleOutcome.Undecided, conclusion.Outcome);
@@ -67,7 +67,7 @@ namespace SRPG.Tests
         {
             var conclusion = new BattleConclusion();
 
-            bool decided = conclusion.Tick(1f, playerSquadsAlive: 2, enemyUnitsAlive: 0, allWavesSpawned: true);
+            bool decided = conclusion.Tick(1f, playerSquadsAlive: 2, enemyUnitsAlive: 0, enemyReinforcementsExhausted: true);
 
             Assert.IsTrue(decided);
             Assert.AreEqual(BattleOutcome.Victory, conclusion.Outcome);
@@ -78,7 +78,7 @@ namespace SRPG.Tests
         {
             var conclusion = new BattleConclusion();
 
-            bool decided = conclusion.Tick(1f, playerSquadsAlive: 0, enemyUnitsAlive: 5, allWavesSpawned: false);
+            bool decided = conclusion.Tick(1f, playerSquadsAlive: 0, enemyUnitsAlive: 5, enemyReinforcementsExhausted: false);
 
             Assert.IsTrue(decided);
             Assert.AreEqual(BattleOutcome.Defeat, conclusion.Outcome);
@@ -93,7 +93,7 @@ namespace SRPG.Tests
         {
             var conclusion = new BattleConclusion();
 
-            conclusion.Tick(1f, playerSquadsAlive: 0, enemyUnitsAlive: 0, allWavesSpawned: true);
+            conclusion.Tick(1f, playerSquadsAlive: 0, enemyUnitsAlive: 0, enemyReinforcementsExhausted: true);
 
             Assert.AreEqual(BattleOutcome.Defeat, conclusion.Outcome);
         }
@@ -164,6 +164,29 @@ namespace SRPG.Tests
             Assert.IsFalse(request.IsValid(out _));
         }
 
+        /// <summary>
+        /// 야전에서는 마주 설 부대가 곧 전투의 전제입니다.
+        /// 예전에는 웨이브가 비어도 전투가 시작됐지만, 이제는 상대 없는 전장이 성립하지 않습니다.
+        /// </summary>
+        [Test]
+        public void 상대가_없는_주문서는_거부된다()
+        {
+            var definition = UnitDefinition.CreateDefault(UnitRole.Infantry);
+
+            try
+            {
+                var request = new BattleRequest();
+                request.PlayerSquads.Add(new SquadOrder { Id = 1, Definition = definition, SoldierCount = 5 });
+
+                Assert.IsFalse(request.IsValid(out string reason), "상대가 없는데 전투가 시작됩니다.");
+                Assert.IsNotEmpty(reason);
+            }
+            finally
+            {
+                Object.DestroyImmediate(definition);
+            }
+        }
+
         [Test]
         public void 온전한_주문서는_통과한다()
         {
@@ -173,6 +196,9 @@ namespace SRPG.Tests
             {
                 var request = new BattleRequest();
                 request.PlayerSquads.Add(new SquadOrder { Id = 1, Definition = definition, SoldierCount = 5 });
+
+                // 야전은 마주 설 상대가 있어야 성립합니다.
+                request.EnemySquads.Add(new SquadOrder { Id = 101, Definition = definition, SoldierCount = 5 });
 
                 Assert.IsTrue(request.IsValid(out string reason), reason);
             }

@@ -18,9 +18,9 @@ namespace SRPG.Systems.Battle
     ///
     /// <b>왜 "적이 0명"만으로 승리가 아닌가</b>
     ///
-    /// 다음 파도가 아직 안 왔을 뿐일 수 있습니다.
-    /// 배가 오는 사이의 빈 순간을 승리로 읽으면 전투가 시작하자마자 끝납니다.
-    /// 마지막 파도까지 나온 뒤에 비어 있어야 진짜로 끝난 것입니다.
+    /// 전장이 좁아 상대가 전 병력을 한 번에 세우지 못했을 뿐일 수 있습니다.
+    /// 앞 부대를 갈아 낸 그 순간을 승리로 읽으면, 뒤에 두 배가 남아 있어도 전투가 끝납니다.
+    /// 더 올라올 지원군이 없어야 진짜로 끝난 것입니다.
     ///
     /// <b>패배가 승리보다 먼저입니다</b>
     ///
@@ -50,11 +50,15 @@ namespace SRPG.Systems.Battle
         /// 관측값으로 결말을 갱신합니다.
         /// </summary>
         /// <param name="deltaTime">지난 시간입니다.</param>
-        /// <param name="playerSquadsAlive">살아 있는 아군 분대 수입니다.</param>
+        /// <param name="playerSquadsAlive">
+        /// 아직 싸울 수 있는 아군 분대 수입니다. <b>전장의 분대와 대기 중인 지원군을 합칩니다.</b>
+        /// 전장이 비었어도 뒤에 부대가 남아 있으면 진 것이 아닙니다.
+        /// </param>
         /// <param name="enemyUnitsAlive">살아 있는 적 유닛 수입니다.</param>
-        /// <param name="allWavesSpawned">마지막 파도까지 전부 나왔는지 여부입니다.</param>
+        /// <param name="enemyReinforcementsExhausted">더 올라올 적 지원군이 없는지 여부입니다.</param>
         /// <returns>이번 호출에서 결말이 <b>새로</b> 정해졌으면 true입니다.</returns>
-        public bool Tick(float deltaTime, int playerSquadsAlive, int enemyUnitsAlive, bool allWavesSpawned)
+        public bool Tick(
+            float deltaTime, int playerSquadsAlive, int enemyUnitsAlive, bool enemyReinforcementsExhausted)
         {
             if (IsDecided)
             {
@@ -70,7 +74,7 @@ namespace SRPG.Systems.Battle
                 return true;
             }
 
-            if (allWavesSpawned && enemyUnitsAlive <= 0)
+            if (enemyReinforcementsExhausted && enemyUnitsAlive <= 0)
             {
                 Outcome = BattleOutcome.Victory;
                 return true;

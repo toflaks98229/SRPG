@@ -6,6 +6,7 @@ using SRPG.Gameplay.Selection;
 using SRPG.Systems.AI;
 using SRPG.Systems.Time;
 using UnityEngine;
+using SRPG.Gameplay.Deployment;
 
 namespace SRPG.UI.HUD
 {
@@ -26,10 +27,10 @@ namespace SRPG.UI.HUD
         private readonly StringBuilder _builder = new StringBuilder(512);
 
         private IUnitRoster _roster;
-        private IEnemySquadRoster _enemySquads;
+        private ISquadRoster _squads;
         private TacticalTimeController _clock;
         private SquadSelectionController _selection;
-        private EnemySpawner _spawner;
+        private SquadDeployer _deployer;
 
         private GUIStyle _panelStyle;
         private GUIStyle _labelStyle;
@@ -74,16 +75,16 @@ namespace SRPG.UI.HUD
         /// </summary>
         public void Initialize(
             IUnitRoster roster,
-            IEnemySquadRoster enemySquads,
+            ISquadRoster squads,
             TacticalTimeController clock,
             SquadSelectionController selection,
-            EnemySpawner spawner)
+            SquadDeployer deployer)
         {
             _roster = roster;
-            _enemySquads = enemySquads;
+            _squads = squads;
             _clock = clock;
             _selection = selection;
-            _spawner = spawner;
+            _deployer = deployer;
         }
 
         // ====================================================================================================
@@ -99,21 +100,19 @@ namespace SRPG.UI.HUD
 
             _builder.AppendLine("<b>── 전투 상태 ──</b>");
 
-            if (_spawner?.Scheduler != null)
+            if (_deployer != null)
             {
-                var scheduler = _spawner.Scheduler;
-
-                if (scheduler.IsFinished)
+                if (_deployer.EnemyReinforcementsExhausted)
                 {
-                    _builder.AppendLine("웨이브: 전부 출현 완료");
+                    _builder.AppendLine("적 지원군: 없음 (전부 투입됨)");
                 }
                 else
                 {
-                    _builder.AppendLine($"웨이브: {scheduler.NextWaveIndex + 1} / {scheduler.TotalWaves}");
-                    _builder.AppendLine($"다음까지: {scheduler.TimeUntilNextWave:F1}초");
+                    _builder.AppendLine($"적 지원군: {_deployer.EnemyReserves}개 분대 대기");
+                    _builder.AppendLine($"다음 투입까지: {_deployer.TimeUntilEnemyReinforcement:F1}초");
                 }
 
-                _builder.AppendLine($"상륙정: {_spawner.ActiveShipCount}척");
+                _builder.AppendLine($"아군 지원군: {_deployer.PlayerReserves}개 분대 대기");
             }
 
             _builder.AppendLine($"적 병력: {_roster.EnemyUnits.Count}명");
@@ -172,12 +171,12 @@ namespace SRPG.UI.HUD
         /// </summary>
         private void AppendEnemySquads()
         {
-            if (_enemySquads == null)
+            if (_squads == null)
             {
                 return;
             }
 
-            var squads = _enemySquads.EnemySquads;
+            var squads = _squads.EnemySquads;
 
             _builder.AppendLine();
             _builder.AppendLine($"<b>── 적 분대 ({squads.Count}) ──</b>");

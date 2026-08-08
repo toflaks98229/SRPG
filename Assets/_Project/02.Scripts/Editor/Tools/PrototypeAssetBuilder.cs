@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Enemies;
@@ -34,7 +34,6 @@ namespace SRPG.Editor.Tools
         private const string SystemPrefabDir = "Assets/_Project/05.Prefabs/Systems";
         private const string UnitDataDir = "Assets/_Project/03.DataAssets/Units";
         private const string EnemyDataDir = "Assets/_Project/03.DataAssets/Enemies";
-        private const string WaveDataDir = "Assets/_Project/03.DataAssets/Waves";
         private const string ConfigDataDir = "Assets/_Project/03.DataAssets/Configs";
 
         /// <summary>전투 구성 에셋의 경로입니다. 씬 빌더가 이 경로를 참조합니다.</summary>
@@ -64,17 +63,15 @@ namespace SRPG.Editor.Tools
             var arrowPrefab = BuildArrowPrefab(materials);
 
             var unitPrefabs = BuildUnitPrefabs(materials);
-            var shipPrefab = BuildShipPrefab(materials);
             var markers = BuildMarkerPrefabs(materials);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
             var definitions = BuildUnitDefinitions(unitPrefabs, arrowPrefab);
 
-            var waves = LoadOrCreate(WaveDataDir + "/WaveDef_Default.asset", WaveDefinition.CreateDefault);
             var tuning = LoadOrCreate(ConfigDataDir + "/BattleTuning_Default.asset", BattleTuning.CreateDefault);
 
-            BuildBattleSetup(materials, definitions, shipPrefab, markers, waves, tuning);
+            BuildBattleSetup(materials, definitions, markers, tuning);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -83,7 +80,7 @@ namespace SRPG.Editor.Tools
                 "[PrototypeAssetBuilder] 에셋 생성 완료\n" +
                 $"  머티리얼 : {MaterialDir}\n" +
                 $"  프리팹   : {UnitPrefabDir}, {EnemyPrefabDir}, {SystemPrefabDir}\n" +
-                $"  데이터   : {UnitDataDir}, {EnemyDataDir}, {WaveDataDir}\n" +
+                $"  데이터   : {UnitDataDir}, {EnemyDataDir}\n" +
                 $"  전투 구성: {BattleSetupPath}");
 
             VerifyReferences();
@@ -113,10 +110,8 @@ namespace SRPG.Editor.Tools
                 return;
             }
 
-            if (setup.Waves == null) problems.Add("BattleSetup.Waves");
             if (setup.Tuning == null) problems.Add("BattleSetup.Tuning");
             if (!setup.TerrainMaterials.IsComplete) problems.Add("BattleSetup.TerrainMaterials (5개 중 일부 누락)");
-            if (setup.EnemyShipPrefab == null) problems.Add("BattleSetup.EnemyShipPrefab");
             if (setup.SelectionMarkerPrefab == null) problems.Add("BattleSetup.SelectionMarkerPrefab");
             if (setup.OrderMarkerPrefab == null) problems.Add("BattleSetup.OrderMarkerPrefab");
 
@@ -623,24 +618,6 @@ namespace SRPG.Editor.Tools
         // 6. Private Methods - Other Prefabs
         // ====================================================================================================
 
-        private static GameObject BuildShipPrefab(Dictionary<string, Material> materials)
-        {
-            var cube = GetBuiltinMesh(PrimitiveType.Cube);
-            var hullMaterial = materials["M_Ship_Hull"];
-
-            var root = new GameObject("EnemyShip");
-
-            var hull = CreateMeshChild(root.transform, "Hull", cube, hullMaterial);
-            hull.transform.localScale = new Vector3(0.9f, 0.35f, 2.1f);
-
-            var mast = CreateMeshChild(root.transform, "Mast", cube, hullMaterial);
-            mast.transform.localPosition = new Vector3(0f, 0.75f, 0f);
-            mast.transform.localScale = new Vector3(0.08f, 1.3f, 0.08f);
-
-            root.AddComponent<EnemyShip>();
-
-            return SavePrefab(root, $"{EnemyPrefabDir}/EnemyShip.prefab");
-        }
 
         private static (GameObject Selection, GameObject Order) BuildMarkerPrefabs(Dictionary<string, Material> materials)
         {
@@ -749,9 +726,7 @@ namespace SRPG.Editor.Tools
         private static void BuildBattleSetup(
             Dictionary<string, Material> materials,
             Dictionary<string, UnitDefinition> definitions,
-            GameObject shipPrefab,
             (GameObject Selection, GameObject Order) markers,
-            WaveDefinition waves,
             BattleTuning tuning)
         {
             var setup = AssetDatabase.LoadAssetAtPath<BattleSetup>(BattleSetupPath);
@@ -763,7 +738,6 @@ namespace SRPG.Editor.Tools
                 AssetDatabase.CreateAsset(setup, BattleSetupPath);
             }
 
-            setup.Waves = waves;
             setup.Tuning = tuning;
 
             setup.TerrainMaterials = new TerrainMaterialSet
@@ -789,7 +763,6 @@ namespace SRPG.Editor.Tools
                 definitions["EnemyArcher"],
             };
 
-            setup.EnemyShipPrefab = shipPrefab;
             setup.SelectionMarkerPrefab = markers.Selection;
             setup.OrderMarkerPrefab = markers.Order;
 
@@ -875,7 +848,6 @@ namespace SRPG.Editor.Tools
                 SystemPrefabDir,
                 UnitDataDir,
                 EnemyDataDir,
-                WaveDataDir,
                 ConfigDataDir,
             };
 
