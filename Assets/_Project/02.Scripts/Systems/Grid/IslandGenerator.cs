@@ -70,7 +70,7 @@ namespace SRPG.Systems.Grid
             BuildSilhouette(settings, rng, w, d, isLand);
             KeepLargestComponent(w, d, isLand);
             ComputeDistanceToWater(w, d, isLand, distToWater);
-            AssignHeights(settings, w, d, isLand, distToWater, height);
+            AssignHeights(settings, rng, w, d, isLand, distToWater, height);
             PlaceRocks(settings, rng, w, d, isLand, height, isRock);
 
             // 지형 확정
@@ -294,10 +294,28 @@ namespace SRPG.Systems.Grid
         }
 
         /// <summary>
-        /// 해안 거리를 계단식 고도로 변환합니다. 인접 타일의 고도 차가 1을 넘지 않도록 보장됩니다.
+        /// 고도를 정합니다. 봉우리를 세우고 물길을 따라 계곡을 판 뒤 계단 제약을 강제합니다.
+        ///
+        /// <b>해안 거리만으로 정하면 웨딩케이크가 됩니다.</b>
+        /// <c>level = f(해안거리)</c>는 단조 함수라 바다에서 멀수록 반드시 높습니다.
+        /// 그러면 계곡이 만들어질 수가 없습니다 — 계곡은 "주변보다 낮은데 바다에서는 먼 곳"이고,
+        /// 그건 정의상 그 식이 금지하는 형태입니다.
+        ///
+        /// 그래서 봉우리를 세워 고도를 해안 거리에서 떼어낸 뒤, 물길을 따라 팝니다.
+        /// 자세한 근거는 <see cref="DrainageNetwork"/>에 있습니다.
         /// </summary>
-        private static void AssignHeights(IslandSettings settings, int w, int d, bool[] isLand, int[] distToWater, int[] height)
+        private static void AssignHeights(
+            IslandSettings settings,
+            System.Random rng,
+            int w, int d,
+            bool[] isLand,
+            int[] distToWater,
+            int[] height)
         {
+            var raw = new int[isLand.Length];
+
+            DrainageNetwork.RaisePeaks(rng, w, d, isLand, distToWater, settings.PeakCount, raw);
+
             for (int i = 0; i < isLand.Length; i++)
             {
                 if (!isLand[i])
@@ -306,9 +324,19 @@ namespace SRPG.Systems.Grid
                     continue;
                 }
 
-                int level = (distToWater[i] - 1) / HeightBandWidth;
+                int level = (raw[i] - 1) / HeightBandWidth;
                 height[i] = Mathf.Clamp(level, 0, settings.MaxHeightLevel);
             }
+
+            // 봉우리를 세우면 이웃 간 고도차가 1을 넘을 수 있습니다.
+            // 파기 전에 한 번 정리해야 물길이 절벽을 뛰어넘지 않습니다.
+            DrainageNetwork.EnforceStepLimit(w, d, isLand, height);
+
+            DrainageNetwork.Carve(rng, w, d, isLand, raw, height, settings.ValleyCount);
+
+            // 판 뒤에는 반드시 다시 강제해야 합니다.
+            // 계곡 옆면이 두 단 이상 솟아 있으면 그 칸으로 걸어 들어갈 수 없습니다.
+            DrainageNetwork.EnforceStepLimit(w, d, isLand, height);
         }
 
         // ====================================================================================================

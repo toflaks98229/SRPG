@@ -15,11 +15,13 @@ MonoBehaviour:
   Width: 30
   Depth: 30
   CellSize: 2
-  HeightStep: 0.9
-  MaxHeightLevel: 2
+  HeightStep: 0.5
+  MaxHeightLevel: 4
   IslandRadius: 0.36
   NoiseScale: 4.5
   NoiseStrength: 0.16
+  PeakCount: 2
+  ValleyCount: 3
   HouseCount: 3
   LandingZoneCount: 4
   HouseMinSpacing: 4

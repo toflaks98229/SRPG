@@ -41,6 +41,7 @@ namespace SRPG.Editor.Tools
 
         private const string GroundedQuadPath = MeshDirectory + "/SRPG_GroundedQuad.mesh";
         private const string TuningPath = ConfigDirectory + "/BattleTuning_Default.asset";
+        private const string IslandSettingsPath = "Assets/_Project/03.DataAssets/Islands/IslandSettings_Default.asset";
 
         /// <summary>빌드에 반드시 들어가야 하는 셰이더입니다.</summary>
         private static readonly string[] RequiredShaders =
@@ -76,6 +77,7 @@ namespace SRPG.Editor.Tools
             WireTerrainMaterials();
             WireUnitBillboards();
             WireMissingConfigs();
+            WireLandformSettings();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -98,6 +100,7 @@ namespace SRPG.Editor.Tools
             CheckTerrainMaterials(problems);
             CheckUnitBillboards(problems);
             CheckConfigs(problems);
+            CheckLandformSettings(problems);
 
             if (problems.Count > 0)
             {
@@ -308,6 +311,81 @@ namespace SRPG.Editor.Tools
             AssetDatabase.SaveAssets();
 
             Debug.Log($"[BattleWiring] ④ 튜닝 에셋을 만들어 연결했습니다: {TuningPath}");
+        }
+
+        /// <summary>
+        /// 지형 생성 설정을 현재 코드에 맞춥니다.
+        ///
+        /// <b>왜 필요한가</b>
+        ///
+        /// 에셋은 코드가 바뀌어도 따라오지 않습니다. <b>이미 적혀 있는 값이 이깁니다.</b>
+        /// 고도 단계를 얕게 바꾸고 단계 수를 늘려도, 에셋에 옛 값이 박혀 있으면
+        /// 실제 게임은 계속 옛 지형을 냅니다.
+        ///
+        /// 코드 기본값에는 새 값이 들어 있으므로 <b>테스트는 전부 통과합니다.</b>
+        /// 폴백 경로만 새 지형이고 에셋 경로는 옛 지형입니다. 가장 찾기 힘든 종류입니다.
+        ///
+        /// (새로 추가한 필드는 사정이 다릅니다. YAML에 항목이 없으면 C#의 초기값이
+        ///  그대로 남으므로 새 값이 자동으로 적용됩니다. 문제는 <b>이미 적혀 있는</b> 값입니다.)
+        ///
+        /// <b>지형 항목만 건드립니다.</b>
+        /// 격자 크기·섬 반경·가옥 수는 기획자가 조정하는 값이라 손대지 않습니다.
+        /// </summary>
+        [MenuItem("SRPG/배선/⑤ 지형 설정 갱신", priority = 34)]
+        public static void WireLandformSettings()
+        {
+            var settings = AssetDatabase.LoadAssetAtPath<IslandSettings>(IslandSettingsPath);
+
+            if (settings == null)
+            {
+                Debug.LogWarning($"[BattleWiring] 섬 설정 에셋을 찾지 못했습니다: {IslandSettingsPath}");
+                return;
+            }
+
+            var reference = IslandSettings.CreateDefault();
+            var changes = new List<string>();
+
+            try
+            {
+                if (settings.PeakCount != reference.PeakCount)
+                {
+                    changes.Add($"PeakCount {settings.PeakCount} → {reference.PeakCount}");
+                    settings.PeakCount = reference.PeakCount;
+                }
+
+                if (settings.ValleyCount != reference.ValleyCount)
+                {
+                    changes.Add($"ValleyCount {settings.ValleyCount} → {reference.ValleyCount}");
+                    settings.ValleyCount = reference.ValleyCount;
+                }
+
+                if (!Mathf.Approximately(settings.HeightStep, reference.HeightStep))
+                {
+                    changes.Add($"HeightStep {settings.HeightStep} → {reference.HeightStep}");
+                    settings.HeightStep = reference.HeightStep;
+                }
+
+                if (settings.MaxHeightLevel != reference.MaxHeightLevel)
+                {
+                    changes.Add($"MaxHeightLevel {settings.MaxHeightLevel} → {reference.MaxHeightLevel}");
+                    settings.MaxHeightLevel = reference.MaxHeightLevel;
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(reference);
+            }
+
+            if (changes.Count == 0)
+            {
+                Debug.Log("[BattleWiring] ⑤ 지형 설정은 이미 맞춰져 있습니다.");
+                return;
+            }
+
+            EditorUtility.SetDirty(settings);
+            AssetDatabase.SaveAssets();
+
+            Debug.Log("[BattleWiring] ⑤ 지형 설정을 갱신했습니다:\n  - " + string.Join("\n  - ", changes));
         }
 
         // ====================================================================================================
@@ -555,6 +633,46 @@ namespace SRPG.Editor.Tools
             if (setup.Tuning == null)
             {
                 problems.Add("BattleSetup.Tuning 이 비어 있습니다. 전투 수치가 전부 코드 기본값으로 돌아갑니다.");
+            }
+        }
+
+        /// <summary>
+        /// 지형 설정이 코드가 기대하는 상태인지 봅니다.
+        ///
+        /// 여기서 걸리는 것들은 전부 <b>테스트를 통과하면서도 화면만 틀린</b> 종류입니다.
+        /// 코드 기본값에는 새 값이 들어 있어 폴백 경로는 멀쩡하고, 에셋 경로만 옛 지형이 나옵니다.
+        /// </summary>
+        private static void CheckLandformSettings(List<string> problems)
+        {
+            var settings = AssetDatabase.LoadAssetAtPath<IslandSettings>(IslandSettingsPath);
+
+            if (settings == null)
+            {
+                problems.Add($"섬 설정 에셋이 없습니다: {IslandSettingsPath}");
+                return;
+            }
+
+            if (settings.PeakCount <= 0)
+            {
+                problems.Add("IslandSettings.PeakCount 가 0입니다. 고도가 해안 거리만 따라가 웨딩케이크가 됩니다.");
+            }
+
+            if (settings.ValleyCount <= 0)
+            {
+                problems.Add("IslandSettings.ValleyCount 가 0입니다. 계곡이 파이지 않습니다.");
+            }
+
+            // 유닛 키가 1입니다. 고도 한 단이 그보다 높으면 한 단만 내려가도 유닛이 완전히 가립니다.
+            if (settings.HeightStep > 0.7f)
+            {
+                problems.Add($"IslandSettings.HeightStep 이 {settings.HeightStep} 입니다. " +
+                             "한 단만 내려가도 유닛이 완전히 가려 판독이 안 됩니다.");
+            }
+
+            if (settings.MaxHeightLevel < 3)
+            {
+                problems.Add($"IslandSettings.MaxHeightLevel 이 {settings.MaxHeightLevel} 입니다. " +
+                             "계곡을 팔 여유가 없습니다 — 한 번 파면 해수면입니다.");
             }
         }
 

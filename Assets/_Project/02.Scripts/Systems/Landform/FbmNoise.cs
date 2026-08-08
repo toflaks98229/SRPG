@@ -63,10 +63,15 @@ namespace SRPG.Systems.Landform
         /// 기본 주파수입니다. 표본 하나당 진행하는 양이라, 클수록 잘게 굴곡집니다.
         ///
         /// 너무 낮으면 굴곡의 파장이 타일 여러 칸을 덮어 <b>한 칸 안에서는 거의 평면</b>이 됩니다.
-        /// 잘게 나눠 놓고도 각진 사각형으로 보이게 되므로, 파장이 타일 한두 칸 수준이어야 합니다.
+        /// 잘게 나눠 놓고도 각진 사각형으로 보이게 되므로, 파장이 타일 한 칸 수준이어야 합니다.
+        ///
+        /// <b>진폭이 아니라 주파수로 기울기를 법니다.</b>
+        /// 기복의 진폭은 고도 한 단계의 절반이라는 상한에 묶여 있습니다 — 그걸 넘으면
+        /// 아래층 봉우리가 위층 골보다 높아져 층이 흔들립니다.
+        /// 같은 진폭에서 경사를 세우는 방법은 파장을 줄이는 것뿐입니다.
         /// </param>
         /// <param name="ridgeWeight">능선의 비중입니다. 0이면 둥근 언덕만, 1이면 능선만 나옵니다.</param>
-        public static void Apply(HeightField field, int seed, float frequency = 0.17f, float ridgeWeight = 0.45f)
+        public static void Apply(HeightField field, int seed, float frequency = 0.28f, float ridgeWeight = 0.45f)
         {
             if (field == null)
             {

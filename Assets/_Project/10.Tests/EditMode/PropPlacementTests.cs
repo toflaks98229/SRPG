@@ -188,7 +188,7 @@ namespace SRPG.Tests
                     flatTilt += tilt;
                     flatCount++;
                 }
-                else if (slope > 8f)
+                else if (slope > 6f)
                 {
                     slopeTilt += tilt;
                     slopeCount++;
