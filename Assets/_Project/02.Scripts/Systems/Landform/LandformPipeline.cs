@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Systems.Grid;
 using UnityEngine;
@@ -6,27 +5,30 @@ using UnityEngine;
 namespace SRPG.Systems.Landform
 {
     /// <summary>
-    /// 지형 조각 파이프라인입니다. 네 단계를 정해진 순서로 돌립니다.
+    /// 지형 생성 파이프라인입니다.
     ///
-    ///   1. 기초 지형   — FBM으로 자연스러운 기복을 깝니다
-    ///   2. 인공 변형   — 길을 다지고 건물 터를 계단식으로 깎습니다
-    ///   3. 매스 무브먼트 — 2단계가 남긴 수직 절단면을 무너뜨립니다
-    ///   4. 오브젝트 배치 — 다져진 평지 위에 지형지물을 세웁니다 (호출자가 담당)
+    /// <b>순서를 뒤집었습니다</b>
     ///
-    /// <b>순서가 전부입니다</b>
+    /// 예전 순서는 이랬습니다 — 타일의 고도 단계를 먼저 정하고, 그 안에서 침식을 돌리고,
+    /// 경계를 노이즈로 흐트러뜨렸습니다.
     ///
-    /// 침식을 먼저 돌리고 길을 내면, 길의 절단면이 날것 그대로 남습니다.
-    /// 사람이 땅을 깎은 자국은 반드시 그 뒤에 다시 무너져 있어야 합니다.
-    /// 그 순서가 지켜져야 "예전에 누가 여기 길을 냈고 세월이 지났다"로 읽힙니다.
+    /// 그 순서로는 한계가 뚜렷했습니다.
+    ///   · 침식이 움직일 폭이 한 단의 절반으로 묶여 골짜기가 파이지 않았습니다.
+    ///     그래서 물길을 손으로 그려 넣어야 했고, 그건 시뮬레이션이 아니라 작도였습니다.
+    ///   · 단 사이를 수직 벽으로 이어서 어디서 보든 90도였고,
+    ///     벽이 바닥과 만나는 자리도 90도였습니다.
     ///
-    /// <b>길은 어디에서 어디로 가는가</b>
+    /// 지금 순서는 이렇습니다.
     ///
-    /// 논문의 예시는 마을 입구와 산 중턱이지만, 이 게임에서 의미 있는 두 지점은 따로 있습니다.
-    ///   · <b>상륙 지점</b> — 적이 올라오는 곳이자, 원래 사람들이 배를 대던 곳
-    ///   · <b>가옥</b>     — 지켜야 하는 곳
+    ///   1. <b>침식</b> — 타일 없이 연속된 지형을 물과 중력으로 깎습니다.
+    ///                    골짜기도 능선도 애추도 전부 여기서 나옵니다.
+    ///   2. <b>평탄화</b> — 완만한 곳만 다져 딛을 수 있는 단을 만듭니다.
+    ///                     가파른 곳은 침식이 남긴 사면 그대로 둡니다.
+    ///   3. <b>읽기</b>   — 그 결과에서 고도 단계를 읽어 냅니다.
     ///
-    /// 이 둘을 잇는 길은 장식이 아닙니다. <b>공격 경로</b>입니다.
-    /// 플레이어가 지형을 보고 "적이 저리로 오겠구나"를 읽을 수 있게 됩니다.
+    /// 3번이 마지막이라는 것이 핵심입니다. 타일은 지형을 만드는 것이 아니라 <b>읽어 내는 것</b>입니다.
+    /// 단 경계는 침식된 높이의 등고선이므로 타일 격자와 아무 상관이 없고,
+    /// 단과 단 사이는 벽이 아니라 사면이므로 직각이 생길 자리가 없습니다.
     /// </summary>
     public static class LandformPipeline
     {
@@ -34,92 +36,112 @@ namespace SRPG.Systems.Landform
         // 1. Constants
         // ====================================================================================================
 
-        /// <summary>타일 한 변을 나눌 조각 수입니다.</summary>
-        public const int DefaultResolution = 4;
+        /// <summary>건물 터의 반경입니다. 표본 단위입니다.</summary>
+        private const float PadRadius = 2.6f;
+
+        /// <summary>건물 터가 주변으로 풀리는 반경입니다.</summary>
+        private const float PadBlend = 5.5f;
 
         /// <summary>완전히 다져지는 길의 반경입니다. 표본 단위입니다.</summary>
         private const float RoadRadius = 1.1f;
 
         /// <summary>길의 영향이 사라지는 반경입니다.</summary>
-        private const float RoadShoulder = 3.2f;
-
-        /// <summary>건물 터의 반경입니다.</summary>
-        private const float TerraceRadius = 2.2f;
-
-        /// <summary>건물 터의 영향이 사라지는 반경입니다.</summary>
-        private const float TerraceBlend = 4.5f;
-
-        /// <summary>침식 반복 횟수입니다.</summary>
-        private const int ErosionIterations = 12;
+        private const float RoadShoulder = 2.8f;
 
         // ====================================================================================================
         // 2. Public Methods
         // ====================================================================================================
 
         /// <summary>
-        /// 격자로부터 조각된 지형을 만듭니다.
+        /// 섬 윤곽에 맞춰 지형을 시뮬레이션합니다. 타일 고도는 아직 정해지지 않습니다.
         /// </summary>
-        /// <param name="grid">지형 구조입니다. 고도 단계는 바뀌지 않습니다.</param>
-        /// <param name="resolution">타일 한 변을 나눌 조각 수입니다.</param>
-        /// <param name="roads">만들어진 길입니다. 필요 없으면 null을 넘겨도 됩니다.</param>
-        public static HeightField Build(
-            IslandGrid grid,
-            int resolution = DefaultResolution,
-            List<List<GridCoord>> roads = null)
+        /// <param name="width">타일 가로 칸 수입니다.</param>
+        /// <param name="depth">타일 세로 칸 수입니다.</param>
+        /// <param name="cellSize">타일 한 칸의 월드 크기입니다.</param>
+        /// <param name="isLand">타일 단위 육지 여부입니다.</param>
+        /// <param name="seed">같은 값이면 같은 지형이 나옵니다.</param>
+        /// <param name="peakHeight">봉우리의 목표 높이입니다.</param>
+        public static TerrainSimulation Simulate(
+            int width, int depth, float cellSize,
+            bool[] isLand,
+            int seed,
+            float peakHeight)
         {
-            if (grid == null)
+            var simulation = new TerrainSimulation(width, depth, cellSize);
+
+            // 타일 단위 육지를 표본 단위로 옮깁니다.
+            for (int sy = 0; sy < simulation.Depth; sy++)
+            {
+                for (int sx = 0; sx < simulation.Width; sx++)
+                {
+                    int tileIndex = (sy / TerrainSimulation.Subdivision) * width + sx / TerrainSimulation.Subdivision;
+
+                    simulation.Land[sy * simulation.Width + sx] = isLand[tileIndex];
+                }
+            }
+
+            simulation.Simulate(seed, peakHeight);
+
+            return simulation;
+        }
+
+        /// <summary>
+        /// 시뮬레이션 결과를 다져 완성된 지형으로 만듭니다.
+        /// </summary>
+        /// <param name="simulation">침식이 끝난 지형입니다.</param>
+        /// <param name="grid">타일 격자입니다. 원점과 가옥 위치를 씁니다.</param>
+        /// <param name="maxLevel">최대 고도 단계입니다.</param>
+        public static HeightField Finish(TerrainSimulation simulation, IslandGrid grid, int maxLevel)
+        {
+            if (simulation == null || grid == null)
             {
                 return null;
             }
 
-            var field = new HeightField(grid, resolution);
-
-            roads?.Clear();
-
-            // ── 0단계 ──────────────────────────────────────────────────────────────
+            // 사람이 땅을 건드린 자국입니다. 침식이 끝난 뒤, 다지기 전에 넣습니다.
             //
-            // 단 경계를 타일 격자에서 떼어냅니다.
-            //
-            // 이것을 가장 먼저 해야 합니다. 뒤에 오는 모든 단계가 "여기가 몇 단인가"를
-            // 기준으로 삼기 때문입니다. 침식은 같은 단끼리만 흙을 주고받고,
-            // 붕괴는 단 경계를 찾아 무너뜨립니다. 경계가 나중에 움직이면 전부 어긋납니다.
-            BoundaryWarp.Apply(field, grid, grid.Seed);
+            // 자연 지형만 있으면 무인도로 보입니다. 사람이 살았다는 인상은 건물이 아니라
+            // 땅에 남은 자국에서 옵니다 — 다져진 길, 깎아 만든 평평한 터.
+            CarveRoads(simulation, grid);
 
-            // ── 1단계 ──────────────────────────────────────────────────────────────
-            FbmNoise.Apply(field, grid.Seed);
+            // 가옥 터는 사람이 삽으로 판 자리라 경사와 무관하게 눌러 버립니다.
+            for (int i = 0; i < grid.HouseTiles.Count; i++)
+            {
+                var coord = grid.HouseTiles[i].Coord;
+                int half = TerrainSimulation.Subdivision / 2;
 
-            // ── 2단계 ──────────────────────────────────────────────────────────────
-            CarveRoads(grid, field, roads);
-            TerraceBuildingSites(grid, field);
+                TerrainFlattening.FlattenPad(
+                    simulation.Height,
+                    simulation.Land,
+                    simulation.Width,
+                    simulation.Depth,
+                    coord.X * TerrainSimulation.Subdivision + half,
+                    coord.Y * TerrainSimulation.Subdivision + half,
+                    PadRadius,
+                    PadBlend);
+            }
 
-            // ── 3단계 ──────────────────────────────────────────────────────────────
-            //
-            // 먼저 층 안에서의 급경사를 무너뜨리고, 그다음 층 경계를 무너뜨립니다.
-            //
-            // 순서가 중요합니다. 절벽 붕괴가 만든 비탈은 갓 쌓인 흙이라 다시 무너져야 하는데,
-            // CliffCollapse 가 마지막에 스스로 한 번 더 안정화합니다.
-            // 반대로 하면 붕괴가 만든 비탈이 날것 그대로 남습니다.
-            ThermalErosion.Apply(field, ErosionIterations);
-            CliffCollapse.Apply(field, grid.Seed);
-
-            return field;
+            return new HeightField(simulation, grid.Origin, grid.HeightStep, maxLevel);
         }
 
-        // ====================================================================================================
-        // 3. Private Methods - Phase 2
-        // ====================================================================================================
-
         /// <summary>
-        /// 상륙 지점마다 가장 가까운 가옥까지 길을 냅니다.
+        /// 상륙 지점에서 가장 가까운 가옥까지 길을 다집니다.
+        ///
+        /// 이 게임에서 그 둘을 잇는 선은 장식이 아니라 <b>공격 경로</b>입니다.
+        /// 플레이어가 지형을 보고 "적이 저리로 오겠구나"를 읽을 수 있게 됩니다.
+        ///
+        /// 경로는 최단 거리가 아니라 <b>최소 건설 비용</b>을 따릅니다 (Galin et al. 2010).
+        /// 비용이 경사에 초선형으로 늘어나므로 길이 등고선을 따라 돌아 오릅니다.
         /// </summary>
-        private static void CarveRoads(IslandGrid grid, HeightField field, List<List<GridCoord>> roads)
+        private static void CarveRoads(TerrainSimulation simulation, IslandGrid grid)
         {
             if (grid.HouseTiles.Count == 0 || grid.LandingZones.Count == 0)
             {
                 return;
             }
 
-            var path = new List<GridCoord>();
+            var path = new System.Collections.Generic.List<GridCoord>();
+            int half = TerrainSimulation.Subdivision / 2;
 
             for (int z = 0; z < grid.LandingZones.Count; z++)
             {
@@ -129,61 +151,47 @@ namespace SRPG.Systems.Landform
                     continue;
                 }
 
-                // 구역의 한가운데 타일에서 출발합니다.
-                var start = zone[zone.Count / 2];
+                var start = zone[zone.Count / 2].Coord;
                 var house = FindNearestHouse(grid, start);
 
-                if (house == null)
+                var from = new GridCoord(
+                    start.X * TerrainSimulation.Subdivision + half,
+                    start.Y * TerrainSimulation.Subdivision + half);
+
+                var to = new GridCoord(
+                    house.X * TerrainSimulation.Subdivision + half,
+                    house.Y * TerrainSimulation.Subdivision + half);
+
+                if (!RoadPlanner.TryFindPath(simulation, from, to, path))
                 {
                     continue;
                 }
 
-                var from = CenterSampleOf(field, start);
-                var to = CenterSampleOf(field, house);
-
-                if (!RoadPlanner.TryFindPath(field, from, to, path))
+                // 경로를 따라가며 다집니다. 폭이 좁으므로 터 다지기를 잘게 반복합니다.
+                for (int p = 0; p < path.Count; p++)
                 {
-                    continue;
+                    TerrainFlattening.FlattenPad(
+                        simulation.Height, simulation.Land,
+                        simulation.Width, simulation.Depth,
+                        path[p].X, path[p].Y,
+                        RoadRadius, RoadShoulder);
                 }
-
-                TerrainSculptor.CutAndFill(field, path, RoadRadius, RoadShoulder);
-
-                roads?.Add(new List<GridCoord>(path));
             }
         }
 
-        /// <summary>
-        /// 가옥이 앉을 터를 계단식으로 다집니다.
-        /// </summary>
-        private static void TerraceBuildingSites(IslandGrid grid, HeightField field)
+        private static GridCoord FindNearestHouse(IslandGrid grid, GridCoord from)
         {
-            for (int i = 0; i < grid.HouseTiles.Count; i++)
-            {
-                TerrainSculptor.Terrace(
-                    field,
-                    CenterSampleOf(field, grid.HouseTiles[i]),
-                    TerraceRadius,
-                    TerraceBlend);
-            }
-        }
-
-        // ====================================================================================================
-        // 4. Private Methods - Helpers
-        // ====================================================================================================
-
-        private static Tile FindNearestHouse(IslandGrid grid, Tile from)
-        {
-            Tile best = null;
+            var best = grid.HouseTiles[0].Coord;
             int bestDistance = int.MaxValue;
 
             for (int i = 0; i < grid.HouseTiles.Count; i++)
             {
-                int distance = GridCoord.ManhattanDistance(from.Coord, grid.HouseTiles[i].Coord);
+                int distance = GridCoord.ManhattanDistance(from, grid.HouseTiles[i].Coord);
 
                 if (distance < bestDistance)
                 {
                     bestDistance = distance;
-                    best = grid.HouseTiles[i];
+                    best = grid.HouseTiles[i].Coord;
                 }
             }
 
@@ -191,17 +199,42 @@ namespace SRPG.Systems.Landform
         }
 
         /// <summary>
-        /// 타일 한가운데에 해당하는 표본입니다.
+        /// 타일의 고도 단계를 지형에서 읽어 냅니다.
         ///
-        /// 타일 모서리 표본을 쓰면 이웃 타일과 공유되어, 길이 타일 경계를 타고 갑니다.
-        /// 한가운데를 잡아야 길이 타일을 가로질러 자연스럽게 흐릅니다.
+        /// <b>타일은 지형을 만들지 않습니다. 읽습니다.</b>
+        /// 타일 한가운데의 표본이 속한 단을 그대로 씁니다.
         /// </summary>
-        private static GridCoord CenterSampleOf(HeightField field, Tile tile)
+        public static void ReadTileHeights(
+            TerrainSimulation simulation,
+            int width, int depth,
+            bool[] isLand,
+            float heightStep,
+            int maxLevel,
+            int[] height)
         {
-            var corner = field.TileToSample(tile.Coord);
-            int half = field.Resolution / 2;
+            int half = TerrainSimulation.Subdivision / 2;
 
-            return new GridCoord(corner.X + half, corner.Y + half);
+            for (int y = 0; y < depth; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int i = y * width + x;
+
+                    if (!isLand[i])
+                    {
+                        height[i] = 0;
+                        continue;
+                    }
+
+                    int sx = x * TerrainSimulation.Subdivision + half;
+                    int sy = y * TerrainSimulation.Subdivision + half;
+
+                    height[i] = Mathf.Clamp(
+                        Mathf.RoundToInt(simulation.HeightAt(sx, sy) / heightStep),
+                        0,
+                        maxLevel);
+                }
+            }
         }
     }
 }

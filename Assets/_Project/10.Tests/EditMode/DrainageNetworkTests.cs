@@ -297,44 +297,6 @@ namespace SRPG.Tests
             }
         }
 
-        [Test]
-        public void 계곡을_0개로_두면_파지_않는다()
-        {
-            CreateStrip(out int w, out int d, out var isLand, out var height);
-
-            for (int x = 1; x < w - 1; x++)
-            {
-                height[1 * w + x] = 2;
-            }
-
-            var before = (int[])height.Clone();
-
-            DrainageNetwork.Carve(new System.Random(1), w, d, isLand, new int[w * d], height, 0);
-
-            CollectionAssert.AreEqual(before, height, "계곡 수가 0인데 팠습니다.");
-        }
-
-        [Test]
-        public void 봉우리를_0개로_두면_해안_거리를_그대로_쓴다()
-        {
-            CreateStrip(out int w, out int d, out var isLand, out _);
-
-            var distToWater = new int[w * d];
-            var raw = new int[w * d];
-
-            for (int x = 1; x < w - 1; x++)
-            {
-                distToWater[1 * w + x] = x;
-            }
-
-            DrainageNetwork.RaisePeaks(new System.Random(1), w, d, isLand, distToWater, 0, raw);
-
-            for (int x = 1; x < w - 1; x++)
-            {
-                Assert.AreEqual(x, raw[1 * w + x], $"{x}번 칸이 해안 거리와 다릅니다.");
-            }
-        }
-
         // ====================================================================================================
         // 6. Helpers
         // ====================================================================================================

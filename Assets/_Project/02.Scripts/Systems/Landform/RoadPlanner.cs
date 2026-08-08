@@ -58,7 +58,7 @@ namespace SRPG.Systems.Landform
         /// <param name="goal">도착 표본입니다.</param>
         /// <param name="path">찾은 경로입니다. 실패하면 비어 있습니다.</param>
         /// <returns>경로를 찾았으면 true입니다.</returns>
-        public static bool TryFindPath(HeightField field, GridCoord start, GridCoord goal, List<GridCoord> path)
+        public static bool TryFindPath(TerrainSimulation field, GridCoord start, GridCoord goal, List<GridCoord> path)
         {
             if (path == null)
             {
@@ -72,7 +72,7 @@ namespace SRPG.Systems.Landform
                 return false;
             }
 
-            int count = field.SamplesX * field.SamplesY;
+            int count = field.Width * field.Depth;
 
             var cameFrom = new int[count];
             var gCost = new float[count];
@@ -84,8 +84,8 @@ namespace SRPG.Systems.Landform
                 gCost[i] = float.MaxValue;
             }
 
-            int startIndex = field.Index(start.X, start.Y);
-            int goalIndex = field.Index(goal.X, goal.Y);
+            int startIndex = start.Y * field.Width + start.X;
+            int goalIndex = goal.Y * field.Width + goal.X;
 
             gCost[startIndex] = 0f;
 
@@ -114,8 +114,8 @@ namespace SRPG.Systems.Landform
                     return true;
                 }
 
-                int cx = current.Index % field.SamplesX;
-                int cy = current.Index / field.SamplesX;
+                int cx = current.Index % field.Width;
+                int cy = current.Index / field.Width;
 
                 for (int n = 0; n < GridCoord.Neighbors8.Length; n++)
                 {
@@ -127,7 +127,7 @@ namespace SRPG.Systems.Landform
                         continue;
                     }
 
-                    int neighborIndex = field.Index(nx, ny);
+                    int neighborIndex = ny * field.Width + nx;
                     if (closed[neighborIndex])
                     {
                         continue;
@@ -159,7 +159,7 @@ namespace SRPG.Systems.Landform
         ///
         /// slope 는 수평 거리에 대한 높이 변화의 비, 즉 tan(경사각)입니다.
         /// </summary>
-        public static float StepCost(HeightField field, int fromX, int fromY, int toX, int toY)
+        public static float StepCost(TerrainSimulation field, int fromX, int fromY, int toX, int toY)
         {
             float dx = (toX - fromX) * field.Spacing;
             float dy = (toY - fromY) * field.Spacing;
@@ -170,7 +170,7 @@ namespace SRPG.Systems.Landform
                 return 0f;
             }
 
-            float rise = Mathf.Abs(field.GetHeight(toX, toY) - field.GetHeight(fromX, fromY));
+            float rise = Mathf.Abs(field.HeightAt(toX, toY) - field.HeightAt(fromX, fromY));
             float slope = rise / horizontal;
 
             return horizontal * (1f + SlopeWeight * Mathf.Pow(slope, SlopeExponent));
@@ -186,7 +186,7 @@ namespace SRPG.Systems.Landform
         /// 경사 페널티는 언제나 0 이상이므로 <b>수평 거리만</b> 세는 것이 안전한 하한입니다.
         /// 하한을 넘겨 잡으면 A*가 최적해를 놓칩니다.
         /// </summary>
-        private static float Heuristic(HeightField field, GridCoord from, GridCoord to)
+        private static float Heuristic(TerrainSimulation field, GridCoord from, GridCoord to)
         {
             float dx = (to.X - from.X) * field.Spacing;
             float dy = (to.Y - from.Y) * field.Spacing;
@@ -194,13 +194,13 @@ namespace SRPG.Systems.Landform
             return Mathf.Sqrt(dx * dx + dy * dy);
         }
 
-        private static void Reconstruct(int[] cameFrom, HeightField field, int goalIndex, List<GridCoord> path)
+        private static void Reconstruct(int[] cameFrom, TerrainSimulation field, int goalIndex, List<GridCoord> path)
         {
             int current = goalIndex;
 
             while (current >= 0)
             {
-                path.Add(new GridCoord(current % field.SamplesX, current / field.SamplesX));
+                path.Add(new GridCoord(current % field.Width, current / field.Width));
                 current = cameFrom[current];
             }
 

@@ -323,32 +323,40 @@ namespace SRPG.Tests
         }
 
         /// <summary>
-        /// 잔해는 손규칙이 아니라 <b>계산 결과</b>에서 나와야 합니다.
+        /// 잔해는 손규칙이 아니라 <b>지형에서 읽어 낸 값</b>이어야 합니다.
         ///
-        /// 실제로 무너진 자리에 무너진 만큼 놓여야 "저기가 무너졌구나"가 읽힙니다.
-        /// 붕괴가 계산되었다면 잔해가 쌓인 표본이 반드시 존재합니다.
+        /// "절벽에 인접하면 돌을 놓는다"가 아니라 "여기는 완만한데 바로 위가 가파르다",
+        /// 즉 <b>사면의 발치</b>인지를 봅니다. 그것이 실제로 돌이 굴러 모이는 자리입니다.
+        /// 그래야 잔해가 왜 거기 있는지를 지형이 설명하게 됩니다.
         /// </summary>
         [Test]
-        public void 붕괴가_잔해를_남긴다()
+        public void 사면의_발치를_잔해_자리로_읽어_낸다()
         {
             var grid = CreateIsland();
+            var field = grid.Height;
 
-            Assert.IsNotNull(grid.Height, "지형이 조각되지 않았습니다.");
+            Assert.IsNotNull(field, "지형이 만들어지지 않았습니다.");
 
             int deposits = 0;
+            float strongest = 0f;
 
-            for (int sy = 0; sy < grid.Height.SamplesY; sy++)
+            for (int sy = 0; sy < field.SamplesY; sy++)
             {
-                for (int sx = 0; sx < grid.Height.SamplesX; sx++)
+                for (int sx = 0; sx < field.SamplesX; sx++)
                 {
-                    if (grid.Height.GetTalus(sx, sy) > 0f)
+                    var world = field.SampleToWorld(sx, sy);
+                    float talus = field.SampleTalus(world.x, world.y);
+
+                    if (talus > 0f)
                     {
                         deposits++;
+                        strongest = Mathf.Max(strongest, talus);
                     }
                 }
             }
 
-            Assert.Greater(deposits, 0, "무너져 쌓인 자리가 하나도 없습니다.");
+            Assert.Greater(deposits, 0, "사면의 발치를 하나도 찾지 못했습니다.");
+            Assert.Greater(strongest, 0.1f, "잔해가 놓일 만큼 뚜렷한 발치가 없습니다.");
         }
 
         /// <summary>

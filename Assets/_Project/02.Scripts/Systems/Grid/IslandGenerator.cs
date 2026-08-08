@@ -70,7 +70,26 @@ namespace SRPG.Systems.Grid
             BuildSilhouette(settings, rng, w, d, isLand);
             KeepLargestComponent(w, d, isLand);
             ComputeDistanceToWater(w, d, isLand, distToWater);
-            AssignHeights(settings, rng, w, d, isLand, distToWater, height);
+
+            // 지형을 먼저 만듭니다. 타일은 아직 높이를 모릅니다.
+            //
+            // 순서가 뒤집힌 자리입니다. 예전에는 여기서 고도 단계를 정하고 그 안에서
+            // 침식을 돌렸는데, 그러면 침식이 움직일 폭이 한 단의 절반으로 묶여
+            // 골짜기가 파이지 않았습니다.
+            var simulation = Landform.LandformPipeline.Simulate(
+                w, d, settings.CellSize,
+                isLand,
+                seed,
+                settings.MaxHeightLevel * settings.HeightStep);
+
+            // 만들어진 지형을 읽어 고도 단계를 정합니다.
+            Landform.LandformPipeline.ReadTileHeights(
+                simulation, w, d, isLand, settings.HeightStep, settings.MaxHeightLevel, height);
+
+            // 통행 판정이 "고도차 1 이하"를 쓰므로 반드시 강제해야 합니다.
+            // 어기면 섬이 걸어서 못 가는 조각으로 쪼개집니다.
+            DrainageNetwork.EnforceStepLimit(w, d, isLand, height);
+
             PlaceRocks(settings, rng, w, d, isLand, height, isRock);
 
             // 지형 확정
@@ -112,9 +131,8 @@ namespace SRPG.Systems.Grid
 
             BuildLandingZones(settings, grid);
 
-            // 여기까지가 게임 구조입니다 — 어디를 걸을 수 있고, 어디가 목표이고, 적이 어디로 오는가.
-            // 그 위에 보이는 땅을 조각합니다. 고도 단계는 이 뒤로 바뀌지 않습니다.
-            grid.Height = Landform.LandformPipeline.Build(grid);
+            // 가옥 자리가 정해졌으니 그 터를 다지고 지형을 완성합니다.
+            grid.Height = Landform.LandformPipeline.Finish(simulation, grid, settings.MaxHeightLevel);
 
             return grid;
         }
@@ -293,51 +311,6 @@ namespace SRPG.Systems.Grid
             }
         }
 
-        /// <summary>
-        /// 고도를 정합니다. 봉우리를 세우고 물길을 따라 계곡을 판 뒤 계단 제약을 강제합니다.
-        ///
-        /// <b>해안 거리만으로 정하면 웨딩케이크가 됩니다.</b>
-        /// <c>level = f(해안거리)</c>는 단조 함수라 바다에서 멀수록 반드시 높습니다.
-        /// 그러면 계곡이 만들어질 수가 없습니다 — 계곡은 "주변보다 낮은데 바다에서는 먼 곳"이고,
-        /// 그건 정의상 그 식이 금지하는 형태입니다.
-        ///
-        /// 그래서 봉우리를 세워 고도를 해안 거리에서 떼어낸 뒤, 물길을 따라 팝니다.
-        /// 자세한 근거는 <see cref="DrainageNetwork"/>에 있습니다.
-        /// </summary>
-        private static void AssignHeights(
-            IslandSettings settings,
-            System.Random rng,
-            int w, int d,
-            bool[] isLand,
-            int[] distToWater,
-            int[] height)
-        {
-            var raw = new int[isLand.Length];
-
-            DrainageNetwork.RaisePeaks(rng, w, d, isLand, distToWater, settings.PeakCount, raw);
-
-            for (int i = 0; i < isLand.Length; i++)
-            {
-                if (!isLand[i])
-                {
-                    height[i] = 0;
-                    continue;
-                }
-
-                int level = (raw[i] - 1) / HeightBandWidth;
-                height[i] = Mathf.Clamp(level, 0, settings.MaxHeightLevel);
-            }
-
-            // 봉우리를 세우면 이웃 간 고도차가 1을 넘을 수 있습니다.
-            // 파기 전에 한 번 정리해야 물길이 절벽을 뛰어넘지 않습니다.
-            DrainageNetwork.EnforceStepLimit(w, d, isLand, height);
-
-            DrainageNetwork.Carve(rng, w, d, isLand, raw, height, settings.ValleyCount);
-
-            // 판 뒤에는 반드시 다시 강제해야 합니다.
-            // 계곡 옆면이 두 단 이상 솟아 있으면 그 칸으로 걸어 들어갈 수 없습니다.
-            DrainageNetwork.EnforceStepLimit(w, d, isLand, height);
-        }
 
         // ====================================================================================================
         // 5. Private Methods - Rocks

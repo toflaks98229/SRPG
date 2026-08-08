@@ -38,72 +38,9 @@ namespace SRPG.Systems.Landform
         /// <summary>층마다 진폭이 몇 배가 되는지입니다.</summary>
         public const float Persistence = 0.5f;
 
-        /// <summary>
-        /// 기복 한계 중 이 단계가 쓰는 비율입니다. 나머지는 뒤 단계를 위해 남겨 둡니다.
-        ///
-        /// <b>한계까지 꽉 채우면 침식이 일을 못 합니다.</b>
-        /// 기복은 고도 단계를 넘지 못하도록 잘려 있는데, 처음부터 그 한계에 붙여 놓으면
-        /// 침식이 옮기려는 흙이 잘려 나가거나 없던 흙이 생깁니다.
-        /// 흙의 총량이 보존되지 않으면 지형이 부풀거나 꺼집니다.
-        ///
-        /// 여유를 남겨 두면 침식과 붕괴가 한계에 닿지 않고 자기 일을 합니다.
-        /// </summary>
-        public const float AmplitudeHeadroom = 0.62f;
-
         // ====================================================================================================
         // 2. Public Methods
         // ====================================================================================================
-
-        /// <summary>
-        /// 하이트필드 전체에 기초 기복을 씁니다.
-        /// </summary>
-        /// <param name="field">대상입니다.</param>
-        /// <param name="seed">같은 값이면 같은 지형이 나옵니다.</param>
-        /// <param name="frequency">
-        /// 기본 주파수입니다. 표본 하나당 진행하는 양이라, 클수록 잘게 굴곡집니다.
-        ///
-        /// 너무 낮으면 굴곡의 파장이 타일 여러 칸을 덮어 <b>한 칸 안에서는 거의 평면</b>이 됩니다.
-        /// 잘게 나눠 놓고도 각진 사각형으로 보이게 되므로, 파장이 타일 한 칸 수준이어야 합니다.
-        ///
-        /// <b>진폭이 아니라 주파수로 기울기를 법니다.</b>
-        /// 기복의 진폭은 고도 한 단계의 절반이라는 상한에 묶여 있습니다 — 그걸 넘으면
-        /// 아래층 봉우리가 위층 골보다 높아져 층이 흔들립니다.
-        /// 같은 진폭에서 경사를 세우는 방법은 파장을 줄이는 것뿐입니다.
-        /// </param>
-        /// <param name="ridgeWeight">능선의 비중입니다. 0이면 둥근 언덕만, 1이면 능선만 나옵니다.</param>
-        public static void Apply(HeightField field, int seed, float frequency = 0.28f, float ridgeWeight = 0.45f)
-        {
-            if (field == null)
-            {
-                return;
-            }
-
-            // 시드마다 다른 잡음 영역을 씁니다. 펄린은 정수 격자에서 0이 되므로 소수 오프셋을 씁니다.
-            var random = new System.Random(seed);
-            float offsetX = (float)random.NextDouble() * 1000f + 0.137f;
-            float offsetY = (float)random.NextDouble() * 1000f + 0.731f;
-
-            for (int sy = 0; sy < field.SamplesY; sy++)
-            {
-                for (int sx = 0; sx < field.SamplesX; sx++)
-                {
-                    if (!field.IsLand(sx, sy))
-                    {
-                        continue;
-                    }
-
-                    float nx = sx * frequency + offsetX;
-                    float ny = sy * frequency + offsetY;
-
-                    float rolling = Rolling(nx, ny, DefaultOctaves);
-                    float ridged = Ridged(nx, ny, DefaultOctaves);
-
-                    float value = Mathf.Lerp(rolling, ridged, ridgeWeight);
-
-                    field.SetRelief(sx, sy, value * field.ReliefLimit * AmplitudeHeadroom);
-                }
-            }
-        }
 
         /// <summary>
         /// 완만한 굴곡입니다. 결과는 -1~1입니다.
