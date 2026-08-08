@@ -215,6 +215,16 @@ namespace SRPG.Systems.Battlefield
         ///
         /// 연결을 끊는 배치는 되돌립니다. 갈 수 없는 구역이 생기면
         /// 부대를 못 보내는 땅이 되고, 그건 지형이 아니라 버그입니다.
+        ///
+        /// <b>파생 정보를 매번 다시 만들지 않습니다</b>
+        ///
+        /// 예전에는 덩이를 놓을 때마다 <see cref="IslandGrid.RebuildDerivedData"/>를 부르고
+        /// 연결성 검사도 임시 컬렉션을 새로 만들어 돌렸습니다. 시도가 최대 400번이므로
+        /// 로딩 한 번에 격자 전체 순회가 수백 번, 임시 컬렉션이 수백 개 쏟아졌습니다.
+        ///
+        /// 놓고 되돌리는 동안 바뀌는 것은 <b>덩이에 속한 칸의 통행 여부뿐</b>입니다.
+        /// 그 칸만 뒤집고, 통행 가능 칸 수는 직접 세어 두고, 검사기는 하나를 재사용합니다.
+        /// 파생 정보는 전부 끝난 뒤 한 번만 다시 만듭니다.
         /// </summary>
         private static void PlaceObstacles(IslandGrid grid, BattlefieldProfile profile, System.Random random)
         {
@@ -244,6 +254,10 @@ namespace SRPG.Systems.Battlefield
             int target = Mathf.RoundToInt(candidates.Count * profile.ObstacleDensity);
             int placed = 0;
 
+            // 지금 통행 가능한 칸 수입니다. 덩이를 놓을 때마다 그만큼 줄여 나갑니다.
+            int walkableCount = grid.WalkableTiles.Count;
+
+            var connectivity = new GridConnectivity(grid);
             var clump = new List<Tile>();
 
             for (int attempt = 0; attempt < MaxObstacleAttempts && placed < target; attempt++)
@@ -257,27 +271,62 @@ namespace SRPG.Systems.Battlefield
 
                 GatherClump(grid, seed, profile.ObstacleClumpSize, random, clump);
 
-                for (int i = 0; i < clump.Count; i++)
-                {
-                    clump[i].Type = TileType.Cliff;
-                }
+                Block(clump);
 
-                grid.RebuildDerivedData();
+                int remaining = walkableCount - clump.Count;
 
-                if (IsConnected(grid))
+                if (remaining > 0 && connectivity.CountReachable(FindWalkable(grid)) == remaining)
                 {
+                    walkableCount = remaining;
                     placed += clump.Count;
                 }
                 else
                 {
-                    for (int i = 0; i < clump.Count; i++)
-                    {
-                        clump[i].Type = TileType.Ground;
-                    }
-
-                    grid.RebuildDerivedData();
+                    Unblock(clump);
                 }
             }
+
+            // 파생 정보는 호출부가 다시 만듭니다. 이 파일의 다른 배치 단계와 같은 관례입니다.
+        }
+
+        /// <summary>덩이를 막습니다. 통행 여부까지 함께 뒤집어야 연결성 검사가 이 배치를 봅니다.</summary>
+        private static void Block(List<Tile> clump)
+        {
+            for (int i = 0; i < clump.Count; i++)
+            {
+                clump[i].Type = TileType.Cliff;
+                clump[i].IsWalkable = false;
+            }
+        }
+
+        /// <summary>막았던 덩이를 되돌립니다.</summary>
+        private static void Unblock(List<Tile> clump)
+        {
+            for (int i = 0; i < clump.Count; i++)
+            {
+                clump[i].Type = TileType.Ground;
+                clump[i].IsWalkable = true;
+            }
+        }
+
+        /// <summary>
+        /// 연결성 검사를 시작할 칸을 하나 찾습니다.
+        ///
+        /// 배치 도중에는 <see cref="IslandGrid.WalkableTiles"/>가 낡았지만,
+        /// 이 루프에서 칸이 <b>새로 통행 가능해지는 일은 없으므로</b> 그 목록은 언제나 상위 집합입니다.
+        /// 앞에서부터 아직 살아 있는 칸을 찾으면 됩니다.
+        /// </summary>
+        private static Tile FindWalkable(IslandGrid grid)
+        {
+            for (int i = 0; i < grid.WalkableTiles.Count; i++)
+            {
+                if (grid.WalkableTiles[i].IsWalkable)
+                {
+                    return grid.WalkableTiles[i];
+                }
+            }
+
+            return null;
         }
 
         /// <summary>씨앗에서 이웃으로 번지며 덩이를 모읍니다.</summary>
@@ -299,16 +348,6 @@ namespace SRPG.Systems.Battlefield
                     result.Add(neighbor);
                 }
             }
-        }
-
-        private static bool IsConnected(IslandGrid grid)
-        {
-            if (grid.WalkableTiles.Count == 0)
-            {
-                return false;
-            }
-
-            return FloodFrom(grid, grid.WalkableTiles[0], null) == grid.WalkableTiles.Count;
         }
 
         /// <summary>
@@ -338,6 +377,9 @@ namespace SRPG.Systems.Battlefield
                 unvisited.Add(grid.WalkableTiles[i].Coord);
             }
 
+            // 검사기 하나를 구역 수만큼 재사용합니다. 구역마다 컬렉션을 새로 만들지 않습니다.
+            var connectivity = new GridConnectivity(grid);
+
             var region = new List<Tile>();
             var largest = new List<Tile>();
 
@@ -350,7 +392,7 @@ namespace SRPG.Systems.Battlefield
                     continue;
                 }
 
-                FloodFrom(grid, tile, region);
+                connectivity.CollectRegion(tile, region);
 
                 for (int r = 0; r < region.Count; r++)
                 {
@@ -380,46 +422,6 @@ namespace SRPG.Systems.Battlefield
                     tile.Type = TileType.Cliff;
                 }
             }
-        }
-
-        /// <summary>
-        /// 한 칸에서 실제로 갈 수 있는 칸들을 모읍니다.
-        ///
-        /// 이동 규칙은 <see cref="TraversalRules"/>가 유일하게 들고 있습니다.
-        /// 길찾기도 격자도 같은 함수를 부르므로, 생성기가 "이어져 있다"고 판단한 땅을
-        /// 부대가 못 가는 일이 구조적으로 생기지 않습니다.
-        /// </summary>
-        /// <returns>닿은 칸의 수입니다.</returns>
-        private static int FloodFrom(IslandGrid grid, Tile start, List<Tile> result)
-        {
-            result?.Clear();
-            result?.Add(start);
-
-            var visited = new HashSet<GridCoord> { start.Coord };
-            var queue = new Queue<Tile>();
-
-            queue.Enqueue(start);
-
-            while (queue.Count > 0)
-            {
-                var current = queue.Dequeue();
-
-                for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
-                {
-                    var neighbor = grid.GetTile(current.Coord + GridCoord.Neighbors4[n]);
-
-                    if (!TraversalRules.CanStep(current, neighbor) || visited.Contains(neighbor.Coord))
-                    {
-                        continue;
-                    }
-
-                    visited.Add(neighbor.Coord);
-                    result?.Add(neighbor);
-                    queue.Enqueue(neighbor);
-                }
-            }
-
-            return visited.Count;
         }
 
         /// <summary>
