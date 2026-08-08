@@ -37,6 +37,20 @@ namespace SRPG.Systems.Battlefield
         /// <summary>이 전장의 지형 종류입니다. 월드맵이 골라 준 값입니다.</summary>
         public TerrainKind Terrain { get; }
 
+        /// <summary>
+        /// 오를 수 있는 기울기의 한계입니다. 도 단위입니다.
+        ///
+        /// <b>왜 결과물에 남겨 두는가</b>
+        ///
+        /// 이 값은 생성이 끝나면 사라져도 될 것처럼 보입니다 — 절벽은 이미 타일에 새겨졌으니까요.
+        /// 그런데 <b>화면</b>이 같은 숫자를 알아야 합니다. 지형 셰이더는 이 각도에서 암반을 드러내고,
+        /// 그래야 눈에 보이는 바위와 실제로 막히는 곳이 같은 선에서 갈립니다.
+        ///
+        /// 셰이더에 34를 적어 두고 프로필을 40으로 고치면, 걸어 올라갈 수 있는 바위와
+        /// 풀밭인데 막히는 자리가 생깁니다. 컴파일도 되고 테스트도 통과합니다.
+        /// </summary>
+        public float ClimbLimitDegrees { get; }
+
         /// <summary>해수면의 월드 높이입니다.</summary>
         public float SeaLevel => Origin.y + Heightmap.SeaLevel;
 
@@ -47,12 +61,18 @@ namespace SRPG.Systems.Battlefield
         // 2. Constructor
         // ====================================================================================================
 
-        public Battlefield(IslandGrid grid, BattlefieldHeightmap heightmap, Vector3 origin, TerrainKind terrain)
+        public Battlefield(
+            IslandGrid grid,
+            BattlefieldHeightmap heightmap,
+            Vector3 origin,
+            TerrainKind terrain,
+            float climbLimitDegrees = 34f)
         {
             Grid = grid;
             Heightmap = heightmap;
             Origin = origin;
             Terrain = terrain;
+            ClimbLimitDegrees = climbLimitDegrees;
         }
     }
 }

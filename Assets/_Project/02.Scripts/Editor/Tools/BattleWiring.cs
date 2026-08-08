@@ -44,18 +44,21 @@ namespace SRPG.Editor.Tools
         private static readonly string[] RequiredShaders =
         {
             PrototypeVisuals.TerrainShaderName,
+            PrototypeVisuals.WaterShaderName,
             PrototypeVisuals.BillboardShaderName,
             PrototypeVisuals.ContactShadowShaderName,
         };
 
-        /// <summary>지형 머티리얼과 외곽선 두께입니다. 물만 0입니다.</summary>
-        private static readonly (string Name, float OutlineWidth)[] TerrainMaterials =
+        /// <summary>
+        /// 전용 셰이더를 써야 하는 머티리얼입니다.
+        ///
+        /// <b>절벽은 여기 없습니다.</b> <c>M_Terrain_Cliff</c>는 지형이 아니라
+        /// 그 위에 세우는 바위 오브젝트가 씁니다. 일반 Lit이 맞습니다.
+        /// </summary>
+        private static readonly (string Name, string Shader)[] TerrainMaterials =
         {
-            ("M_Terrain_Ground", 0.06f),
-            ("M_Terrain_Cliff", 0.06f),
-
-            // 물은 화면 밖까지 이어집니다. 뒤집힌 껍질을 씌우면 화면 가장자리에 검은 띠가 생깁니다.
-            ("M_Terrain_Water", 0f),
+            ("M_Terrain_Ground", PrototypeVisuals.TerrainShaderName),
+            ("M_Terrain_Water", PrototypeVisuals.WaterShaderName),
         };
 
         // ====================================================================================================
@@ -169,28 +172,30 @@ namespace SRPG.Editor.Tools
         }
 
         /// <summary>
-        /// 지형 머티리얼을 <c>SRPG/Terrain</c> 셰이더로 바꿉니다.
+        /// 지면과 물 머티리얼을 전용 셰이더로 바꿉니다.
         ///
         /// <b>왜 필요한가</b>
         /// <see cref="SRPG.Gameplay.Island.BattlefieldView"/>는 연결된 머티리얼이 있으면 그것을 씁니다.
-        /// 다만 지면은 예외입니다 — 터레인은 전용 셰이더를 요구하므로 뷰가 따로 만듭니다.
-        /// 지금 연결된 것은 URP/Lit이라 <b>외곽선도, 정점 컬러 접지 음영도 나오지 않습니다</b>.
-        /// 메시에 접지 음영을 써 넣는 코드는 이미 돌고 있는데 읽는 쪽이 없는 상태입니다.
+        /// 연결된 것이 URP/Lit이면 지면은 고도도 경사도 말하지 않는 단색이 되고,
+        /// 물은 수심을 재지 못해 <b>여울이 드러나지 않습니다</b>. 도하 지점이 눈에 안 보인다는 뜻입니다.
+        ///
+        /// 화면은 멀쩡해 보입니다. 그래서 아무도 모릅니다.
         /// </summary>
         [MenuItem("SRPG/배선/② 지형 머티리얼을 SRPG 셰이더로", priority = 31)]
         public static void WireTerrainMaterials()
         {
-            var shader = Shader.Find(PrototypeVisuals.TerrainShaderName);
-            if (shader == null)
-            {
-                Debug.LogError($"[BattleWiring] 셰이더 '{PrototypeVisuals.TerrainShaderName}' 를 찾지 못했습니다.");
-                return;
-            }
-
             int changed = 0;
 
             for (int i = 0; i < TerrainMaterials.Length; i++)
             {
+                var shader = Shader.Find(TerrainMaterials[i].Shader);
+
+                if (shader == null)
+                {
+                    Debug.LogError($"[BattleWiring] 셰이더 '{TerrainMaterials[i].Shader}' 를 찾지 못했습니다.");
+                    continue;
+                }
+
                 string path = $"{MaterialDirectory}/{TerrainMaterials[i].Name}.mat";
                 var material = AssetDatabase.LoadAssetAtPath<Material>(path);
 
@@ -200,30 +205,23 @@ namespace SRPG.Editor.Tools
                     continue;
                 }
 
-                // 셰이더를 바꾸기 전에 색을 빼 둡니다.
-                // 같은 이름의 프로퍼티는 유지되지만, 순서에 기대지 않는 편이 안전합니다.
-                Color baseColor = material.HasProperty("_BaseColor")
-                    ? material.GetColor("_BaseColor")
-                    : Color.gray;
-
                 if (material.shader != shader)
                 {
                     material.shader = shader;
                     changed++;
                 }
 
-                material.SetColor("_BaseColor", baseColor);
-
-                // 그늘색은 기본색을 어둡게 민 것입니다. 따로 지정하게 두면 지형마다 손으로 맞춰야 합니다.
-                material.SetColor("_ShadeColor", baseColor * 0.42f);
-                material.SetFloat("_OutlineWidth", TerrainMaterials[i].OutlineWidth);
-                material.SetFloat("_AmbientBoost", BattleLighting.AmbientBoost);
+                // 지형만 조명 하한을 맞춥니다. 물은 조명을 받지 않습니다.
+                if (material.HasProperty("_AmbientBoost"))
+                {
+                    material.SetFloat("_AmbientBoost", BattleLighting.AmbientBoost);
+                }
 
                 EditorUtility.SetDirty(material);
             }
 
             AssetDatabase.SaveAssets();
-            Debug.Log($"[BattleWiring] ② 지형 머티리얼 {changed}개를 SRPG/Terrain 으로 바꿨습니다.");
+            Debug.Log($"[BattleWiring] ② 지형·물 머티리얼 {changed}개를 전용 셰이더로 바꿨습니다.");
         }
 
         /// <summary>
@@ -399,14 +397,15 @@ namespace SRPG.Editor.Tools
 
         private static void CheckTerrainMaterials(List<string> problems)
         {
-            var shader = Shader.Find(PrototypeVisuals.TerrainShaderName);
-            if (shader == null)
-            {
-                return;
-            }
-
             for (int i = 0; i < TerrainMaterials.Length; i++)
             {
+                var shader = Shader.Find(TerrainMaterials[i].Shader);
+
+                if (shader == null)
+                {
+                    continue;
+                }
+
                 string path = $"{MaterialDirectory}/{TerrainMaterials[i].Name}.mat";
                 var material = AssetDatabase.LoadAssetAtPath<Material>(path);
 
@@ -418,7 +417,7 @@ namespace SRPG.Editor.Tools
                 {
                     problems.Add(
                         $"{TerrainMaterials[i].Name} 이 '{material.shader.name}' 를 씁니다. " +
-                        "외곽선과 접지 음영이 나오지 않습니다.");
+                        $"'{TerrainMaterials[i].Shader}' 여야 고도·수심이 화면에 나옵니다.");
                 }
             }
         }

@@ -104,6 +104,7 @@ Material:
     - _BumpScale: 1
     - _ClearCoatMask: 0
     - _ClearCoatSmoothness: 0
+    - _ClimbLimit: 34
     - _Cull: 2
     - _Cutoff: 0.5
     - _DetailAlbedoMapScale: 1
@@ -114,19 +115,24 @@ Material:
     - _GlossMapScale: 0
     - _Glossiness: 0.05
     - _GlossyReflections: 0
+    - _HeightRange: 6
     - _Metallic: 0
     - _OcclusionStrength: 1
     - _OutlineWidth: 0.06
     - _Parallax: 0.005
     - _QueueOffset: 0
     - _ReceiveShadows: 1
+    - _RockBlend: 7
+    - _SeaLevel: 0
     - _ShadeStrength: 0.85
+    - _ShadowDepth: 0.55
     - _Smoothness: 0.05
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
     - _Surface: 0
+    - _WetBand: 0.9
     - _WorkflowMode: 1
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1
@@ -134,8 +140,12 @@ Material:
     - _BaseColor: {r: 0.43999994, g: 0.62, b: 0.35999995, a: 1}
     - _Color: {r: 0.43999997, g: 0.62, b: 0.35999998, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _HighColor: {r: 0.6, g: 0.62, b: 0.41999996, a: 1}
+    - _LowColor: {r: 0.41999996, g: 0.58, b: 0.32999998, a: 1}
     - _OutlineColor: {r: 0.079999976, g: 0.089999996, b: 0.10999996, a: 1}
+    - _RockColor: {r: 0.43999997, g: 0.41999996, b: 0.42999998, a: 1}
     - _ShadeColor: {r: 0.18479997, g: 0.2604, b: 0.15119998, a: 0.42}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
+    - _WetColor: {r: 0.31999996, g: 0.39999998, b: 0.30999997, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

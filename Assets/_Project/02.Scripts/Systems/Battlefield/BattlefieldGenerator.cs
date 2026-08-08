@@ -138,7 +138,7 @@ namespace SRPG.Systems.Battlefield
             // 야전의 전개 구역입니다. 축을 시드로 뽑으므로 같은 전장이면 같은 대치 구도가 나옵니다.
             DeploymentZones.Build(grid, seed);
 
-            return new Battlefield(grid, heightmap, origin, profile.Kind);
+            return new Battlefield(grid, heightmap, origin, profile.Kind, profile.ClimbLimitDegrees);
         }
 
         /// <summary>

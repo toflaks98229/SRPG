@@ -294,47 +294,58 @@ namespace SRPG.Editor.Tools
 
         /// <summary>
         /// 프로토타입 머티리얼을 만듭니다. 이름 → 머티리얼 사전을 돌려줍니다.
+        ///
+        /// <b>지형과 물은 전용 셰이더를 씁니다</b>
+        ///
+        /// 나머지는 전부 URP Lit입니다. 지면과 물만 예외인 이유는 둘 다
+        /// <b>화면에 정보를 실어야</b> 하기 때문입니다 — 지면은 어디가 절벽인지,
+        /// 물은 어디가 얕은지를 색으로 말합니다. Lit으로는 그 둘 다 나오지 않습니다.
         /// </summary>
         private static Dictionary<string, Material> BuildMaterials()
         {
-            var palette = new (string Name, Color Color, float Smoothness)[]
+            var palette = new (string Name, Color Color, float Smoothness, string Shader)[]
             {
-                // 지형
-                ("M_Terrain_Ground", new Color(0.44f, 0.62f, 0.36f), 0.05f),
-                ("M_Terrain_Cliff",  new Color(0.44f, 0.42f, 0.43f), 0.10f),
-                ("M_Terrain_Water",  new Color(0.18f, 0.35f, 0.52f), 0.65f),
+                // 지형 — 지면과 물은 전용 셰이더입니다.
+                ("M_Terrain_Ground", new Color(0.44f, 0.62f, 0.36f), 0.05f, PrototypeVisuals.TerrainShaderName),
+                ("M_Terrain_Water",  new Color(0.18f, 0.35f, 0.52f), 0.65f, PrototypeVisuals.WaterShaderName),
+
+                // 절벽 머티리얼은 지형이 아니라 그 위에 세우는 <b>바위 오브젝트</b>가 씁니다.
+                // 지형 셰이더를 물리면 바위 윗면이 경사 0이라 풀색으로 나옵니다.
+                ("M_Terrain_Cliff",  new Color(0.44f, 0.42f, 0.43f), 0.10f, null),
 
                 // 아군 병과 (조사에서 정리한 역할 구분이 색으로 읽히도록 한색 계열)
-                ("M_Unit_Militia",  new Color(0.80f, 0.80f, 0.85f), 0.10f),
-                ("M_Unit_Infantry", new Color(0.35f, 0.62f, 0.95f), 0.10f),
-                ("M_Unit_Archer",   new Color(0.45f, 0.85f, 0.45f), 0.10f),
-                ("M_Unit_Pike",     new Color(0.95f, 0.78f, 0.30f), 0.10f),
+                ("M_Unit_Militia",  new Color(0.80f, 0.80f, 0.85f), 0.10f, null),
+                ("M_Unit_Infantry", new Color(0.35f, 0.62f, 0.95f), 0.10f, null),
+                ("M_Unit_Archer",   new Color(0.45f, 0.85f, 0.45f), 0.10f, null),
+                ("M_Unit_Pike",     new Color(0.95f, 0.78f, 0.30f), 0.10f, null),
 
                 // 적 (난색 계열로 묶어 진영이 한눈에 갈리게 함)
-                ("M_Enemy_Militia",  new Color(0.70f, 0.35f, 0.30f), 0.10f),
-                ("M_Enemy_Infantry", new Color(0.75f, 0.28f, 0.28f), 0.10f),
-                ("M_Enemy_Archer",   new Color(0.85f, 0.45f, 0.35f), 0.10f),
+                ("M_Enemy_Militia",  new Color(0.70f, 0.35f, 0.30f), 0.10f, null),
+                ("M_Enemy_Infantry", new Color(0.75f, 0.28f, 0.28f), 0.10f, null),
+                ("M_Enemy_Archer",   new Color(0.85f, 0.45f, 0.35f), 0.10f, null),
 
                 // 소품
-                ("M_Flag_Player", new Color(0.95f, 0.92f, 0.85f), 0.05f),
-                ("M_Flag_Enemy",  new Color(0.35f, 0.10f, 0.12f), 0.05f),
-                ("M_FlagPole",    new Color(0.25f, 0.20f, 0.16f), 0.05f),
+                ("M_Flag_Player", new Color(0.95f, 0.92f, 0.85f), 0.05f, null),
+                ("M_Flag_Enemy",  new Color(0.35f, 0.10f, 0.12f), 0.05f, null),
+                ("M_FlagPole",    new Color(0.25f, 0.20f, 0.16f), 0.05f, null),
 
                 // 무기 (금속은 반짝여야 휘두르는 궤적이 눈에 들어옵니다)
-                ("M_Weapon_Steel", new Color(0.78f, 0.80f, 0.84f), 0.72f),
-                ("M_Weapon_Wood",  new Color(0.42f, 0.31f, 0.21f), 0.08f),
-                ("M_Arrow",        new Color(0.88f, 0.86f, 0.78f), 0.20f),
+                ("M_Weapon_Steel", new Color(0.78f, 0.80f, 0.84f), 0.72f, null),
+                ("M_Weapon_Wood",  new Color(0.42f, 0.31f, 0.21f), 0.08f, null),
+                ("M_Arrow",        new Color(0.88f, 0.86f, 0.78f), 0.20f, null),
 
                 // 마커
-                ("M_Marker_Selection", new Color(1.00f, 0.95f, 0.55f), 0.20f),
-                ("M_Marker_Order",     new Color(0.55f, 0.90f, 1.00f), 0.20f),
+                ("M_Marker_Selection", new Color(1.00f, 0.95f, 0.55f), 0.20f, null),
+                ("M_Marker_Order",     new Color(0.55f, 0.90f, 1.00f), 0.20f, null),
             };
 
-            var shader = FindLitShader();
+            var litShader = FindLitShader();
             var result = new Dictionary<string, Material>(palette.Length);
 
             foreach (var entry in palette)
             {
+                var shader = ResolveShader(entry.Shader, litShader);
+
                 string path = $"{MaterialDir}/{entry.Name}.mat";
                 var material = AssetDatabase.LoadAssetAtPath<Material>(path);
 
@@ -344,11 +355,40 @@ namespace SRPG.Editor.Tools
                     ApplyMaterialValues(material, entry.Color, entry.Smoothness);
                     AssetDatabase.CreateAsset(material, path);
                 }
+                else if (material.shader != shader)
+                {
+                    // 이미 있는 에셋이 옛 셰이더를 물고 있을 수 있습니다.
+                    // 만들 때만 정하면 한 번 구운 프로젝트에서는 영영 안 바뀝니다.
+                    material.shader = shader;
+                    ApplyMaterialValues(material, entry.Color, entry.Smoothness);
+                    EditorUtility.SetDirty(material);
+                }
 
                 result[entry.Name] = material;
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 이름으로 셰이더를 찾습니다. 이름이 비었거나 못 찾으면 Lit으로 물러납니다.
+        /// </summary>
+        private static Shader ResolveShader(string name, Shader fallback)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return fallback;
+            }
+
+            var shader = Shader.Find(name);
+
+            if (shader == null)
+            {
+                Debug.LogWarning($"[PrototypeAssetBuilder] 셰이더 '{name}' 를 찾지 못해 Lit으로 대체합니다.");
+                return fallback;
+            }
+
+            return shader;
         }
 
         private static Shader FindLitShader()

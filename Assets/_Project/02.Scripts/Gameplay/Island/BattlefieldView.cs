@@ -104,14 +104,28 @@ namespace SRPG.Gameplay.Island
             terrainObject.transform.position = battlefield.Origin;
 
             var terrain = terrainObject.GetComponent<Terrain>();
-            terrain.materialTemplate = ResolveTerrainMaterial();
+            terrain.materialTemplate = ResolveTerrainMaterial(battlefield);
+
+            // GPU 인스턴싱을 끕니다.
+            // 켜면 정점 위치가 하이트맵 텍스처에서 나오는데, 그 경로는 유니티의 터레인 셰이더에만
+            // 들어 있습니다. 우리 셰이더로는 <b>지형이 평평하게 납작해집니다</b>.
+            terrain.drawInstanced = false;
 
             // 지형 레이어로 표시해야 클릭 레이캐스트가 유닛을 건너뛰고 지면만 잡습니다.
             GameLayers.ApplyRecursively(terrainObject, GameLayers.Terrain);
         }
 
         /// <summary>
-        /// 해수면을 깝니다. 터레인이 물 아래로 내려간 자리가 바다가 됩니다.
+        /// 해수면을 깝니다. 터레인이 물 아래로 내려간 자리가 강과 물가가 됩니다.
+        ///
+        /// <b>판 하나가 전부입니다</b>
+        ///
+        /// 강의 모양을 따로 만들지 않습니다. 하이트맵이 이미 강줄기를 파 놓았으므로,
+        /// 평평한 판을 해수면 높이에 깔면 <b>파인 곳에만 물이 보입니다</b>.
+        /// 물의 형태는 지형이 정하고, 여기서는 수면의 높이만 정합니다.
+        ///
+        /// 물 셰이더가 그 아래 지형까지의 거리를 재기 때문에
+        /// 얕은 여울은 저절로 밝게 드러납니다 — 도하 지점이 눈에 보입니다.
         /// </summary>
         private void BuildWater(Battlefield battlefield)
         {
@@ -134,10 +148,11 @@ namespace SRPG.Gameplay.Island
             Destroy(water.GetComponent<Collider>());
 
             var renderer = water.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = _materials.Water != null
-                ? _materials.Water
-                : PrototypeVisuals.CreateMaterial(WaterColor);
+            renderer.sharedMaterial = ResolveWaterMaterial();
+
+            // 물은 그림자를 드리우지 않습니다. 반투명한 판이 강바닥을 검게 덮어 버립니다.
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
         }
 
         /// <summary>
@@ -190,15 +205,29 @@ namespace SRPG.Gameplay.Island
         /// <summary>
         /// 터레인이 쓸 머티리얼을 정합니다.
         ///
-        /// <b>터레인 전용 셰이더가 필요합니다.</b>
-        /// 일반 Lit 셰이더를 터레인에 물리면 스플랫맵 경로가 없어 표면이 검게 나옵니다.
-        /// 연결된 지면 머티리얼이 터레인용이 아니면 쓰지 않고 전용 머티리얼을 만듭니다.
+        /// <b>이 전장의 숫자를 셰이더에 넣어야 합니다</b>
+        ///
+        /// 지형 셰이더는 해수면과 고도폭을 알아야 저지와 고지를 가릅니다.
+        /// 그 숫자는 전장마다 다르므로 에셋에 굳어 있으면 안 됩니다.
+        /// 연결된 머티리얼은 색 취향만 물려주고, 세 숫자는 여기서 덮습니다.
+        ///
+        /// 전용 셰이더가 없으면 URP 터레인 셰이더로 물러납니다.
+        /// <b>일반 Lit은 안 됩니다</b> — 터레인에 물리면 스플랫맵 경로가 없어 표면이 검게 나옵니다.
         /// </summary>
-        private Material ResolveTerrainMaterial()
+        private Material ResolveTerrainMaterial(Battlefield battlefield)
         {
-            if (_materials.Ground != null && IsTerrainShader(_materials.Ground.shader))
+            // 해수면 위로 남은 높이입니다. 이 폭 안에서 저지→고지 색이 갈립니다.
+            float heightRange = battlefield.Heightmap.MaxElevation - battlefield.Heightmap.SeaLevel;
+
+            var material = PrototypeVisuals.CreateTerrainMaterial(
+                _materials.Ground,
+                battlefield.SeaLevel,
+                heightRange,
+                battlefield.ClimbLimitDegrees);
+
+            if (material != null)
             {
-                return _materials.Ground;
+                return material;
             }
 
             var shader = Shader.Find("Universal Render Pipeline/Terrain/Lit");
@@ -212,9 +241,25 @@ namespace SRPG.Gameplay.Island
             return new Material(shader) { color = GroundColor };
         }
 
-        private static bool IsTerrainShader(Shader shader)
+        /// <summary>
+        /// 물이 쓸 머티리얼을 정합니다. 연결된 것이 물 셰이더면 그대로 쓰고, 아니면 새로 만듭니다.
+        ///
+        /// 여기서는 전장마다 다른 숫자를 넣지 않습니다.
+        /// 수심은 셰이더가 <b>깊이 버퍼에서 직접 재므로</b> 미리 알려 줄 것이 없습니다.
+        /// </summary>
+        private Material ResolveWaterMaterial()
         {
-            return shader != null && shader.name.Contains("Terrain");
+            if (_materials.Water != null && IsWaterShader(_materials.Water.shader))
+            {
+                return _materials.Water;
+            }
+
+            return PrototypeVisuals.CreateWaterMaterial(WaterColor);
+        }
+
+        private static bool IsWaterShader(Shader shader)
+        {
+            return shader != null && shader.name == PrototypeVisuals.WaterShaderName;
         }
 
         private void ClearChildren()

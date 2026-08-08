@@ -17,6 +17,9 @@ namespace SRPG.Gameplay.Visual
         /// <summary>지형 셰이더의 이름입니다.</summary>
         public const string TerrainShaderName = "SRPG/Terrain";
 
+        /// <summary>물 셰이더의 이름입니다.</summary>
+        public const string WaterShaderName = "SRPG/Water";
+
         /// <summary>2.5D 유닛 빌보드 셰이더의 이름입니다.</summary>
         public const string BillboardShaderName = "SRPG/Billboard";
 
@@ -24,8 +27,9 @@ namespace SRPG.Gameplay.Visual
         public const string ContactShadowShaderName = "SRPG/ContactShadow";
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
-        private static readonly int ShadeColorId = Shader.PropertyToID("_ShadeColor");
-        private static readonly int OutlineWidthId = Shader.PropertyToID("_OutlineWidth");
+        private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
+        private static readonly int HeightRangeId = Shader.PropertyToID("_HeightRange");
+        private static readonly int ClimbLimitId = Shader.PropertyToID("_ClimbLimit");
 
         private static Mesh s_capsuleMesh;
         private static Mesh s_cubeMesh;
@@ -94,42 +98,78 @@ namespace SRPG.Gameplay.Visual
         }
 
         /// <summary>
-        /// 지형용 머티리얼을 만듭니다. 외곽선과 접지 음영이 붙은 전용 셰이더를 씁니다.
+        /// 터레인용 머티리얼을 만듭니다.
         ///
-        /// 셰이더를 찾지 못하면 조용히 기본 머티리얼로 물러납니다.
-        /// 셰이더 하나 때문에 게임이 실행조차 안 되는 것보다는, 밋밋하게라도 돌아가는 편이 낫습니다.
+        /// <b>왜 전장마다 새로 만드는가</b>
+        ///
+        /// 지형 셰이더는 해수면·고도폭·등반 한계를 알아야 색을 정합니다.
+        /// 그런데 그 셋은 <b>전장마다 다릅니다</b> — 언덕 전장과 평야 전장의 고도폭이 같을 리 없습니다.
+        /// 공유 에셋 하나에 써 넣으면 마지막에 만들어진 전장의 값이 남아
+        /// 다음 전장에서 엉뚱한 높이에 물가 띠가 그려집니다.
+        ///
+        /// 그래서 에셋은 색과 취향만 들고, 전장에 종속된 세 숫자는 여기서 덮어씁니다.
         /// </summary>
-        /// <param name="color">기본 색상입니다.</param>
-        /// <param name="outlineWidth">외곽선 두께입니다. 0이면 외곽선이 사실상 사라집니다.</param>
-        public static Material CreateTerrainMaterial(Color color, float outlineWidth = 0.06f)
+        /// <param name="source">기준이 되는 에셋 머티리얼입니다. 비어 있으면 셰이더에서 새로 만듭니다.</param>
+        /// <param name="seaLevel">해수면의 월드 높이입니다.</param>
+        /// <param name="heightRange">해수면 위로 올라가는 높이의 폭입니다.</param>
+        /// <param name="climbLimitDegrees">생성기가 절벽을 가른 기울기입니다.</param>
+        public static Material CreateTerrainMaterial(
+            Material source,
+            float seaLevel,
+            float heightRange,
+            float climbLimitDegrees)
         {
             var shader = Shader.Find(TerrainShaderName);
+
             if (shader == null)
             {
-                WarnMissingShaderOnce();
-                return CreateMaterial(color);
+                WarnMissingShaderOnce(TerrainShaderName, "고도·경사에 따른 지형 색이 나오지 않습니다.");
+                return null;
             }
 
-            var material = new Material(shader)
-            {
-                name = $"Terrain_{ColorUtility.ToHtmlStringRGB(color)}",
-                hideFlags = HideFlags.DontSave,
-            };
+            // 에셋이 있으면 그것을 복제해 색 취향을 물려받고, 없으면 셰이더 기본값으로 시작합니다.
+            var material = source != null && source.shader == shader
+                ? new Material(source)
+                : new Material(shader);
 
-            material.SetColor(BaseColorId, color);
+            material.name = "Terrain_Runtime";
+            material.hideFlags = HideFlags.DontSave;
 
-            // 그늘색은 기본색을 어둡게 민 것입니다.
-            // 별도로 지정하게 두면 지형마다 색 조합을 손으로 맞춰야 하고, 어긋나기 쉽습니다.
-            material.SetColor(ShadeColorId, color * 0.42f);
-            material.SetFloat(OutlineWidthId, outlineWidth);
+            material.SetFloat(SeaLevelId, seaLevel);
+            material.SetFloat(HeightRangeId, Mathf.Max(0.5f, heightRange));
+            material.SetFloat(ClimbLimitId, climbLimitDegrees);
 
             return material;
         }
 
         /// <summary>
-        /// 지형 셰이더가 없다는 경고를 한 번만 냅니다.
+        /// 물 머티리얼을 만듭니다.
+        ///
+        /// 셰이더를 찾지 못하면 불투명한 파란 판으로 물러납니다.
+        /// 수심도 여울도 보이지 않지만, 적어도 물이 있어야 할 자리에 물이 있습니다.
         /// </summary>
-        private static void WarnMissingShaderOnce()
+        public static Material CreateWaterMaterial(Color fallbackColor)
+        {
+            var shader = Shader.Find(WaterShaderName);
+
+            if (shader == null)
+            {
+                WarnMissingShaderOnce(WaterShaderName, "수심에 따른 여울이 드러나지 않습니다.");
+                return CreateMaterial(fallbackColor);
+            }
+
+            return new Material(shader)
+            {
+                name = "Water_Runtime",
+                hideFlags = HideFlags.DontSave,
+            };
+        }
+
+        /// <summary>
+        /// 셰이더가 없다는 경고를 한 번만 냅니다.
+        /// 프레임마다 나오면 콘솔이 잠겨 정작 중요한 오류를 못 봅니다.
+        /// </summary>
+        private static void WarnMissingShaderOnce(string shaderName, string consequence)
         {
             if (s_warnedMissingShader)
             {
@@ -138,8 +178,8 @@ namespace SRPG.Gameplay.Visual
 
             s_warnedMissingShader = true;
             Debug.LogWarning(
-                $"[PrototypeVisuals] 셰이더 '{TerrainShaderName}' 를 찾지 못해 기본 머티리얼로 대체합니다.\n" +
-                "외곽선과 접지 음영이 표시되지 않습니다.");
+                $"[PrototypeVisuals] 셰이더 '{shaderName}' 를 찾지 못해 기본 머티리얼로 대체합니다.\n" +
+                consequence);
         }
 
         // ====================================================================================================
