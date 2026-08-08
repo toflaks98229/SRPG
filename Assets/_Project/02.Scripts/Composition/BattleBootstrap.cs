@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
@@ -95,6 +95,14 @@ namespace SRPG.Composition
         // 3. Properties
         // ====================================================================================================
 
+        /// <summary>
+        /// 섬을 공급하는 함수입니다. 인자는 시드이고, null을 돌려주면 전투가 시작되지 않습니다.
+        ///
+        /// <b>Start 가 돌기 전에 연결해야 합니다.</b>
+        /// 지금은 맵 생성기가 없으므로 비어 있고, 그래서 전투도 시작되지 않습니다.
+        /// </summary>
+        public System.Func<int, IslandGrid> IslandSource { get; set; }
+
         /// <summary>이 전투의 런타임 컨텍스트입니다.</summary>
         public BattleContext Context => _context;
 
@@ -131,14 +139,18 @@ namespace SRPG.Composition
         /// </summary>
         private void BuildBattle()
         {
-            var settings = ResolveIslandSettings();
             var waves = ResolveWaveDefinition();
             var tuning = ResolveTuning();
 
-            var grid = IslandGenerator.Generate(settings, _seedOverride);
-            Debug.Log($"[Bootstrap] 섬 생성 완료 seed={grid.Seed} 통행가능={grid.WalkableTiles.Count} " +
-                      $"가옥={grid.HouseTiles.Count} 상륙구역={grid.LandingZones.Count} " +
-                      $"({(_setup != null ? "에셋 구성" : "코드 기본값")})");
+            var grid = BuildIslandGrid();
+
+            if (grid == null)
+            {
+                Debug.LogError(
+                    "[Bootstrap] 섬을 만들 수 없어 전투를 시작하지 못했습니다. " +
+                    "맵 생성이 제거된 상태입니다. 새 생성기를 IslandSource 에 연결하세요.");
+                return;
+            }
 
             _timeController = new TacticalTimeController(tuning.SlowMotionScale, tuning.SlowMotionTransitionSpeed);
             _context = new BattleContext(grid, _timeController, tuning);
@@ -163,6 +175,24 @@ namespace SRPG.Composition
         }
 
         /// <summary>
+        /// 전투가 벌어질 섬을 얻습니다.
+        ///
+        /// <b>여기가 맵 생성이 붙는 자리입니다.</b>
+        ///
+        /// 절차적 지형 생성을 걷어냈으므로 부트스트랩은 섬을 <b>만들지 않고 받습니다</b>.
+        /// 새 생성기가 생기면 <see cref="IslandSource"/> 에 연결하면 되고,
+        /// 나머지 조립 과정은 <see cref="IslandGrid"/> 하나만 보므로 손댈 것이 없습니다.
+        ///
+        /// <b>부트스트랩이 맵을 만드는 방법을 아는 것은 좋지 않습니다.</b>
+        /// 조립 지점은 조립만 해야 합니다. 공급자를 밖에서 꽂는 편이
+        /// 생성 방식이 바뀔 때 이 클래스가 흔들리지 않게 합니다.
+        /// </summary>
+        private IslandGrid BuildIslandGrid()
+        {
+            return IslandSource?.Invoke(_seedOverride);
+        }
+
+        /// <summary>
         /// 생성물이 붙을 루트를 확보합니다. 씬에 미리 배치된 루트가 있으면 그것을 씁니다.
         /// </summary>
         private void EnsureRuntimeRoot()
@@ -183,16 +213,6 @@ namespace SRPG.Composition
         // ====================================================================================================
         // 6. Private Methods - Asset Resolution
         // ====================================================================================================
-
-        private IslandSettings ResolveIslandSettings()
-        {
-            if (_setup != null && _setup.Island != null)
-            {
-                return _setup.Island;
-            }
-
-            return IslandSettings.CreateDefault();
-        }
 
         private WaveDefinition ResolveWaveDefinition()
         {

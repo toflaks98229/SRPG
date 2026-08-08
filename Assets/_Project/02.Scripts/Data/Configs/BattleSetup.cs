@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 namespace SRPG.Data
 {
@@ -19,9 +19,6 @@ namespace SRPG.Data
         // ====================================================================================================
 
         [Header("전장")]
-        [Tooltip("섬 생성 설정입니다.")]
-        public IslandSettings Island;
-
         [Tooltip("웨이브 구성입니다.")]
         public WaveDefinition Waves;
 

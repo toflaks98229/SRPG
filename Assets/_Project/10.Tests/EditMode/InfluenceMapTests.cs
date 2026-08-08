@@ -3,6 +3,7 @@ using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.AI;
 using SRPG.Systems.Grid;
+using SRPG.Tests.Support;
 
 namespace SRPG.Tests
 {
@@ -21,10 +22,7 @@ namespace SRPG.Tests
 
         private static IslandGrid CreateIsland(int seed = 20260807)
         {
-            var settings = IslandSettings.CreateDefault();
-            settings.Width = 30;
-            settings.Depth = 30;
-            return IslandGenerator.Generate(settings, seed);
+            return TestIsland.Create(seed);
         }
 
         /// <summary>섬 안쪽의 통행 가능한 타일 하나를 고릅니다.</summary>

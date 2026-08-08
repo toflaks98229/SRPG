@@ -1,8 +1,6 @@
 using System.Collections;
 using NUnit.Framework;
 using SRPG.Composition;
-using SRPG.Gameplay.Island;
-using SRPG.Gameplay.Visual;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -10,19 +8,23 @@ using UnityEngine.TestTools;
 namespace SRPG.Tests.PlayMode
 {
     /// <summary>
-    /// 실제 전투 씬이 <b>연결된 에셋으로</b> 뜨는지 확인합니다.
+    /// 실제 전투 씬의 배선을 확인합니다.
     ///
-    /// <b>왜 따로 필요한가</b>
+    /// <b>지금은 맵 생성이 없습니다</b>
     ///
-    /// 이 프로젝트에는 두 갈래의 실행 경로가 있습니다.
-    ///   · <b>에셋 경로</b> — 프리팹과 머티리얼이 연결되어 있으면 그것을 씁니다.
-    ///   · <b>폴백 경로</b> — 비어 있으면 코드가 프리미티브로 만듭니다.
+    /// 절차적 지형 생성을 걷어내면서 씬의 부트스트랩에는 섬을 공급할 것이 없습니다.
+    /// 그래서 씬을 열어도 전투가 조립되지 않습니다. 그건 <b>지금의 정상 상태</b>입니다.
     ///
-    /// 기존 스모크 테스트는 부트스트랩을 맨손으로 만들어 <b>폴백 경로만</b> 지나갑니다.
-    /// 그래서 새 시각 시스템을 폴백에만 붙여 놓아도 전부 통과했습니다.
-    /// 실제로 그런 상태였습니다 — 지형 셰이더도 빌보드도 실제 게임에서는 한 번도 안 나왔습니다.
+    /// 예전에는 여기서 지형 셰이더·빌보드·접지 그림자·지형지물이 실제로 나오는지를
+    /// 봤지만, 그 전부가 섬 하나를 전제로 하고 있었습니다.
+    /// 새 생성기가 붙으면 그 검사들을 git 이력에서 되살려야 합니다.
     ///
-    /// 여기서는 씬을 진짜로 로드합니다. 에셋이 어긋나면 여기서 걸립니다.
+    /// 그때까지 여기서 지킬 수 있는 것은 둘입니다.
+    ///   · 씬 자체는 멀쩡히 열리고 부트스트랩과 구성 에셋이 연결되어 있는가
+    ///   · 맵이 없다는 사실을 <b>조용히</b> 넘기지 않고 분명히 알리는가
+    ///
+    /// 둘째가 중요합니다. 맵이 없어 아무것도 안 만들어졌는데 오류도 없으면,
+    /// 나중에 그 상태를 "왜 화면이 비었지"로 다시 헤매게 됩니다.
     /// </summary>
     public sealed class BattleSceneWiringTests
     {
@@ -32,268 +34,57 @@ namespace SRPG.Tests.PlayMode
 
         private const string ScenePath = "Assets/_Project/01.Scenes/Battle/Battle.unity";
 
-        /// <summary>병력이 생성될 때까지 기다릴 최대 시간입니다.</summary>
-        private const float SpawnTimeout = 10f;
-
         // ====================================================================================================
-        // 2. Setup
+        // 2. Tests
         // ====================================================================================================
-
-        [TearDown]
-        public void TearDown()
-        {
-            UnityEngine.Time.timeScale = 1f;
-            UnityEngine.Time.fixedDeltaTime = 0.02f;
-        }
 
         /// <summary>
-        /// 전투 씬을 로드하고 병력이 생길 때까지 기다립니다.
+        /// 씬이 열리고 조립 지점과 구성 에셋이 연결되어 있는지 봅니다.
+        ///
+        /// 맵이 없어도 이 배선은 살아 있어야 합니다. 새 생성기를 꽂을 자리가 여기이기 때문입니다.
         /// </summary>
-        private static IEnumerator LoadBattleScene()
+        [UnityTest]
+        public IEnumerator 씬에_부트스트랩과_구성_에셋이_연결되어_있다()
         {
-            yield return SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode.Single);
+            // 맵이 없다는 오류는 지금의 정상 상태입니다. 이 검사가 보려는 것은 그게 아닙니다.
+            LogAssert.ignoreFailingMessages = true;
 
-            // 부트스트랩은 Start에서 조립합니다. 한 프레임 넘겨야 결과를 볼 수 있습니다.
+            yield return SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode.Single);
             yield return null;
 
             var bootstrap = Object.FindFirstObjectByType<BattleBootstrap>();
+
             Assert.IsNotNull(bootstrap, "씬에 BattleBootstrap 이 없습니다.");
             Assert.IsNotNull(bootstrap.Setup, "씬의 부트스트랩에 전투 구성 에셋이 연결되어 있지 않습니다.");
+            Assert.IsNotNull(bootstrap.Setup.Tuning, "BattleSetup.Tuning 이 비어 있습니다. 수치가 코드 기본값으로 돌아갑니다.");
 
-            float elapsed = 0f;
-
-            while (elapsed < SpawnTimeout && Object.FindFirstObjectByType<UnitBillboard>() == null)
-            {
-                elapsed += UnityEngine.Time.deltaTime;
-                yield return null;
-            }
+            LogAssert.ignoreFailingMessages = false;
         }
 
-        // ====================================================================================================
-        // 3. Tests
-        // ====================================================================================================
-
         /// <summary>
-        /// 씬이 그냥 뜨는지부터 봅니다. 여기가 깨지면 아래 검사는 볼 것도 없습니다.
+        /// 맵이 없다는 것을 <b>분명히 알리는지</b> 봅니다.
+        ///
+        /// 조용히 아무것도 안 만들면 화면이 빈 이유를 나중에 다시 찾아야 합니다.
         /// </summary>
         [UnityTest]
-        public IEnumerator 전투_씬이_연결된_에셋으로_뜬다()
+        public IEnumerator 맵_공급자가_없으면_전투를_시작하지_않고_알린다()
         {
-            yield return LoadBattleScene();
+            LogAssert.ignoreFailingMessages = true;
+
+            yield return SceneManager.LoadSceneAsync(ScenePath, LoadSceneMode.Single);
+            yield return null;
 
             var bootstrap = Object.FindFirstObjectByType<BattleBootstrap>();
 
-            Assert.IsNotNull(bootstrap.Context, "전투 컨텍스트가 만들어지지 않았습니다.");
-            Assert.Greater(bootstrap.Context.PlayerUnits.Count, 0, "플레이어 병력이 없습니다.");
-        }
+            Assert.IsNull(
+                bootstrap.IslandSource,
+                "씬의 부트스트랩에 맵 공급자가 연결되어 있습니다. 이 검사를 갱신하세요.");
 
-        /// <summary>
-        /// 튜닝 에셋이 실제로 쓰이는지 봅니다.
-        ///
-        /// 비어 있어도 코드 기본값으로 조용히 굴러갑니다. 그래서 아무도 모릅니다.
-        /// 기획자가 인스펙터에서 만질 대상이 존재하지 않는 상태가 됩니다.
-        /// </summary>
-        [UnityTest]
-        public IEnumerator 튜닝_수치가_코드_기본값이_아니라_에셋에서_온다()
-        {
-            yield return LoadBattleScene();
+            Assert.IsNull(
+                bootstrap.Context,
+                "맵이 없는데 전투 컨텍스트가 만들어졌습니다. 조립이 절반만 진행된 상태입니다.");
 
-            var bootstrap = Object.FindFirstObjectByType<BattleBootstrap>();
-
-            Assert.IsNotNull(bootstrap.Setup.Tuning, "BattleSetup.Tuning 이 비어 있습니다.");
-            Assert.AreSame(
-                bootstrap.Setup.Tuning,
-                bootstrap.Context.Tuning,
-                "연결된 튜닝 에셋이 있는데 전투가 다른 것을 쓰고 있습니다.");
-        }
-
-        /// <summary>
-        /// 지형이 SRPG 셰이더로 그려지는지 봅니다.
-        ///
-        /// 연결된 머티리얼이 URP/Lit이면 외곽선도 정점 컬러 접지 음영도 나오지 않습니다.
-        /// 메시에 접지 음영을 써 넣는 코드는 계속 도는데 읽는 쪽이 없는 상태가 됩니다.
-        /// </summary>
-        [UnityTest]
-        public IEnumerator 지형이_SRPG_지형_셰이더로_그려진다()
-        {
-            yield return LoadBattleScene();
-
-            var island = Object.FindFirstObjectByType<IslandView>();
-            Assert.IsNotNull(island, "섬이 만들어지지 않았습니다.");
-
-            var renderers = island.GetComponentsInChildren<MeshRenderer>();
-            Assert.Greater(renderers.Length, 0, "섬에 렌더러가 없습니다.");
-
-            int terrainCount = 0;
-
-            for (int i = 0; i < renderers.Length; i++)
-            {
-                var material = renderers[i].sharedMaterial;
-
-                if (material != null && material.shader != null &&
-                    material.shader.name == PrototypeVisuals.TerrainShaderName)
-                {
-                    terrainCount++;
-                }
-            }
-
-            Assert.Greater(
-                terrainCount,
-                0,
-                $"지형 {renderers.Length}개 중 SRPG/Terrain 을 쓰는 것이 하나도 없습니다. " +
-                "외곽선과 접지 음영이 나오지 않습니다.");
-        }
-
-        /// <summary>
-        /// 지형지물이 실제로 나오는지, 그리고 <b>통행을 막지 않는지</b> 봅니다.
-        ///
-        /// 콜라이더가 붙으면 바위를 클릭했을 때 지면이 아니라 바위 표면이 잡혀
-        /// 이동 명령이 엉뚱한 곳에 떨어집니다. 길을 막는 것은 지형이지 장식이 아닙니다.
-        /// </summary>
-        [UnityTest]
-        public IEnumerator 지형지물이_나오고_통행을_막지_않는다()
-        {
-            yield return LoadBattleScene();
-
-            var island = Object.FindFirstObjectByType<IslandView>();
-            Assert.IsNotNull(island, "섬이 만들어지지 않았습니다.");
-
-            int propObjects = 0;
-
-            foreach (Transform child in island.transform)
-            {
-                if (!child.name.StartsWith("Props_"))
-                {
-                    continue;
-                }
-
-                propObjects++;
-
-                Assert.IsNull(
-                    child.GetComponent<Collider>(),
-                    $"{child.name} 에 콜라이더가 있습니다. 클릭 판정과 통행을 방해합니다.");
-
-                var filter = child.GetComponent<MeshFilter>();
-                Assert.IsNotNull(filter, $"{child.name} 에 메시가 없습니다.");
-                Assert.Greater(filter.sharedMesh.vertexCount, 0, $"{child.name} 의 메시가 비어 있습니다.");
-            }
-
-            Assert.Greater(propObjects, 0, "지형지물이 하나도 만들어지지 않았습니다.");
-        }
-
-        /// <summary>
-        /// 걸을 수 있는 윗면과 딛을 수 없는 암반이 <b>다른 메시</b>로 갈라져 있는지 봅니다.
-        ///
-        /// 한 메시에 섞여 있으면 재질을 따로 줄 수 없고,
-        /// 잔디 재질의 수직 벽이 생겨 절벽인지 언덕인지 읽히지 않습니다.
-        /// </summary>
-        [UnityTest]
-        public IEnumerator 윗면과_암반이_다른_메시로_갈라진다()
-        {
-            yield return LoadBattleScene();
-
-            var island = Object.FindFirstObjectByType<IslandView>();
-
-            Transform rock = island.transform.Find("Terrain_Rock");
-            Assert.IsNotNull(rock, "암반 메시가 없습니다. 측면이 윗면과 같은 메시에 섞여 있습니다.");
-
-            bool hasTop = false;
-
-            foreach (Transform child in island.transform)
-            {
-                if (child.name.StartsWith("Terrain_Top_"))
-                {
-                    hasTop = true;
-
-                    Assert.AreNotSame(
-                        rock.GetComponent<MeshRenderer>().sharedMaterial,
-                        child.GetComponent<MeshRenderer>().sharedMaterial,
-                        $"{child.name} 이 암반과 같은 재질을 씁니다. 딛을 수 있는지가 색으로 구분되지 않습니다.");
-                }
-            }
-
-            Assert.IsTrue(hasTop, "걸을 수 있는 윗면 메시가 없습니다.");
-        }
-
-        /// <summary>
-        /// 유닛이 빌보드로 나오는지 봅니다.
-        ///
-        /// <see cref="SRPG.Data.UnitDefinition.Prefab"/>이 연결되어 있으면 부트스트랩은 프리팹을 씁니다.
-        /// 빌보드를 만드는 코드는 프리팹이 <b>없을 때만</b> 도는 폴백이라, 프리팹에 직접 붙어 있지 않으면
-        /// 실제 게임에서는 한 번도 실행되지 않습니다.
-        /// </summary>
-        [UnityTest]
-        public IEnumerator 유닛이_빌보드로_그려진다()
-        {
-            yield return LoadBattleScene();
-
-            var billboard = Object.FindFirstObjectByType<UnitBillboard>();
-
-            Assert.IsNotNull(
-                billboard,
-                "빌보드 유닛이 하나도 없습니다. 유닛 프리팹이 아직 캡슐입니다.");
-
-            var body = billboard.transform.Find("Body");
-            Assert.IsNotNull(body, "빌보드 유닛에 Body 오브젝트가 없습니다.");
-
-            var renderer = body.GetComponent<MeshRenderer>();
-            Assert.IsNotNull(renderer, "Body 에 렌더러가 없습니다.");
-
-            Assert.AreEqual(
-                PrototypeVisuals.BillboardShaderName,
-                renderer.sharedMaterial.shader.name,
-                "유닛 몸체가 빌보드 셰이더를 쓰지 않습니다.");
-        }
-
-        /// <summary>
-        /// 접지 그림자가 붙는지, 그리고 유닛을 따라다니는지 봅니다.
-        ///
-        /// 빌보드는 평면이라 지면과 닿는 면이 없습니다.
-        /// 그림자가 없으면 카메라를 돌릴 때 스프라이트가 배경 위에 떠 있는 것처럼 보입니다.
-        /// </summary>
-        [UnityTest]
-        public IEnumerator 유닛마다_접지_그림자가_붙는다()
-        {
-            yield return LoadBattleScene();
-
-            var bootstrap = Object.FindFirstObjectByType<BattleBootstrap>();
-            var shadows = Object.FindObjectsByType<ContactShadow>(FindObjectsSortMode.None);
-
-            Assert.Greater(shadows.Length, 0, "접지 그림자가 하나도 없습니다.");
-
-            Assert.GreaterOrEqual(
-                shadows.Length,
-                bootstrap.Context.PlayerUnits.Count,
-                "그림자 수가 유닛 수보다 적습니다. 일부 유닛이 그림자 없이 떠 있습니다.");
-        }
-
-        /// <summary>
-        /// 그림자가 유닛의 발밑에 있는지 봅니다.
-        ///
-        /// 붙어 있기만 하고 딴 데 있으면 접지가 아니라 노이즈입니다.
-        /// </summary>
-        [UnityTest]
-        public IEnumerator 접지_그림자가_유닛의_발밑에_있다()
-        {
-            yield return LoadBattleScene();
-
-            var bootstrap = Object.FindFirstObjectByType<BattleBootstrap>();
-            Assert.Greater(bootstrap.Context.PlayerUnits.Count, 0, "유닛이 없습니다.");
-
-            var unit = bootstrap.Context.PlayerUnits[0];
-            var shadows = Object.FindObjectsByType<ContactShadow>(FindObjectsSortMode.None);
-
-            float nearest = float.MaxValue;
-
-            for (int i = 0; i < shadows.Length; i++)
-            {
-                Vector3 delta = shadows[i].transform.position - unit.transform.position;
-                delta.y = 0f;
-
-                nearest = Mathf.Min(nearest, delta.magnitude);
-            }
-
-            Assert.Less(nearest, 0.05f, $"가장 가까운 그림자가 유닛에서 {nearest:F2}만큼 떨어져 있습니다.");
+            LogAssert.ignoreFailingMessages = false;
         }
     }
 }

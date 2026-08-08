@@ -2,6 +2,7 @@ using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.Grid;
+using SRPG.Tests.Support;
 using UnityEngine;
 
 namespace SRPG.Tests
@@ -21,10 +22,7 @@ namespace SRPG.Tests
 
         private static IslandGrid CreateIsland(int seed = 20260807)
         {
-            var settings = IslandSettings.CreateDefault();
-            settings.Width = 30;
-            settings.Depth = 30;
-            return IslandGenerator.Generate(settings, seed);
+            return TestIsland.Create(seed);
         }
 
         // ====================================================================================================

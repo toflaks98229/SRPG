@@ -1,8 +1,9 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.Grid;
+using SRPG.Tests.Support;
 using SRPG.Systems.Pathfinding;
 using UnityEngine;
 
@@ -19,10 +20,7 @@ namespace SRPG.Tests
 
         private static IslandGrid CreateIsland(int seed = 20260807)
         {
-            var settings = IslandSettings.CreateDefault();
-            settings.Width = 30;
-            settings.Depth = 30;
-            return IslandGenerator.Generate(settings, seed);
+            return TestIsland.Create(seed);
         }
 
         // ====================================================================================================
@@ -151,12 +149,8 @@ namespace SRPG.Tests
         {
             // 감소 키를 쓰지 않아 같은 셀이 힙에 여러 번 들어갑니다.
             // 힙 크기를 셀 수만큼만 잡으면 여기서 IndexOutOfRange가 납니다.
-            var settings = IslandSettings.CreateDefault();
-            settings.Width = 64;
-            settings.Depth = 64;
-            settings.IslandRadius = 0.48f;
 
-            var grid = IslandGenerator.Generate(settings, seedOverride: 55555);
+            var grid = TestIsland.Create(55555);
             var pathfinder = new GridPathfinder(grid);
             var path = new List<GridCoord>();
 

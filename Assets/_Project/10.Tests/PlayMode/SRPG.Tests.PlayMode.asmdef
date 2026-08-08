@@ -2,6 +2,7 @@
     "name": "SRPG.Tests.PlayMode",
     "rootNamespace": "SRPG.Tests.PlayMode",
     "references": [
+        "SRPG.Tests.Support",
         "SRPG.Common",
         "SRPG.Data",
         "SRPG.Framework",

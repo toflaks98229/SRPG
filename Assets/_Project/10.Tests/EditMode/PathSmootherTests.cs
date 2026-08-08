@@ -3,6 +3,7 @@ using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.Grid;
+using SRPG.Tests.Support;
 using SRPG.Systems.Pathfinding;
 
 namespace SRPG.Tests
@@ -56,10 +57,7 @@ namespace SRPG.Tests
 
         private static IslandGrid CreateIsland(int seed = 20260807)
         {
-            var settings = IslandSettings.CreateDefault();
-            settings.Width = 30;
-            settings.Depth = 30;
-            return IslandGenerator.Generate(settings, seed);
+            return TestIsland.Create(seed);
         }
 
         /// <summary>칸 단위로 이어진 직선 경로를 만듭니다.</summary>

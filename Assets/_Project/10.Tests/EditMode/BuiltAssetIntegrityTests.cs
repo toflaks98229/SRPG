@@ -1,4 +1,4 @@
-﻿using NUnit.Framework;
+using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Units;
@@ -59,7 +59,6 @@ namespace SRPG.Tests
         {
             var setup = LoadSetupOrIgnore();
 
-            Assert.IsNotNull(setup.Island, "섬 설정이 연결되지 않았습니다.");
             Assert.IsNotNull(setup.Waves, "웨이브 구성이 연결되지 않았습니다.");
             Assert.IsTrue(setup.TerrainMaterials.IsComplete, "지형 머티리얼 5종 중 빠진 것이 있습니다.");
             Assert.IsNotNull(setup.EnemyShipPrefab, "상륙정 프리팹이 연결되지 않았습니다.");

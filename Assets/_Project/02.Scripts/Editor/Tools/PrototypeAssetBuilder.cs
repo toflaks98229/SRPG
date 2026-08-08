@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Enemies;
@@ -34,7 +34,6 @@ namespace SRPG.Editor.Tools
         private const string SystemPrefabDir = "Assets/_Project/05.Prefabs/Systems";
         private const string UnitDataDir = "Assets/_Project/03.DataAssets/Units";
         private const string EnemyDataDir = "Assets/_Project/03.DataAssets/Enemies";
-        private const string IslandDataDir = "Assets/_Project/03.DataAssets/Islands";
         private const string WaveDataDir = "Assets/_Project/03.DataAssets/Waves";
         private const string ConfigDataDir = "Assets/_Project/03.DataAssets/Configs";
 
@@ -72,11 +71,10 @@ namespace SRPG.Editor.Tools
 
             var definitions = BuildUnitDefinitions(unitPrefabs, arrowPrefab);
 
-            var island = LoadOrCreate(IslandDataDir + "/IslandSettings_Default.asset", IslandSettings.CreateDefault);
             var waves = LoadOrCreate(WaveDataDir + "/WaveDef_Default.asset", WaveDefinition.CreateDefault);
             var tuning = LoadOrCreate(ConfigDataDir + "/BattleTuning_Default.asset", BattleTuning.CreateDefault);
 
-            BuildBattleSetup(materials, definitions, shipPrefab, markers, island, waves, tuning);
+            BuildBattleSetup(materials, definitions, shipPrefab, markers, waves, tuning);
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -85,7 +83,7 @@ namespace SRPG.Editor.Tools
                 "[PrototypeAssetBuilder] 에셋 생성 완료\n" +
                 $"  머티리얼 : {MaterialDir}\n" +
                 $"  프리팹   : {UnitPrefabDir}, {EnemyPrefabDir}, {SystemPrefabDir}\n" +
-                $"  데이터   : {UnitDataDir}, {EnemyDataDir}, {IslandDataDir}, {WaveDataDir}\n" +
+                $"  데이터   : {UnitDataDir}, {EnemyDataDir}, {WaveDataDir}\n" +
                 $"  전투 구성: {BattleSetupPath}");
 
             VerifyReferences();
@@ -115,7 +113,6 @@ namespace SRPG.Editor.Tools
                 return;
             }
 
-            if (setup.Island == null) problems.Add("BattleSetup.Island");
             if (setup.Waves == null) problems.Add("BattleSetup.Waves");
             if (setup.Tuning == null) problems.Add("BattleSetup.Tuning");
             if (!setup.TerrainMaterials.IsComplete) problems.Add("BattleSetup.TerrainMaterials (5개 중 일부 누락)");
@@ -754,7 +751,6 @@ namespace SRPG.Editor.Tools
             Dictionary<string, UnitDefinition> definitions,
             GameObject shipPrefab,
             (GameObject Selection, GameObject Order) markers,
-            IslandSettings island,
             WaveDefinition waves,
             BattleTuning tuning)
         {
@@ -767,7 +763,6 @@ namespace SRPG.Editor.Tools
                 AssetDatabase.CreateAsset(setup, BattleSetupPath);
             }
 
-            setup.Island = island;
             setup.Waves = waves;
             setup.Tuning = tuning;
 
@@ -880,7 +875,6 @@ namespace SRPG.Editor.Tools
                 SystemPrefabDir,
                 UnitDataDir,
                 EnemyDataDir,
-                IslandDataDir,
                 WaveDataDir,
                 ConfigDataDir,
             };

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Composition;
@@ -6,6 +6,7 @@ using SRPG.Gameplay.CameraControl;
 using SRPG.Gameplay.Enemies;
 using SRPG.Gameplay.Selection;
 using SRPG.Gameplay.Squads;
+using SRPG.Tests.Support;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -266,10 +267,18 @@ namespace SRPG.Tests.PlayMode
         private BattleBootstrap CreateBootstrap()
         {
             _bootstrapObject = new GameObject("TestBootstrap");
+            _bootstrapObject.SetActive(false);
+
             var bootstrap = _bootstrapObject.AddComponent<BattleBootstrap>();
 
-            // 인스펙터 필드를 직렬화 없이 설정하기 위해 SerializedField 기본값을 그대로 씁니다.
-            // 시드는 IslandSettings 기본값(0 = 무작위)이므로, 연결성 등은 EditMode 테스트가 담당합니다.
+            // 부트스트랩은 섬을 만들지 않고 받습니다. 테스트가 픽스처를 꽂아 줍니다.
+            //
+            // 오브젝트를 꺼 둔 채로 붙였다가 연결한 뒤 켭니다.
+            // 켜져 있으면 Start 가 먼저 돌아 섬 없이 조립을 시도합니다.
+            bootstrap.IslandSource = seed => TestIsland.Create(seed == 0 ? 20260807 : seed);
+
+            _bootstrapObject.SetActive(true);
+
             return bootstrap;
         }
     }

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using SRPG.Common;
 using UnityEngine;
 
@@ -36,16 +36,7 @@ namespace SRPG.Systems.Grid
         public Vector3 Origin { get; }
 
         /// <summary>이 섬을 만들 때 사용한 시드입니다. 동일 시드는 동일 섬을 재현합니다.</summary>
-        public int Seed { get; internal set; }
-
-        /// <summary>
-        /// 타일보다 촘촘한 연속 지형 높이입니다. 아직 조각되지 않았으면 null입니다.
-        ///
-        /// 타일의 <see cref="Tile.Height"/>가 <b>게임 규칙</b>이라면 이쪽은 <b>보이는 땅</b>입니다.
-        /// 통행 판정과 길찾기는 여전히 타일을 보고, 메시와 발 높이만 이쪽을 봅니다.
-        /// 둘을 섞으면 "보이는 것과 갈 수 있는 곳이 다른" 상태가 됩니다.
-        /// </summary>
-        public Landform.HeightField Height { get; internal set; }
+        public int Seed { get; set; }
 
         /// <summary>통행 가능한 모든 타일입니다.</summary>
         public List<Tile> WalkableTiles { get; } = new List<Tile>();
@@ -199,37 +190,24 @@ namespace SRPG.Systems.Grid
         /// <summary>
         /// 월드 좌표의 지면 높이를 반환합니다. 격자 밖이거나 통행 불가면 해수면(0)으로 봅니다.
         /// 유닛과 분대 앵커를 지면에 붙이는 데 사용합니다.
-        ///
-        /// <b>하이트필드가 있으면 그쪽을 봅니다.</b>
-        /// 지형 메시가 타일마다 평면이 아니라 굴곡을 가지므로, 발 높이도 같은 곡면에서 읽어야
-        /// 유닛이 땅에 박히거나 떠 있지 않습니다. 메시와 발 높이는 반드시 같은 출처여야 합니다.
         /// </summary>
         public float SampleGroundHeight(Vector3 world)
         {
             var tile = GetTile(WorldToCoord(world));
 
-            if (tile == null || !tile.IsWalkable)
-            {
-                return 0f;
-            }
-
-            // 표본의 단계를 씁니다. 타일의 단계가 아닙니다.
-            //
-            // BoundaryWarp 가 단 경계를 타일 격자에서 떼어냈으므로, 경계 근처에서는
-            // 보이는 땅의 높이가 타일의 고도 단계와 다릅니다.
-            // 타일 쪽을 쓰면 그 자리에서 유닛이 땅에 박히거나 공중에 뜹니다.
-            return Height == null
-                ? tile.WorldCenter.y
-                : Height.SampleSurface(world.x, world.z);
+            return tile != null && tile.IsWalkable ? tile.WorldCenter.y : 0f;
         }
 
         /// <summary>
-        /// 월드 좌표에서의 지표면 법선입니다. 하이트필드가 없으면 수직입니다.
-        /// 지형지물을 비탈에 맞춰 세우는 데 씁니다.
+        /// 월드 좌표에서의 지표면 법선입니다. 지금은 언제나 수직입니다.
+        ///
+        /// 타일 윗면이 평면이므로 법선도 하나뿐입니다.
+        /// 지형에 굴곡이 생기면 여기서 실제 기울기를 돌려주어야 합니다.
         /// </summary>
         public Vector3 SampleGroundNormal(Vector3 world)
         {
-            return Height == null ? Vector3.up : Height.SampleNormal(world.x, world.z);
+            _ = world;
+            return Vector3.up;
         }
 
         // ====================================================================================================
@@ -263,7 +241,7 @@ namespace SRPG.Systems.Grid
         /// 타일의 지형이 확정된 뒤 파생 정보(월드 좌표, 해안 여부, 통행 가능 이웃 수)를 다시 계산합니다.
         /// 생성기가 지형을 모두 배치한 다음 한 번 호출합니다.
         /// </summary>
-        internal void RebuildDerivedData()
+        public void RebuildDerivedData()
         {
             WalkableTiles.Clear();
             HouseTiles.Clear();

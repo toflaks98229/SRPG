@@ -4,6 +4,7 @@ using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.Formation;
 using SRPG.Systems.Grid;
+using SRPG.Tests.Support;
 using UnityEngine;
 
 namespace SRPG.Tests
@@ -25,10 +26,7 @@ namespace SRPG.Tests
 
         private static IslandGrid CreateIsland(int seed = 20260807)
         {
-            var settings = IslandSettings.CreateDefault();
-            settings.Width = 30;
-            settings.Depth = 30;
-            return IslandGenerator.Generate(settings, seed);
+            return TestIsland.Create(seed);
         }
 
         /// <summary>서로 이어진 통행 가능 타일 경로를 만듭니다.</summary>

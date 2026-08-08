@@ -2,6 +2,7 @@
     "name": "SRPG.Tests.EditMode",
     "rootNamespace": "SRPG.Tests",
     "references": [
+        "SRPG.Tests.Support",
         "SRPG.Common",
         "SRPG.Data",
         "SRPG.Framework",

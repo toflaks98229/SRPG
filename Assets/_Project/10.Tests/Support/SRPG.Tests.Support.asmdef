@@ -1,0 +1,19 @@
+{
+    "name": "SRPG.Tests.Support",
+    "rootNamespace": "SRPG.Tests.Support",
+    "references": [
+        "SRPG.Common",
+        "SRPG.Data",
+        "SRPG.Systems"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,9 +1,10 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Squads;
 using SRPG.Systems.Grid;
+using SRPG.Tests.Support;
 using SRPG.Systems.Spatial;
 using UnityEngine;
 
@@ -28,10 +29,7 @@ namespace SRPG.Tests
         [SetUp]
         public void SetUp()
         {
-            var settings = IslandSettings.CreateDefault();
-            settings.Width = 30;
-            settings.Depth = 30;
-            _grid = IslandGenerator.Generate(settings, seedOverride: 20260807);
+            _grid = TestIsland.Create(20260807);
         }
 
         [TearDown]
