@@ -84,6 +84,18 @@ namespace SRPG.Systems.Grid
         /// </summary>
         public List<List<Tile>> LandingZones { get; } = new List<List<Tile>>();
 
+        /// <summary>
+        /// 플레이어 부대가 전장에 들어서는 구역입니다.
+        ///
+        /// 야전은 두 부대가 마주 보며 들어섭니다. 상륙 구역과 달리 <b>어느 쪽에서 오는지를
+        /// 처음부터 서로 압니다</b> — 문제는 그 다음입니다. 어느 날개를 두껍게 할지,
+        /// 고지를 먼저 잡을지, 언제 붙을지.
+        /// </summary>
+        public List<Tile> PlayerDeployment { get; } = new List<Tile>();
+
+        /// <summary>적 부대가 전장에 들어서는 구역입니다. 플레이어 구역의 반대편입니다.</summary>
+        public List<Tile> EnemyDeployment { get; } = new List<Tile>();
+
         // ====================================================================================================
         // 3. Constructor
         // ====================================================================================================
@@ -118,6 +130,12 @@ namespace SRPG.Systems.Grid
         // ====================================================================================================
         // 4. Public Methods - Access
         // ====================================================================================================
+
+        /// <summary>지정 진영의 전개 구역입니다.</summary>
+        public List<Tile> GetDeployment(Team team)
+        {
+            return team == Team.Player ? PlayerDeployment : EnemyDeployment;
+        }
 
         /// <summary>좌표가 격자 범위 안에 있는지 확인합니다.</summary>
         public bool IsInside(GridCoord coord)

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
+using SRPG.Systems.Deployment;
 using SRPG.Systems.Grid;
 using UnityEngine;
 
@@ -138,6 +139,9 @@ namespace SRPG.Systems.Battlefield
             grid.RebuildDerivedData();
 
             BuildApproaches(grid, profile);
+
+            // 야전의 전개 구역입니다. 축을 시드로 뽑으므로 같은 전장이면 같은 대치 구도가 나옵니다.
+            DeploymentZones.Build(grid, seed);
 
             return new Battlefield(grid, heightmap, origin, profile.Kind);
         }

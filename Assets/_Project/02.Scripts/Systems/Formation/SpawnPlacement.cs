@@ -103,6 +103,76 @@ namespace SRPG.Systems.Formation
             return result.Count;
         }
 
+        /// <summary>
+        /// <b>전개 구역 안에서</b> 분대 자리를 고릅니다. 야전의 배치 경로입니다.
+        ///
+        /// <b>왜 전장 중심 쪽부터 채우는가</b>
+        ///
+        /// 구역의 뒤쪽(자기 진영 끝)부터 채우면 부대가 서로 겹쳐 늘어서고,
+        /// 앞줄이 붙는 동안 뒷줄은 한참을 걸어와야 합니다.
+        /// 마주 보는 쪽부터 채우면 자연히 <b>전열이 먼저 서고 예비가 뒤에</b> 섭니다.
+        ///
+        /// 간격은 여기서도 지킬 수 있을 때만 지킵니다 — 좁은 전장에서 빈손으로 돌아가면
+        /// 그 분대는 전투에 참가하지 못합니다.
+        /// </summary>
+        /// <param name="zone">이 진영의 전개 구역입니다.</param>
+        /// <param name="facing">부대가 바라보는 지점입니다. 보통 전장 중심입니다.</param>
+        /// <param name="count">필요한 자리 수입니다.</param>
+        /// <param name="result">고른 칸이 채워집니다. 호출 시 비워집니다.</param>
+        /// <param name="minSpacing">분대끼리 둘 최소 격자 간격입니다.</param>
+        /// <returns>실제로 고른 칸의 수입니다.</returns>
+        public static int SelectDeploymentTiles(
+            IReadOnlyList<Tile> zone,
+            Vector3 facing,
+            int count,
+            List<Tile> result,
+            int minSpacing = DefaultMinSpacing)
+        {
+            result.Clear();
+
+            if (zone == null || zone.Count == 0 || count <= 0)
+            {
+                return 0;
+            }
+
+            var candidates = new List<Tile>(zone.Count);
+
+            for (int i = 0; i < zone.Count; i++)
+            {
+                if (zone[i] != null && zone[i].IsWalkable)
+                {
+                    candidates.Add(zone[i]);
+                }
+            }
+
+            if (candidates.Count == 0)
+            {
+                return 0;
+            }
+
+            // 마주 보는 쪽에 가까운 칸부터 채웁니다.
+            candidates.Sort((a, b) =>
+                (a.WorldCenter - facing).sqrMagnitude.CompareTo((b.WorldCenter - facing).sqrMagnitude));
+
+            for (int i = 0; i < candidates.Count && result.Count < count; i++)
+            {
+                if (IsFarEnough(result, candidates[i], minSpacing))
+                {
+                    result.Add(candidates[i]);
+                }
+            }
+
+            for (int i = 0; i < candidates.Count && result.Count < count; i++)
+            {
+                if (!result.Contains(candidates[i]))
+                {
+                    result.Add(candidates[i]);
+                }
+            }
+
+            return result.Count;
+        }
+
         // ====================================================================================================
         // 3. Private Methods
         // ====================================================================================================
