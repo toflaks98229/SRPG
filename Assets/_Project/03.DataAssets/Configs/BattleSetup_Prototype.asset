@@ -12,15 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dcbe12b942266c642ac2405265965fed, type: 3}
   m_Name: BattleSetup_Prototype
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.BattleSetup
-  Island: {fileID: 11400000, guid: a030069effd9de14992891fd6542da38, type: 2}
-  Waves: {fileID: 11400000, guid: 9c25eb68d94cebf4a87600ba1e17c435, type: 2}
   TerrainMaterials:
-    Beach: {fileID: 2100000, guid: 00e738181d106e94d81f3909b19ccc41, type: 2}
     Ground: {fileID: 2100000, guid: d6fa291f73cfe844cbdc22135431f865, type: 2}
     Cliff: {fileID: 2100000, guid: 57cc321cd396f8f4eb192079467798dc, type: 2}
-    House: {fileID: 2100000, guid: 91ad8e36c779e2c408fbcd13f5f374c9, type: 2}
     Water: {fileID: 2100000, guid: 1dfb9f56e090bff48aadee3a9a505474, type: 2}
   Tuning: {fileID: 11400000, guid: 143e1a8289c7f584fa9488227cb5278e, type: 2}
+  TerrainProfile: {fileID: 11400000, guid: e41035570d80ebf4aad18a528a00ace7, type: 2}
   PlayerRoster:
   - {fileID: 11400000, guid: 49b1a6f1c2f2b594cbe6c7da2a251163, type: 2}
   - {fileID: 11400000, guid: 49a92c8938f50624e9c6e03a2c7e9bb0, type: 2}
@@ -29,6 +26,5 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
   - {fileID: 11400000, guid: 7d1a1d210dfbd65418af3b3b93ff4af2, type: 2}
   - {fileID: 11400000, guid: f6cf42cbf5d81cd45a9bae64885a98b8, type: 2}
-  EnemyShipPrefab: {fileID: 2754042536540009167, guid: 96dc7746e33815043b0d66d5791e24ec, type: 3}
   SelectionMarkerPrefab: {fileID: 8729604530160665726, guid: 2c4434dfd0972bc40aa757182faf56b9, type: 3}
   OrderMarkerPrefab: {fileID: 2807837919859614980, guid: f1eb32298dae15c48bf02a61e534331c, type: 3}

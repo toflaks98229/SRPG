@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
@@ -8,6 +8,7 @@ using SRPG.Gameplay.Weapons;
 using SRPG.Systems.Grid;
 using SRPG.Tests.Support;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace SRPG.Tests
 {
@@ -139,6 +140,8 @@ namespace SRPG.Tests
         [TearDown]
         public void TearDown()
         {
+            LogAssert.ignoreFailingMessages = false;
+
             for (int i = 0; i < _spawned.Count; i++)
             {
                 if (_spawned[i] != null)
@@ -195,17 +198,33 @@ namespace SRPG.Tests
             Assert.AreSame(unit, _context.Registered[0]);
         }
 
+        /// <summary>
+        /// 쓰러지면 명부에서 빠집니다.
+        ///
+        /// <b>왜 파괴가 아니라 <c>Kill</c> 로 확인하는가</b>
+        ///
+        /// 병사는 <c>OnDestroy</c> 에서도 등록을 푸는데, EditMode 에서는 일반 MonoBehaviour 의
+        /// 생명주기 콜백이 돌지 않습니다. 오브젝트를 지워 놓고 기다려도 아무 일도 일어나지 않고,
+        /// 그건 코드가 틀린 것이 아니라 <b>여기서 관측할 수 없는 것</b>입니다.
+        ///
+        /// 실제로 중요한 경로는 이쪽입니다. 전투 중에 명부를 비우는 것은 파괴가 아니라 죽음이고,
+        /// <c>OnDestroy</c> 는 씬을 벗어날 때를 위한 이중 장치입니다.
+        /// 그쪽은 PlayMode 가 봅니다.
+        /// </summary>
         [Test]
-        public void 사라지면_등록이_풀린다()
+        public void 쓰러지면_등록이_풀린다()
         {
             var unit = CreateUnit(Vector3.zero, Team.Player);
-            var go = unit.gameObject;
 
             Assert.AreEqual(1, _context.Registered.Count);
 
-            Object.DestroyImmediate(go);
+            // Kill 은 마지막에 Object.Destroy 를 부릅니다. 런타임에서는 옳지만
+            // EditMode 에서는 유니티가 오류를 남기므로, 그 잡음만 무시합니다.
+            LogAssert.ignoreFailingMessages = true;
 
-            Assert.AreEqual(0, _context.Registered.Count, "파괴된 병사가 등록부에 남아 있습니다.");
+            unit.Kill();
+
+            Assert.AreEqual(0, _context.Registered.Count, "쓰러진 병사가 등록부에 남아 있습니다.");
         }
 
         /// <summary>

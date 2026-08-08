@@ -286,6 +286,13 @@ namespace SRPG.Tests.PlayMode
                     Id = 22, Definition = definition, SoldierCount = 2, DisplayName = "후위",
                 });
 
+                // 야전은 마주 설 상대가 있어야 열립니다.
+                // 주문서 검증이 이것을 요구하므로, 상대를 비워 두면 전투가 시작조차 하지 않습니다.
+                request.EnemySquads.Add(new SquadOrder
+                {
+                    Id = 101, Definition = definition, SoldierCount = 3, DisplayName = "적 전위",
+                });
+
                 CreateBootstrap(request);
                 yield return null;
 
