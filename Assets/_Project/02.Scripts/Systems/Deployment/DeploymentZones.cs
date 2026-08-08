@@ -72,7 +72,7 @@ namespace SRPG.Systems.Deployment
                 return;
             }
 
-            Vector3 axis = ResolveAxis(seed);
+            Vector3 axis = BattleAxis.Resolve(seed);
             Vector3 center = grid.WorldCenter;
 
             // 축 위의 위치로 줄을 세웁니다. 앞쪽이 한 진영, 뒤쪽이 다른 진영입니다.
@@ -122,24 +122,6 @@ namespace SRPG.Systems.Deployment
         // ====================================================================================================
         // 3. Private Methods
         // ====================================================================================================
-
-        /// <summary>
-        /// 대치 축입니다. 시드가 같으면 언제나 같은 축이 나옵니다.
-        /// </summary>
-        private static Vector3 ResolveAxis(int seed)
-        {
-            // 시드가 0이면 System.Random 이 시간에 따라 달라지므로 고정 각도를 씁니다.
-            // 전장은 재현 가능해야 합니다.
-            if (seed == 0)
-            {
-                return Vector3.forward;
-            }
-
-            var random = new System.Random(seed);
-            float angle = (float)(random.NextDouble() * System.Math.PI * 2.0);
-
-            return new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-        }
 
         /// <summary>전장 중심에서 잰 축 위의 위치입니다.</summary>
         private static float Project(Tile tile, Vector3 center, Vector3 axis)

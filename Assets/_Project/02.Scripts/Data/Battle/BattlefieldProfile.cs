@@ -22,6 +22,9 @@ namespace SRPG.Data
 
         /// <summary>바위땅. 장애물이 크고 통로가 좁습니다.</summary>
         Rocky = 3,
+
+        /// <summary>강. 전장을 가르는 물길이 있고, 여울이 유일한 도하 지점입니다.</summary>
+        River = 4,
     }
 
     /// <summary>
@@ -88,6 +91,28 @@ namespace SRPG.Data
         public int ObstacleClumpSize = 2;
 
         // ====================================================================================================
+        // 4. River
+        // ====================================================================================================
+
+        [Header("강")]
+        [Range(0f, 0.4f)]
+        [Tooltip("전장 한 변에 대한 강폭입니다. 0이면 강이 없습니다.\n\n" +
+                 "<b>River 지형에서만 쓰입니다.</b> 넓으면 도하가 큰 결단이 되고, " +
+                 "좁으면 그냥 개울이 됩니다.")]
+        public float RiverWidth = 0.16f;
+
+        [Range(0.02f, 0.5f)]
+        [Tooltip("강바닥이 해수면보다 얼마나 낮은지입니다.\n\n" +
+                 "깊을수록 강둑이 가팔라져 여울 밖으로는 아예 못 내려갑니다.")]
+        public float RiverDepth = 0.12f;
+
+        [Range(1, 4)]
+        [Tooltip("여울(도하 지점) 수입니다.\n\n" +
+                 "<b>0으로 둘 수 없습니다.</b> 건널 수 없는 강은 두 부대가 영영 만나지 못하게 만듭니다.\n" +
+                 "적을수록 도하 지점 다툼이 전투의 전부가 됩니다.")]
+        public int FordCount = 2;
+
+        // ====================================================================================================
         // 5. Factory
         // ====================================================================================================
 
@@ -127,6 +152,17 @@ namespace SRPG.Data
                     profile.HillScale = 0.11f;
                     profile.ObstacleDensity = 0.14f;
                     profile.ObstacleClumpSize = 4;
+                    break;
+
+                case TerrainKind.River:
+                    // 강이 전장을 가릅니다. 지형 자체는 완만해 물길이 유일한 장애물이 됩니다.
+                    profile.MaxElevation = 2f;
+                    profile.HillScale = 0.08f;
+                    profile.ObstacleDensity = 0.02f;
+                    profile.ObstacleClumpSize = 2;
+                    profile.RiverWidth = 0.16f;
+                    profile.RiverDepth = 0.12f;
+                    profile.FordCount = 2;
                     break;
 
                 default:

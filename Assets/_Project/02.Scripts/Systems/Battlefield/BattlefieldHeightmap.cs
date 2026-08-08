@@ -1,4 +1,5 @@
-using SRPG.Data;
+﻿using SRPG.Data;
+using SRPG.Systems.Deployment;
 using UnityEngine;
 
 namespace SRPG.Systems.Battlefield
@@ -122,6 +123,21 @@ namespace SRPG.Systems.Battlefield
 
                     map._heights[y, x] = Mathf.Clamp01(value);
                 }
+            }
+
+            // 강은 언덕을 다 얹은 뒤에 팝니다. 먼저 파면 노이즈가 물길을 도로 메웁니다.
+            //
+            // 흐름은 대치 축을 <b>가로지릅니다.</b> 나란히 흐르면 아무것도 가르지 않아
+            // 강이 있으나 마나 한 전장이 됩니다.
+            if (profile.Kind == TerrainKind.River && profile.RiverWidth > 0f)
+            {
+                RiverCarver.Carve(
+                    map._heights,
+                    BattleAxis.ResolveCross(seed),
+                    SeaLevelRatio,
+                    profile.RiverWidth,
+                    profile.RiverDepth,
+                    profile.FordCount);
             }
 
             return map;
