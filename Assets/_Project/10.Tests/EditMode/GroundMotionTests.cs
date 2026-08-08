@@ -318,5 +318,172 @@ namespace SRPG.Tests
                 Vector3.zero,
                 SteeringSolver.SeparationFrom(new Vector3(0.5f, 0f, 0f), Vector3.zero, 0f));
         }
+
+        // ====================================================================================================
+        // 7. 한 걸음 — 익사 판정과 미끄러짐의 순서
+        // ====================================================================================================
+
+        /// <summary>
+        /// <b>익사 판정이 미끄러짐보다 먼저여야 합니다.</b>
+        ///
+        /// 순서가 뒤집히면 밀려나던 병사가 물가를 따라 스르륵 비껴갑니다.
+        /// 그러면 넉백은 그냥 밀치기 연출이 되고, 이 게임의 주요 사망 수단이 사라집니다.
+        /// </summary>
+        [Test]
+        public void 세게_밀려_물에_닿으면_미끄러지지_않고_익사한다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            // 오른쪽 한 줄을 바다로 만듭니다. 물가에 선 병사를 바다 쪽으로 밉니다.
+            MakeWater(grid, 5, 4);
+
+            Vector3 from = Center(grid, 4, 4);
+            Vector3 desired = Center(grid, 5, 4);
+
+            var step = GroundMotion.TryStep(grid, from, desired, mayDrown: true, out Vector3 next);
+
+            Assert.AreEqual(GroundStep.Drowned, step, "물로 밀려났는데 익사하지 않았습니다.");
+            Assert.AreEqual(desired.x, next.x, 0.001f, "낙수 지점이 물 위가 아닙니다.");
+            Assert.AreEqual(0f, next.y, 0.001f, "낙수 지점이 수면 높이가 아닙니다.");
+        }
+
+        /// <summary>
+        /// 밀려서 빠지는 것은 사고지만, 달려들다 빠지는 것은 자살입니다.
+        /// 스스로 낸 힘(도약)으로는 물에 들어가지 않고 물가에서 막혀야 합니다.
+        /// </summary>
+        [Test]
+        public void 스스로_달려드는_힘으로는_물에_빠지지_않는다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            MakeWater(grid, 5, 4);
+
+            Vector3 from = Center(grid, 4, 4);
+            Vector3 desired = Center(grid, 5, 4);
+
+            var step = GroundMotion.TryStep(grid, from, desired, mayDrown: false, out Vector3 next);
+
+            Assert.AreEqual(GroundStep.Moved, step, "달려들었을 뿐인데 익사했습니다.");
+            Assert.IsTrue(GroundMotion.TryStand(grid, next, out _), "설 수 없는 자리로 갔습니다.");
+        }
+
+        [Test]
+        public void 물이_아니면_밀려나도_그냥_움직인다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            Vector3 from = Center(grid, 4, 4);
+            Vector3 desired = Center(grid, 5, 4);
+
+            var step = GroundMotion.TryStep(grid, from, desired, mayDrown: true, out Vector3 next);
+
+            Assert.AreEqual(GroundStep.Moved, step);
+            Assert.AreEqual(desired.x, next.x, 0.001f);
+        }
+
+        /// <summary>
+        /// 절벽으로 밀려도 익사하면 안 됩니다. 막혀서 미끄러질 뿐입니다.
+        /// </summary>
+        [Test]
+        public void 절벽으로_밀리면_익사가_아니라_막힌다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            Block(grid, 5, 4);
+
+            Vector3 from = Center(grid, 4, 4);
+            Vector3 desired = Center(grid, 5, 4);
+
+            Assert.AreEqual(
+                GroundStep.Moved,
+                GroundMotion.TryStep(grid, from, desired, mayDrown: true, out _));
+        }
+
+        // ====================================================================================================
+        // 8. 발 높이 — 통행은 타일이, 높이는 지형이 정합니다
+        // ====================================================================================================
+
+        /// <summary>
+        /// <b>한 칸 안에서도 높이가 달라야 합니다.</b>
+        ///
+        /// 예전에는 타일 중심의 높이를 그대로 돌려주었습니다. 그러면 칸 안에서 높이가 상수라,
+        /// 비탈을 걷는 병사가 칸 경계마다 한 단씩 툭툭 튀어 올랐습니다.
+        /// 정작 분대 앵커는 연속면을 타고 있었으므로 앵커만 부드럽게 오르고 병사는 계단으로 올랐습니다.
+        /// </summary>
+        [Test]
+        public void 발_높이는_칸_안에서도_연속이다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            // 동쪽으로 갈수록 높아지는 비탈입니다.
+            grid.SurfaceSampler = (x, z) => x * 0.25f;
+
+            Vector3 center = Center(grid, 4, 4);
+
+            // 같은 칸 안의 서쪽 끝과 동쪽 끝입니다.
+            var west = new Vector3(center.x - Cell * 0.45f, 0f, center.z);
+            var east = new Vector3(center.x + Cell * 0.45f, 0f, center.z);
+
+            Assert.IsTrue(GroundMotion.TryStand(grid, west, out float westHeight));
+            Assert.IsTrue(GroundMotion.TryStand(grid, east, out float eastHeight));
+
+            Assert.AreNotEqual(
+                westHeight,
+                eastHeight,
+                "한 칸 안에서 높이가 상수입니다. 병사가 칸 경계마다 튀어 오릅니다.");
+
+            Assert.Less(westHeight, eastHeight, "비탈의 방향이 뒤집혔습니다.");
+        }
+
+        [Test]
+        public void 발_높이는_지형이_말하는_값_그대로다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            grid.SurfaceSampler = (x, z) => x * 0.25f + z * 0.1f;
+
+            var probe = new Vector3(0.7f, 0f, -1.3f);
+
+            Assert.IsTrue(GroundMotion.TryStand(grid, probe, out float height));
+
+            Assert.AreEqual(
+                grid.SampleGroundHeight(probe),
+                height,
+                0.0001f,
+                "앵커가 쓰는 높이와 병사가 쓰는 높이가 다릅니다.");
+        }
+
+        /// <summary>
+        /// 지형이 연결되지 않은 프로토타입 경로에서는 예전처럼 타일 높이를 씁니다.
+        /// </summary>
+        [Test]
+        public void 지형이_없으면_타일_높이로_돌아간다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            Vector3 center = Center(grid, 4, 4);
+
+            Assert.IsTrue(GroundMotion.TryStand(grid, center, out float height));
+            Assert.AreEqual(center.y, height, 0.0001f);
+        }
+
+        [Test]
+        public void 설_수_없는_자리는_여전히_거절한다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            grid.SurfaceSampler = (x, z) => 5f;
+
+            MakeWater(grid, 2, 2);
+            Block(grid, 3, 3);
+
+            Assert.IsFalse(
+                GroundMotion.TryStand(grid, Center(grid, 2, 2), out _),
+                "지형 높이가 있다고 해서 물 위에 설 수는 없습니다.");
+
+            Assert.IsFalse(
+                GroundMotion.TryStand(grid, Center(grid, 3, 3), out _),
+                "지형 높이가 있다고 해서 절벽에 설 수는 없습니다.");
+        }
     }
 }

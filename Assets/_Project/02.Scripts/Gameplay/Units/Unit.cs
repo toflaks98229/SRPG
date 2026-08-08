@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Weapons;
 using SRPG.Systems.Combat;
-using SRPG.Systems.Grid;
-using SRPG.Systems.Pathfinding;
 using UnityEngine;
 
 namespace SRPG.Gameplay.Units
@@ -19,10 +16,17 @@ namespace SRPG.Gameplay.Units
     /// 전투는 물리 기반입니다. 이 클래스는 <b>공격을 시작할지</b>만 정하고,
     /// 실제로 누가 맞는지는 무기(<see cref="WeaponBase"/>)가 콜라이더 질의로 판정합니다.
     ///
-    /// 공격 시작 조건
-    ///   · 무기가 이전 동작을 끝냈고 재사용 대기가 지났다
-    ///   · 대상이 사거리 안에 있다
-    ///   · 이동 중이 아니거나, 이동 중 공격이 허용된 병과다 (창병은 불가)
+    /// <b>이 클래스는 조율만 합니다</b>
+    ///
+    /// 판단은 넷으로 나뉘어 있고, 각자 MonoBehaviour 밖에 있습니다.
+    ///
+    ///   · <see cref="UnitTargeting"/>  — 누구를 볼 것인가 (히스테리시스·표적 고정·공격 대기열)
+    ///   · <see cref="UnitLocomotion"/> — 어디로 어떻게 갈 것인가 (도착·분리 조향, 넉백·도약, 지형)
+    ///   · <see cref="UnitFacing"/>     — 어디를 향해 설 것인가 (표적·위협·진행·대기)
+    ///   · <see cref="AttackerSlots"/>  — 나를 치기로 예약한 적들의 장부
+    ///
+    /// 여기 남은 것은 그 넷을 <b>정해진 순서로</b> 부르는 일과, 몸에 직접 붙는 것들
+    /// (체력·콜라이더·무기 부착·사망)뿐입니다.
     ///
     /// 사망 원인은 둘입니다. 체력 소진과 <b>익사</b>입니다.
     /// 넉백으로 물에 밀려나면 즉사합니다. 조사에서 확인한 Bad North의 핵심 사망 규칙입니다.
@@ -34,32 +38,8 @@ namespace SRPG.Gameplay.Units
         // 1. Constants
         // ====================================================================================================
 
-        /// <summary>슬롯에 도착했다고 판단하는 거리입니다.</summary>
-        private const float SlotArrivalThreshold = 0.45f;
-
-        /// <summary>도착 감속이 시작되는 거리입니다.</summary>
-        private const float ArriveSlowRadius = 1.2f;
-
         /// <summary>이동 중으로 판정하는 최소 속도입니다. 창병의 이동 중 공격 금지 판정에 사용합니다.</summary>
         private const float MovingSpeedThreshold = 0.25f;
-
-        /// <summary>넉백 속도가 초당 얼마나 줄어드는지입니다.</summary>
-        private const float KnockbackDecay = 11f;
-
-        /// <summary>도약 속도가 초당 얼마나 줄어드는지입니다. 넉백보다 빨리 잦아듭니다.</summary>
-        private const float LungeDecay = 20f;
-
-        /// <summary>이 속도 이상으로 밀려나는 중이면 물 위로도 밀려납니다(= 익사할 수 있습니다).</summary>
-        private const float DrownKnockbackThreshold = 1.2f;
-
-        /// <summary>평상시 회전 속도입니다.</summary>
-        private const float TurnSpeed = 12f;
-
-        /// <summary>교전 중 회전 속도입니다. 무기 판정이 정면 기준이라 빠르게 돌아야 합니다.</summary>
-        private const float CombatTurnSpeed = 22f;
-
-        /// <summary>방패병이 위협 방향을 다시 살피는 주기(초)입니다. 매 프레임 질의하지 않기 위한 것입니다.</summary>
-        private const float ThreatScanInterval = 0.3f;
 
         // ====================================================================================================
         // 2. Inspector
@@ -84,63 +64,24 @@ namespace SRPG.Gameplay.Units
         // 3. Fields
         // ====================================================================================================
 
+        private readonly UnitTargeting _targeting = new UnitTargeting();
+        private readonly UnitLocomotion _locomotion = new UnitLocomotion();
+        private readonly UnitFacing _facing = new UnitFacing();
+        private readonly AttackerSlots _attackerSlots = new AttackerSlots();
+
         private UnitDefinition _definition;
         private BattleContext _context;
         private Team _team;
         private WeaponBase _weapon;
+        private Transform _transform;
 
         private float _health;
         private float _attackTimer;
         private float _staggerTimer;
         private float _rootTimer;
-        private Unit _target;
+
+        /// <summary>분대(또는 적 AI)가 배정한 진형 슬롯입니다.</summary>
         private Vector3 _slotTarget;
-        private Vector3 _lastVelocity;
-        private Vector3 _knockbackVelocity;
-
-        /// <summary>
-        /// 스스로 앞으로 던진 도약 속도입니다. 넉백과 <b>따로</b> 둡니다.
-        ///
-        /// 같은 채널에 넣으면 물가의 적에게 달려들 때마다 스스로 물에 뛰어들어 익사합니다.
-        /// 밀려나는 것과 뛰어드는 것은 결과가 달라야 합니다.
-        /// </summary>
-        private Vector3 _lungeVelocity;
-
-        /// <summary>
-        /// 부드럽게 따라가는 분리 성분입니다.
-        ///
-        /// 계산된 값을 그대로 더하면 이웃이 반경에 드나들 때마다 속도가 계단처럼 튑니다.
-        /// 옆 사람이 조금 다가왔을 뿐인데 홱 밀려나는 것처럼 보입니다.
-        /// </summary>
-        private Vector3 _separationVelocity;
-        private Transform _transform;
-
-        private readonly List<Unit> _neighborBuffer = new List<Unit>(16);
-        private readonly List<Unit> _candidateBuffer = new List<Unit>(16);
-
-        /// <summary>
-        /// 지금 나를 치기로 <b>예약한</b> 적들입니다.
-        ///
-        /// 오버킬을 막기 위한 장치입니다. 창병 여럿이 최전방의 한 명만 동시에 찌르면
-        /// 그가 죽은 자리로 뒤따라오던 적들이 그대로 통과합니다.
-        /// 예약 인원에 상한을 두면 남는 창병이 자연히 다음 적을 겨눕니다.
-        /// </summary>
-        private readonly HashSet<Unit> _committedAttackers = new HashSet<Unit>();
-
-        /// <summary>표적을 바꾸지 못하는 남은 시간입니다.</summary>
-        private float _targetLockTimer;
-
-        /// <summary>회전 스프링의 각속도입니다. 무기가 무게를 가질 때만 씁니다.</summary>
-        private float _yawVelocity;
-
-        /// <summary>방패병이 몸을 돌릴 위협 대상입니다. 공격 대상과는 별개입니다.</summary>
-        private Unit _threatSource;
-
-        /// <summary>분대가 지정한 대기 방향입니다. 교전 대상이 없을 때 이쪽을 봅니다.</summary>
-        private Vector3 _idleFacing;
-        private bool _hasIdleFacing;
-
-        private float _threatScanTimer;
 
         // ====================================================================================================
         // 4. Properties
@@ -174,10 +115,10 @@ namespace SRPG.Gameplay.Units
         public int Rank { get; private set; } = CombatConstants.MinRank;
 
         /// <summary>현재 교전 중인지 여부입니다. 분대 상태 판정에 사용합니다.</summary>
-        public bool IsEngaged => _target != null && _target.IsAlive;
+        public bool IsEngaged => _targeting.HasLivingTarget;
 
         /// <summary>직전 프레임에 적용된 속도입니다. 예측 사격의 입력이기도 합니다.</summary>
-        public Vector3 Velocity => _lastVelocity;
+        public Vector3 Velocity => _locomotion.Velocity;
 
         /// <summary>넉백으로 경직된 상태인지 여부입니다.</summary>
         public bool IsStaggered => _staggerTimer > 0f;
@@ -190,7 +131,7 @@ namespace SRPG.Gameplay.Units
         public bool IsMoving { get; private set; }
 
         /// <summary>지금 나를 치기로 예약한 적의 수입니다. 디버그 표시와 오버킬 판정에 씁니다.</summary>
-        public int CommittedAttackerCount => _committedAttackers.Count;
+        public int CommittedAttackerCount => _attackerSlots.Count;
 
         /// <summary>이 병사의 무기가 횡대를 선호하는지 여부입니다. 분대가 진형 모양을 정할 때 묻습니다.</summary>
         public bool PrefersLineFormation => _weapon != null && _weapon.PrefersLineFormation;
@@ -219,6 +160,12 @@ namespace SRPG.Gameplay.Units
             _transform = transform;
         }
 
+        /// <summary>
+        /// 한 프레임의 판단 순서입니다. <b>이 순서 자체가 규칙입니다.</b>
+        ///
+        /// 표적을 먼저 정해야 어디로 갈지가 나오고, 이동 여부가 정해져야 창병이 찌를지가 나옵니다.
+        /// 그래서 <see cref="IsMoving"/>은 조향 다음, 전투 앞에서 <b>한 번만</b> 확정됩니다.
+        /// </summary>
         private void Update()
         {
             if (!IsAlive || _context == null || _definition == null)
@@ -233,12 +180,16 @@ namespace SRPG.Gameplay.Units
             }
 
             TickTimers(deltaTime);
-            AcquireTarget();
+
+            _targeting.Refresh(
+                _weapon != null && _weapon.UsesAttackQueue,
+                _weapon != null ? _weapon.TargetLockSeconds : 0f,
+                _context.Tuning.MaxSimultaneousAttackers);
 
             // 경직 중이거나 공격 동작에 붙잡힌 동안에는 스스로 움직이지 않습니다.
             // 넉백은 그와 무관하게 계속 적용됩니다. 맞고 밀려나는 도중에 버티면 넉백이 무의미해집니다.
             bool canSteer = _staggerTimer <= 0f && _rootTimer <= 0f;
-            Vector3 steering = canSteer ? ComputeSteering(deltaTime) : Vector3.zero;
+            Vector3 steering = canSteer ? SolveSteering(deltaTime) : Vector3.zero;
 
             // 이동 여부를 여기서 한 번만 정합니다.
             // 전투 규칙(창병의 이동 중 공격 금지)과 무기의 자세가 같은 판단을 봐야 합니다.
@@ -276,11 +227,13 @@ namespace SRPG.Gameplay.Units
             _health = definition.MaxHealth;
             IsAlive = true;
             _slotTarget = _transform.position;
-            _knockbackVelocity = Vector3.zero;
-            _lungeVelocity = Vector3.zero;
-            _separationVelocity = Vector3.zero;
             _staggerTimer = 0f;
             _rootTimer = 0f;
+
+            _targeting.Configure(this, context, definition);
+            _locomotion.Configure(this, context, definition);
+            _facing.Configure(this, _transform, context, definition);
+            _attackerSlots.Clear();
 
             // 같은 프레임에 생성된 유닛들이 동시에 공격하지 않도록 첫 쿨다운을 흩뜨립니다.
             _attackTimer = UnityEngine.Random.Range(0f, definition.AttackInterval);
@@ -439,8 +392,7 @@ namespace SRPG.Gameplay.Units
                 return;
             }
 
-            impulse.y = 0f;
-            _knockbackVelocity += impulse;
+            _locomotion.AddKnockback(impulse);
 
             if (staggerSeconds > 0f)
             {
@@ -462,8 +414,7 @@ namespace SRPG.Gameplay.Units
                 return;
             }
 
-            impulse.y = 0f;
-            _lungeVelocity += impulse;
+            _locomotion.AddLunge(impulse);
         }
 
         /// <summary>
@@ -501,31 +452,20 @@ namespace SRPG.Gameplay.Units
 
         /// <summary>
         /// 교전 대상이 없을 때 바라볼 방향을 분대가 지정합니다.
-        ///
-        /// 이게 없으면 대기 중인 병사는 <b>마지막으로 걷던 방향</b>을 그대로 보고 서 있습니다.
-        /// 분대가 해안을 등지고 도착하면 전원이 섬 안쪽을 보고 선 채로 상륙을 맞이합니다.
         /// </summary>
         public void SetIdleFacing(Vector3 direction)
         {
-            direction.y = 0f;
-
-            if (direction.sqrMagnitude > 0.0001f)
-            {
-                _idleFacing = direction.normalized;
-                _hasIdleFacing = true;
-            }
+            _facing.SetIdleFacing(direction);
         }
 
         // ====================================================================================================
-        // 9-1. Public Methods - Attack Queue
+        // 10. Public Methods - Attack Queue
         // ====================================================================================================
 
         /// <summary>
         /// 나를 칠 자리를 하나 예약합니다. 이미 자리가 찼으면 거절합니다.
         ///
-        /// <b>정원은 체력으로 정해집니다.</b> 한 방에 죽는 적에게는 한 명만 붙고,
-        /// 여러 대를 맞아야 하는 거구에게는 여러 명이 함께 붙습니다.
-        /// 이 한 줄이 "덩치 큰 적에게는 유동적으로 여럿이 달라붙는다"를 규칙 없이 만들어 냅니다.
+        /// <b>정원은 체력으로 정해집니다.</b> 규칙은 <see cref="AttackerSlots"/>가 들고 있습니다.
         /// </summary>
         /// <param name="attacker">예약하려는 쪽입니다.</param>
         /// <param name="damagePerHit">그 공격이 한 번에 주는 피해량입니다. 정원 계산의 분모입니다.</param>
@@ -538,23 +478,7 @@ namespace SRPG.Gameplay.Units
                 return false;
             }
 
-            // 이미 잡아 둔 자리는 그대로 유지합니다.
-            if (_committedAttackers.Contains(attacker))
-            {
-                return true;
-            }
-
-            PruneCommittedAttackers();
-
-            int capacity = ComputeAttackerCapacity(damagePerHit, maxAttackers);
-
-            if (_committedAttackers.Count >= capacity)
-            {
-                return false;
-            }
-
-            _committedAttackers.Add(attacker);
-            return true;
+            return _attackerSlots.TryCommit(attacker, _health, damagePerHit, maxAttackers);
         }
 
         /// <summary>
@@ -567,14 +491,13 @@ namespace SRPG.Gameplay.Units
                 return false;
             }
 
-            if (attacker != null && _committedAttackers.Contains(attacker))
-            {
-                return true;
-            }
+            return _attackerSlots.HasRoom(attacker, _health, damagePerHit, maxAttackers);
+        }
 
-            PruneCommittedAttackers();
-
-            return _committedAttackers.Count < ComputeAttackerCapacity(damagePerHit, maxAttackers);
+        /// <summary>예약을 놓습니다. 표적을 바꾸거나 죽을 때 호출합니다.</summary>
+        public void ReleaseAttacker(Unit attacker)
+        {
+            _attackerSlots.Release(attacker);
         }
 
         /// <summary>
@@ -585,37 +508,8 @@ namespace SRPG.Gameplay.Units
             return _context != null ? _context.FindNearestEnemy(Position, _team, radius) : null;
         }
 
-        /// <summary>예약을 놓습니다. 표적을 바꾸거나 죽을 때 호출합니다.</summary>
-        public void ReleaseAttacker(Unit attacker)
-        {
-            if (attacker != null)
-            {
-                _committedAttackers.Remove(attacker);
-            }
-        }
-
-        /// <summary>
-        /// 동시에 붙을 수 있는 인원입니다. 지금 체력을 한 방 피해로 나눈 값입니다.
-        /// </summary>
-        private int ComputeAttackerCapacity(float damagePerHit, int maxAttackers)
-        {
-            if (damagePerHit <= 0.01f)
-            {
-                return Mathf.Max(1, maxAttackers);
-            }
-
-            int needed = Mathf.CeilToInt(_health / damagePerHit);
-            return Mathf.Clamp(needed, 1, Mathf.Max(1, maxAttackers));
-        }
-
-        /// <summary>죽었거나 사라진 예약자를 정리합니다.</summary>
-        private void PruneCommittedAttackers()
-        {
-            _committedAttackers.RemoveWhere(attacker => attacker == null || !attacker.IsAlive);
-        }
-
         // ====================================================================================================
-        // 10. Private Methods - Setup
+        // 11. Private Methods - Setup
         // ====================================================================================================
 
         /// <summary>
@@ -667,7 +561,7 @@ namespace SRPG.Gameplay.Units
         }
 
         // ====================================================================================================
-        // 11. Private Methods - Decision
+        // 12. Private Methods - Tick
         // ====================================================================================================
 
         private void TickTimers(float deltaTime)
@@ -675,253 +569,35 @@ namespace SRPG.Gameplay.Units
             _attackTimer -= deltaTime;
             _staggerTimer -= deltaTime;
             _rootTimer -= deltaTime;
-            _targetLockTimer -= deltaTime;
-            _threatScanTimer -= deltaTime;
 
-            _knockbackVelocity = Vector3.MoveTowards(
-                _knockbackVelocity,
-                Vector3.zero,
-                KnockbackDecay * deltaTime);
-
-            // 도약은 넉백보다 빨리 잦아듭니다. 한 걸음 파고드는 것이지 미끄러지는 것이 아닙니다.
-            _lungeVelocity = Vector3.MoveTowards(
-                _lungeVelocity,
-                Vector3.zero,
-                LungeDecay * deltaTime);
+            _targeting.Tick(deltaTime);
+            _facing.Tick(deltaTime);
+            _locomotion.Decay(deltaTime);
         }
 
         /// <summary>
-        /// 교전 대상을 갱신합니다. 기존 대상이 죽거나 너무 멀어지면 새로 탐색합니다.
-        /// </summary>
-        private void AcquireTarget()
-        {
-            if (_target != null)
-            {
-                if (!_target.IsAlive)
-                {
-                    ClearTarget();
-                }
-                else
-                {
-                    // 히스테리시스를 두어 대상이 매 프레임 바뀌며 떨리는 것을 막습니다.
-                    float sqrDistance = (_target.Position - Position).sqrMagnitude;
-                    float dropRange = _definition.EngageRadius * 1.5f;
-                    if (sqrDistance > dropRange * dropRange)
-                    {
-                        ClearTarget();
-                    }
-                }
-            }
-
-            // 표적 고정: 한 번 잡으면 잠시 바꾸지 않습니다.
-            // 더 가까운 적이 나타날 때마다 시선을 돌리면 창끝이 흩어지고 방어선에 구멍이 납니다.
-            if (_target != null && _targetLockTimer > 0f)
-            {
-                return;
-            }
-
-            if (_target != null)
-            {
-                return;
-            }
-
-            var found = _weapon != null && _weapon.UsesAttackQueue
-                ? FindUnclaimedEnemy()
-                : _context.FindNearestEnemy(Position, _team, _definition.EngageRadius);
-
-            if (found == null)
-            {
-                return;
-            }
-
-            _target = found;
-            _targetLockTimer = _weapon != null ? _weapon.TargetLockSeconds : 0f;
-        }
-
-        /// <summary>
-        /// 아직 자리가 남은 적 중 가장 가까운 쪽을 고릅니다.
+        /// 이번 프레임의 이동 지시를 모아 조향을 구합니다.
         ///
-        /// <b>공격 대기열의 실행부입니다.</b> 다른 병사가 이미 맡은 적은 건너뛰고 다음으로 다가오는 적을 봅니다.
-        /// 아무도 남지 않았으면(전부 자리가 찼으면) 가장 가까운 적으로 되돌아갑니다.
-        /// 그러지 않으면 방어선 전체가 손을 놓고 서 있게 됩니다.
+        /// 슬롯은 분대가, 리시와 후퇴는 무기가 정합니다.
+        /// 여기서 그 셋을 한자리에 모아 넘기므로, 이동을 계산하는 쪽은 무기를 캐묻지 않아도 됩니다.
         /// </summary>
-        private Unit FindUnclaimedEnemy()
+        private Vector3 SolveSteering(float deltaTime)
         {
-            var enemyTeam = _team == Team.Player ? Team.Enemy : Team.Player;
-            int count = _context.QueryTeam(Position, _definition.EngageRadius, enemyTeam, null, _candidateBuffer);
+            Vector3 retreatFrom = Vector3.zero;
+            bool retreating = _weapon != null && _weapon.TryGetRetreatFrom(out retreatFrom);
 
-            Unit best = null;
-            float bestSqr = float.MaxValue;
+            var target = _targeting.Target;
+            bool hasTarget = _targeting.HasLivingTarget;
 
-            int maxAttackers = _context.Tuning.MaxSimultaneousAttackers;
+            var order = new SteeringOrder(
+                _slotTarget,
+                hasTarget,
+                hasTarget ? target.Position : Vector3.zero,
+                GetFormationBreakDistance(),
+                retreating,
+                retreatFrom);
 
-            for (int i = 0; i < count; i++)
-            {
-                var candidate = _candidateBuffer[i];
-                if (candidate == null || !candidate.IsAlive)
-                {
-                    continue;
-                }
-
-                // 이미 정원이 찬 적은 건너뜁니다. 예약은 실제로 공격을 시작할 때 잡습니다.
-                if (!candidate.HasRoomForAttacker(this, _definition.AttackDamage, maxAttackers))
-                {
-                    continue;
-                }
-
-                float sqr = (candidate.Position - Position).sqrMagnitude;
-                if (sqr < bestSqr)
-                {
-                    bestSqr = sqr;
-                    best = candidate;
-                }
-            }
-
-            // 전부 찼으면 평소대로 가장 가까운 적을 봅니다.
-            return best ?? _context.FindNearestEnemy(Position, _team, _definition.EngageRadius);
-        }
-
-        /// <summary>표적을 놓고 예약도 함께 반납합니다.</summary>
-        private void ClearTarget()
-        {
-            _target?.ReleaseAttacker(this);
-            _target = null;
-            _targetLockTimer = 0f;
-        }
-
-        /// <summary>
-        /// 이번 프레임의 목표 속도를 계산합니다. 도착 조향과 분리 조향의 합입니다.
-        /// </summary>
-        private Vector3 ComputeSteering(float deltaTime)
-        {
-            Vector3 position = Position;
-            Vector3 destination = _slotTarget;
-
-            float slotDistance = Vector3.Distance(
-                new Vector3(position.x, 0f, position.z),
-                new Vector3(_slotTarget.x, 0f, _slotTarget.z));
-
-            bool atSlot = slotDistance <= SlotArrivalThreshold;
-
-            // 진형 붕괴: 품 안을 내준 무기는 싸울 방법이 없습니다. 물러나는 것이 유일한 반응입니다.
-            if (_weapon != null && _weapon.TryGetRetreatFrom(out Vector3 threat))
-            {
-                Vector3 away = position - threat;
-                away.y = 0f;
-
-                if (away.sqrMagnitude > 0.0001f)
-                {
-                    return away.normalized * _definition.MoveSpeed;
-                }
-            }
-
-            // 얼마나 나설 수 있는지는 무기가 정합니다. 창병과 궁수는 0이라 자리를 지킵니다.
-            float leash = GetFormationBreakDistance();
-
-            // 대열을 풀 수 있는 병과는 <b>행군 중에도</b> 눈앞의 적에게 붙습니다.
-            // 자리를 잡은 뒤에만 나서게 하면 행군로에 선 적을 그냥 지나쳐 가 버립니다.
-            bool mayEngage = atSlot || leash > 0f;
-
-            if (mayEngage && _target != null && _target.IsAlive)
-            {
-                // 리시는 자기 자리(행군 중이면 앵커)에서 잽니다.
-                // 분대가 지나가 버리면 거리가 벌어져 자연히 교전을 접고 따라붙습니다.
-                // 별도의 "복귀" 규칙 없이 이 한 줄이 이탈 시간을 스스로 제한합니다.
-                bool withinLeash = leash > 0f
-                                   && Vector3.Distance(_target.Position, _slotTarget) <= leash;
-
-                float targetDistance = Vector3.Distance(position, _target.Position);
-
-                if (targetDistance <= _definition.AttackRange)
-                {
-                    // 사거리 안입니다. 자리를 지키는 병과이거나 아직 리시 안이면 멈춰 싸웁니다.
-                    if (atSlot || withinLeash)
-                    {
-                        destination = position;
-                    }
-                }
-                else if (withinLeash)
-                {
-                    destination = _target.Position;
-                }
-            }
-
-            Vector3 velocity = SteeringSolver.Arrive(position, destination, _definition.MoveSpeed, ArriveSlowRadius);
-
-            // 아군끼리 겹치지 않도록 밀어냅니다.
-            float separationRadius = _definition.Radius * 2.4f;
-
-            Vector3 separation = ComputeSeparation(
-                position, separationRadius, _team, this, _context.Tuning.AllySeparationWeight);
-
-            // 적과도 밀어냅니다. 다만 <b>약하게</b>입니다.
-            //
-            // 안 밀어내면 난전에서 몸이 그대로 겹쳐 어느 쪽이 어디 있는지 알 수 없게 됩니다.
-            // 그렇다고 아군만큼 세게 밀면 서로 다가가지 못해 영영 칼이 닿지 않습니다.
-            // 부딪히되 뚫고 지나가지는 않는 정도가 필요합니다.
-            var enemyTeam = _team == Team.Player ? Team.Enemy : Team.Player;
-            separation += ComputeSeparation(
-                position, separationRadius, enemyTeam, null, _context.Tuning.EnemySeparationWeight);
-
-            // <b>분리 성분만 따로 부드럽게 따라갑니다.</b>
-            //
-            // 계산된 값을 그대로 더하면, 이웃이 반경에 들어오거나 슬롯 배정이 바뀌는 순간
-            // 속도가 계단처럼 튑니다. 옆 사람이 다가왔을 뿐인데 홱 밀려나는 것처럼 보입니다.
-            // 도착 조향은 원래 부드러우므로 여기만 눌러 주면 됩니다.
-            float smoothing = Mathf.Max(0.01f, _context.Tuning.SeparationSmoothing);
-            _separationVelocity = Vector3.Lerp(
-                _separationVelocity,
-                separation,
-                1f - Mathf.Exp(-smoothing * deltaTime));
-
-            velocity += _separationVelocity;
-
-            // 최대 속도를 넘지 않게 제한합니다.
-            float maxSpeed = _definition.MoveSpeed;
-            if (velocity.sqrMagnitude > maxSpeed * maxSpeed)
-            {
-                velocity = velocity.normalized * maxSpeed;
-            }
-
-            return velocity;
-        }
-
-        /// <summary>
-        /// 방패를 든 병사가 몸을 돌려야 할 위협 방향입니다.
-        ///
-        /// 방패는 정면만 막으므로, 서 있는 동안 어디를 보느냐가 곧 방어력입니다.
-        /// 뒤에서 날아오는 화살에 등을 보이고 있으면 저항이 통째로 무의미해집니다.
-        ///
-        /// 교전 반경보다 넓게 봅니다. 궁수는 사거리 밖에서 쏘므로,
-        /// 교전 반경만 보면 정작 나를 쏘는 상대를 영영 인지하지 못합니다.
-        /// 매 프레임 질의하지 않고 <see cref="ThreatScanInterval"/>마다 한 번만 갱신합니다.
-        /// </summary>
-        private bool TryGetThreatFacing(Vector3 position, out Vector3 facing)
-        {
-            facing = Vector3.zero;
-
-            if (_definition.ProjectileResistance <= 0f || _context == null)
-            {
-                return false;
-            }
-
-            if (_threatScanTimer <= 0f)
-            {
-                _threatScanTimer = ThreatScanInterval;
-
-                float radius = _context.Tuning.ShieldThreatRadius;
-                _threatSource = radius > 0f
-                    ? _context.FindNearestEnemy(position, _team, radius)
-                    : null;
-            }
-
-            if (_threatSource == null || !_threatSource.IsAlive)
-            {
-                return false;
-            }
-
-            facing = _threatSource.Position - position;
-            return facing.sqrMagnitude > 0.0001f;
+            return _locomotion.Solve(order, Position, deltaTime);
         }
 
         /// <summary>
@@ -941,33 +617,8 @@ namespace SRPG.Gameplay.Units
             return _weapon.FormationBreakTiles * _context.Grid.CellSize;
         }
 
-        /// <summary>
-        /// 지정 진영의 이웃에게서 밀려나는 속도를 구합니다.
-        /// </summary>
-        private Vector3 ComputeSeparation(Vector3 position, float radius, Team team, Unit exclude, float weight)
-        {
-            if (weight <= 0f)
-            {
-                return Vector3.zero;
-            }
-
-            int count = _context.QueryTeam(position, radius, team, exclude, _neighborBuffer);
-            if (count == 0)
-            {
-                return Vector3.zero;
-            }
-
-            Vector3 separation = Vector3.zero;
-            for (int i = 0; i < count; i++)
-            {
-                separation += SteeringSolver.SeparationFrom(position, _neighborBuffer[i].Position, radius);
-            }
-
-            return separation * (_definition.MoveSpeed * weight);
-        }
-
         // ====================================================================================================
-        // 12. Private Methods - Combat
+        // 13. Private Methods - Combat
         // ====================================================================================================
 
         /// <summary>
@@ -983,38 +634,34 @@ namespace SRPG.Gameplay.Units
 
             _weapon.Tick(deltaTime);
 
-            if (_weapon.IsBusy || _staggerTimer > 0f || _attackTimer > 0f)
-            {
-                return;
-            }
+            var target = _targeting.Target;
+            bool hasLivingTarget = _targeting.HasLivingTarget;
 
-            if (_target == null || !_target.IsAlive)
-            {
-                return;
-            }
+            var blocked = AttackGate.Evaluate(new AttackGateInput(
+                _weapon.IsBusy,
+                _staggerTimer,
+                _attackTimer,
+                hasLivingTarget,
+                IsMoving,
+                _definition.CanAttackWhileMoving,
+                hasLivingTarget ? Vector3.Distance(Position, target.Position) : float.MaxValue,
+                _definition.AttackRange));
 
-            // 창병 규칙: 이동 중에는 공격하지 않습니다. 자리를 먼저 잡도록 강제하는 장치입니다.
-            if (IsMoving && !_definition.CanAttackWhileMoving)
-            {
-                return;
-            }
-
-            if (Vector3.Distance(Position, _target.Position) > _definition.AttackRange)
+            if (blocked != AttackBlock.None)
             {
                 return;
             }
 
             // 공격 대기열: 찌르기 직전에 자리를 예약합니다.
-            // 자리가 없으면 이번 공격을 보류합니다. 다음 표적 탐색에서 다른 적으로 옮겨 갑니다.
+            // 자리가 없으면 이번 공격을 보류합니다.
             if (_weapon.UsesAttackQueue &&
-                !_target.TryCommitAttacker(this, _definition.AttackDamage, _context.Tuning.MaxSimultaneousAttackers))
+                !target.TryCommitAttacker(this, _definition.AttackDamage, _context.Tuning.MaxSimultaneousAttackers))
             {
-                // 고정이 풀리면 다른 적을 보게 됩니다.
-                _targetLockTimer = 0f;
+                _targeting.BreakLock();
                 return;
             }
 
-            if (_weapon.TryBeginAttack(_target))
+            if (_weapon.TryBeginAttack(target))
             {
                 _attackTimer = _definition.AttackInterval;
                 _rootTimer = _weapon.RootDuration;
@@ -1022,137 +669,31 @@ namespace SRPG.Gameplay.Units
         }
 
         // ====================================================================================================
-        // 13. Private Methods - Movement
+        // 14. Private Methods - Movement
         // ====================================================================================================
 
         /// <summary>
-        /// 조향과 넉백을 합쳐 실제로 이동시키고, 지면 높이에 맞춰 스냅합니다.
+        /// 조향과 외력을 합쳐 실제로 이동시키고, 방향을 갱신합니다.
         /// </summary>
         private void ApplyMovement(Vector3 steering, float deltaTime)
         {
-            _lastVelocity = steering;
-
-            Vector3 total = steering + _knockbackVelocity + _lungeVelocity;
-            Vector3 position = Position;
-            Vector3 next = position + total * deltaTime;
-
-            if (!ResolveGround(position, ref next))
+            if (!_locomotion.TryStep(Position, steering, deltaTime, out Vector3 next))
             {
-                return; // 익사 처리됨
+                Drown(next);
+                return;
             }
 
             _transform.position = next;
-            UpdateFacing(next, steering, deltaTime);
+            _facing.Apply(next, steering, IsMoving, _targeting.Target, _weapon, deltaTime);
         }
 
         /// <summary>
-        /// 도착 지점의 지형을 판정합니다.
-        ///
-        /// 평상시에는 갈 수 없는 곳으로 밀려나지 않습니다.
-        /// 그러나 <b>넉백 중에는 물 위로 밀려날 수 있고, 그러면 익사합니다.</b>
-        /// 이 예외가 없으면 넉백은 그냥 밀치기 연출이 되고, 물이 위험 요소가 되지 않습니다.
-        /// </summary>
-        /// <returns>계속 진행하면 true, 익사해 처리가 끝났으면 false입니다.</returns>
-        private bool ResolveGround(Vector3 position, ref Vector3 next)
-        {
-            var grid = _context.Grid;
-
-            // 익사 판정이 먼저입니다.
-            // 미끄러짐을 먼저 보면 밀려나던 유닛이 물가를 따라 스르륵 비껴가고, 물이 위험 요소가 아니게 됩니다.
-            bool beingKnockedBack = _knockbackVelocity.sqrMagnitude > DrownKnockbackThreshold * DrownKnockbackThreshold;
-
-            if (beingKnockedBack && GroundMotion.IsWater(grid, next))
-            {
-                Drown(next);
-                return false;
-            }
-
-            // 막혔으면 벽을 따라 미끄러집니다.
-            //
-            // 예전에는 제자리에 멈췄습니다. 벽에 비스듬히 다가가는 병사는 어느 축으로도 못 나아가
-            // 그 자리에서 굳고, 분대는 떠나가고 그 한 명만 낙오했습니다.
-            next = GroundMotion.Resolve(grid, position, next);
-            return true;
-        }
-
-        /// <summary>
-        /// 물에 빠져 죽습니다.
+        /// 물에 빠져 죽습니다. 낙수 지점은 이미 수면 높이로 맞춰져 있습니다.
         /// </summary>
         private void Drown(Vector3 splashPosition)
         {
-            _transform.position = new Vector3(splashPosition.x, 0f, splashPosition.z);
+            _transform.position = splashPosition;
             Kill();
-        }
-
-        /// <summary>
-        /// 바라보는 방향을 갱신합니다.
-        /// 교전 중에는 더 빠르게 돕니다. 무기 판정이 정면 기준이라 늦게 돌면 헛칩니다.
-        /// </summary>
-        private void UpdateFacing(Vector3 position, Vector3 steering, float deltaTime)
-        {
-            bool hasTarget = _target != null && _target.IsAlive;
-
-            Vector3 facing;
-
-            if (hasTarget)
-            {
-                // 무기가 겨눌 자리를 따로 가지고 있으면 그쪽을 봅니다.
-                // 창은 적이 지금 있는 곳이 아니라 <b>올 자리</b>를 미리 겨눕니다.
-                Vector3 lookTarget = _weapon != null && _weapon.TryGetAimPoint(_target, out var aimPoint)
-                    ? aimPoint
-                    : _target.Position;
-
-                facing = lookTarget - position;
-            }
-            else if (TryGetThreatFacing(position, out var threatFacing))
-            {
-                // 방패를 든 채 서 있는 병사는 위협 쪽으로 몸을 돌립니다.
-                // 방패는 정면만 막으므로 어디를 보고 서 있느냐가 곧 방어력입니다.
-                facing = threatFacing;
-            }
-            else if (IsMoving)
-            {
-                // 걷는 중에는 가는 쪽을 봅니다.
-                facing = steering;
-            }
-            else
-            {
-                // 멈춰 서 있으면 분대가 지정한 방향을 봅니다. 보통 해안선이나 적의 진로입니다.
-                facing = _hasIdleFacing ? _idleFacing : steering;
-            }
-
-            facing.y = 0f;
-
-            if (facing.sqrMagnitude <= 0.0001f)
-            {
-                return;
-            }
-
-            float targetYaw = Quaternion.LookRotation(facing.normalized, Vector3.up).eulerAngles.y;
-
-            // 무게가 있는 무기는 스프링으로 돕니다.
-            // 보간은 언제나 목표를 향해 곧바로 줄어들어 관성이 없습니다.
-            // 그래서 표적을 옮길 때마다 창이 로봇처럼 휙 꺾입니다.
-            if (_weapon != null && _weapon.UsesSpringTurn)
-            {
-                float yaw = SpringDamper.StepAngle(
-                    _transform.eulerAngles.y,
-                    targetYaw,
-                    ref _yawVelocity,
-                    _weapon.TurnSpringFrequency,
-                    _weapon.TurnSpringDamping,
-                    deltaTime);
-
-                _transform.rotation = Quaternion.Euler(0f, yaw, 0f);
-                return;
-            }
-
-            float turnSpeed = hasTarget ? CombatTurnSpeed : TurnSpeed;
-
-            _transform.rotation = Quaternion.Slerp(
-                _transform.rotation,
-                Quaternion.LookRotation(facing.normalized, Vector3.up),
-                turnSpeed * deltaTime);
         }
     }
 }
