@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
@@ -107,30 +107,14 @@ namespace SRPG.Tests.EditMode
         }
 
         [Test]
-        public void Generate_HasLandingZones()
+        public void Generate_HasFacingDeploymentZones()
         {
-            var field = BattlefieldGenerator.Generate(BattlefieldSpec.CreateDefault(TerrainKind.Plains, Seed));
+            var field = BattlefieldGenerator.Generate(BattlefieldSpec.CreateDefault(seed: 20260809));
 
-            Assert.Greater(field.Grid.LandingZones.Count, 1, "상륙 구역이 하나뿐이면 반대편을 지킬 이유가 없습니다.");
+            Assert.Greater(field.Grid.PlayerDeployment.Count, 0, "아군이 설 자리가 없습니다.");
+            Assert.Greater(field.Grid.EnemyDeployment.Count, 0, "적이 설 자리가 없습니다.");
         }
 
-        [Test]
-        public void Generate_PlacesHouses()
-        {
-            var field = BattlefieldGenerator.Generate(BattlefieldSpec.CreateDefault(TerrainKind.Plains, Seed));
-
-            int houses = 0;
-
-            for (int i = 0; i < field.Grid.AllTiles.Count; i++)
-            {
-                if (field.Grid.AllTiles[i].Type == TileType.House)
-                {
-                    houses++;
-                }
-            }
-
-            Assert.Greater(houses, 0, "적 AI가 노릴 목표가 없습니다.");
-        }
 
         // ====================================================================================================
         // 4. Tests - Terrain and Grid Agree

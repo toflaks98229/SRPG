@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Systems.Formation;
@@ -268,21 +268,23 @@ namespace SRPG.Tests
             Assert.AreEqual(3, SpawnPlacement.SelectSquadTiles(grid, 3, result), "설 곳이 없다고 물러났습니다.");
         }
 
-        /// <summary>가옥 위에는 서지 않습니다. 지켜야 할 것을 밟고 설 이유가 없습니다.</summary>
+        /// <summary>
+        /// 물가에는 서지 않습니다. 넉백 한 번에 병사가 빠져 죽는 자리입니다.
+        /// </summary>
         [Test]
-        public void 가옥_위에는_서지_않는다()
+        public void 물가에는_서지_않는다()
         {
             var grid = BuildInland(11, 11);
 
-            At(grid, 5, 5).Type = TileType.House;
-            At(grid, 5, 6).Type = TileType.House;
+            At(grid, 5, 5).IsCoastal = true;
+            At(grid, 5, 6).IsCoastal = true;
 
             var result = new List<Tile>();
             SpawnPlacement.SelectSquadTiles(grid, 4, result);
 
             foreach (var tile in result)
             {
-                Assert.AreNotEqual(TileType.House, tile.Type, $"가옥 위에 섰습니다: {tile.Coord}");
+                Assert.IsFalse(tile.IsCoastal, $"물가에 섰습니다: {tile.Coord}");
             }
         }
 

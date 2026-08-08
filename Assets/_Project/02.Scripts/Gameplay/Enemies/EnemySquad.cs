@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
@@ -81,9 +81,6 @@ namespace SRPG.Gameplay.Enemies
 
         /// <summary>현재 향하는 목표 좌표입니다.</summary>
         public GridCoord GoalCoord => _motor.Destination;
-
-        /// <summary>현재 목표의 종류입니다. 디버그 표시에 씁니다.</summary>
-        public GoalKind GoalKind { get; private set; } = GoalKind.House;
 
         /// <summary>현재 목표의 유용도 점수입니다. 디버그 표시에 씁니다.</summary>
         public float GoalScore => _currentGoalScore;
@@ -236,17 +233,11 @@ namespace SRPG.Gameplay.Enemies
         }
 
         /// <summary>
-        /// 목표 후보를 모읍니다. 가옥 전부와 플레이어 유닛이 서 있는 칸입니다.
+        /// 목표 후보를 모읍니다. 플레이어 유닛이 서 있는 칸입니다.
         /// </summary>
         private void BuildCandidates()
         {
             _candidates.Clear();
-
-            var houses = _context.Grid.HouseTiles;
-            for (int i = 0; i < houses.Count; i++)
-            {
-                _candidates.Add(new GoalCandidate(houses[i].Coord, GoalKind.House));
-            }
 
             var players = _context.PlayerUnits;
             for (int i = 0; i < players.Count; i++)
@@ -262,11 +253,11 @@ namespace SRPG.Gameplay.Enemies
 
                 if (tile != null && tile.IsWalkable)
                 {
-                    _candidates.Add(new GoalCandidate(coord, GoalKind.PlayerSquad));
+                    _candidates.Add(new GoalCandidate(coord));
                 }
             }
 
-            // 가옥도 플레이어도 없으면 갈 곳이 없습니다. 상륙 지점에 머뭅니다.
+            // 칠 부대가 없으면 갈 곳이 없습니다. 그 자리에 머뭅니다.
         }
 
         private EnemyGoalPlanner.Weights ReadWeights()
@@ -276,8 +267,7 @@ namespace SRPG.Gameplay.Enemies
             return new EnemyGoalPlanner.Weights
             {
                 Proximity = tuning.AiProximityWeight,
-                Value = tuning.AiValueWeight,
-                Undefended = tuning.AiUndefendedWeight,
+                Isolation = tuning.AiIsolationWeight,
                 OpenGround = tuning.AiOpenGroundWeight,
             };
         }
@@ -315,7 +305,6 @@ namespace SRPG.Gameplay.Enemies
             _context.EnemyOccupancy.Claim(resolved, this);
 
             _motor.SetPath(_path, resolved);
-            GoalKind = goal.Kind;
             _currentGoalScore = score;
         }
 

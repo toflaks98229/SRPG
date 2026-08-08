@@ -1,5 +1,6 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
+using SRPG.Systems.Deployment;
 using SRPG.Systems.Grid;
 using UnityEngine;
 
@@ -54,16 +55,12 @@ namespace SRPG.Tests.Support
         /// <param name="depth">격자 세로 칸 수입니다.</param>
         /// <param name="maxHeightLevel">최대 고도 단계입니다.</param>
         /// <param name="cliffCount">놓을 절벽 수입니다. 연결을 끊는 자리는 건너뜁니다.</param>
-        /// <param name="houseCount">놓을 가옥 수입니다.</param>
-        /// <param name="landingZoneCount">나눌 상륙 구역 수입니다.</param>
         public static IslandGrid Create(
             int seed = 1,
             int width = 24,
             int depth = 24,
             int maxHeightLevel = 2,
-            int cliffCount = 6,
-            int houseCount = 3,
-            int landingZoneCount = 4)
+            int cliffCount = 6)
         {
             var grid = new IslandGrid(width, depth, cellSize: 2f, heightStep: 0.9f) { Seed = seed };
             var random = new System.Random(seed);
@@ -99,10 +96,8 @@ namespace SRPG.Tests.Support
             PlaceCliffs(grid, random, cliffCount);
             grid.RebuildDerivedData();
 
-            PlaceHouses(grid, random, houseCount);
-            grid.RebuildDerivedData();
-
-            BuildLandingZones(grid, landingZoneCount);
+            // 야전 테스트 격자도 마주 보는 전개 구역을 갖습니다.
+            DeploymentZones.Build(grid, seed);
 
             return grid;
         }
@@ -114,7 +109,7 @@ namespace SRPG.Tests.Support
         /// </summary>
         public static IslandGrid CreateFlat(int width = 16, int depth = 16)
         {
-            return Create(seed: 1, width: width, depth: depth, maxHeightLevel: 0, cliffCount: 0, houseCount: 1);
+            return Create(seed: 1, width: width, depth: depth, maxHeightLevel: 0, cliffCount: 0);
         }
 
         // ====================================================================================================
@@ -299,104 +294,5 @@ namespace SRPG.Tests.Support
             return visited.Count == grid.WalkableTiles.Count;
         }
 
-        private static void PlaceHouses(IslandGrid grid, System.Random random, int count)
-        {
-            if (count <= 0)
-            {
-                return;
-            }
-
-            var candidates = new List<Tile>();
-
-            for (int i = 0; i < grid.WalkableTiles.Count; i++)
-            {
-                var tile = grid.WalkableTiles[i];
-
-                if (tile.Type == TileType.Ground && !tile.IsCoastal)
-                {
-                    candidates.Add(tile);
-                }
-            }
-
-            // 내륙이 없으면 조건을 풉니다. 가옥이 없으면 목표가 없는 섬이 됩니다.
-            if (candidates.Count == 0)
-            {
-                candidates.AddRange(grid.WalkableTiles);
-            }
-
-            for (int i = candidates.Count - 1; i > 0; i--)
-            {
-                int j = random.Next(i + 1);
-                (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
-            }
-
-            for (int i = 0; i < candidates.Count && i < count; i++)
-            {
-                candidates[i].Type = TileType.House;
-            }
-        }
-
-        /// <summary>
-        /// 해변을 각도로 나눠 상륙 구역을 만듭니다. 구역들이 섬 둘레에 고르게 흩어집니다.
-        /// </summary>
-        private static void BuildLandingZones(IslandGrid grid, int count)
-        {
-            grid.LandingZones.Clear();
-
-            var coastal = new List<Tile>();
-
-            for (int i = 0; i < grid.WalkableTiles.Count; i++)
-            {
-                var tile = grid.WalkableTiles[i];
-
-                if (tile.IsCoastal && tile.Type == TileType.Beach)
-                {
-                    coastal.Add(tile);
-                }
-            }
-
-            if (coastal.Count == 0 || count <= 0)
-            {
-                return;
-            }
-
-            int zoneCount = Mathf.Clamp(count, 1, coastal.Count);
-            var buckets = new List<Tile>[zoneCount];
-
-            for (int i = 0; i < zoneCount; i++)
-            {
-                buckets[i] = new List<Tile>();
-            }
-
-            float cx = (grid.Width - 1) * 0.5f;
-            float cy = (grid.Depth - 1) * 0.5f;
-
-            for (int i = 0; i < coastal.Count; i++)
-            {
-                float angle = Mathf.Atan2(coastal[i].Coord.Y - cy, coastal[i].Coord.X - cx);
-                float normalized = (angle + Mathf.PI) / (2f * Mathf.PI);
-
-                int bucket = Mathf.Clamp(Mathf.FloorToInt(normalized * zoneCount), 0, zoneCount - 1);
-                buckets[bucket].Add(coastal[i]);
-            }
-
-            int zoneId = 0;
-
-            for (int i = 0; i < zoneCount; i++)
-            {
-                if (buckets[i].Count == 0)
-                {
-                    continue;
-                }
-
-                for (int t = 0; t < buckets[i].Count; t++)
-                {
-                    buckets[i][t].LandingZoneId = zoneId;
-                }
-
-                grid.LandingZones.Add(buckets[i]);
-                zoneId++;
-            }
-        }
     }
 }

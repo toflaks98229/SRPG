@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Systems.Grid;
 using UnityEngine;
@@ -64,8 +64,8 @@ namespace SRPG.Systems.Formation
             {
                 var tile = grid.WalkableTiles[i];
 
-                // 가옥 위와 해안은 피해 안쪽 평지에 배치합니다.
-                // 해안에 세우면 상륙정이 닿는 자리에 그대로 서 있게 됩니다.
+                // 물가는 피해 안쪽 평지에 배치합니다.
+                // 물가에 세우면 넉백 한 번에 병사가 빠져 죽습니다.
                 if (tile.Type == TileType.Ground && !tile.IsCoastal)
                 {
                     candidates.Add(tile);

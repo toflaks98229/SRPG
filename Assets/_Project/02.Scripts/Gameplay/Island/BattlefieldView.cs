@@ -1,4 +1,4 @@
-using SRPG.Common;
+﻿using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Visual;
 using SRPG.Systems.Battlefield;
@@ -42,7 +42,6 @@ namespace SRPG.Gameplay.Island
 
         private static readonly Color GroundColor = new Color(0.44f, 0.62f, 0.36f);
         private static readonly Color RockColor = new Color(0.42f, 0.40f, 0.43f);
-        private static readonly Color ObjectiveColor = new Color(0.72f, 0.48f, 0.28f);
         private static readonly Color WaterColor = new Color(0.18f, 0.35f, 0.52f);
 
         // ====================================================================================================
@@ -142,7 +141,7 @@ namespace SRPG.Gameplay.Island
         }
 
         /// <summary>
-        /// 장애물과 가옥을 세웁니다.
+        /// 장애물을 세웁니다.
         ///
         /// 지형이 아니라 <b>오브젝트</b>입니다. 배너로드의 바위와 나무가 그렇듯,
         /// 지면은 연속으로 두고 그 위에 물체를 놓습니다.
@@ -159,26 +158,19 @@ namespace SRPG.Gameplay.Island
                 ? _materials.Cliff
                 : PrototypeVisuals.CreateMaterial(RockColor);
 
-            var houseMaterial = _materials.House != null
-                ? _materials.House
-                : PrototypeVisuals.CreateMaterial(ObjectiveColor);
-
             for (int i = 0; i < grid.AllTiles.Count; i++)
             {
                 var tile = grid.AllTiles[i];
 
-                bool isRock = tile.Type == TileType.Cliff;
-                bool isHouse = tile.Type == TileType.House;
-
-                if (!isRock && !isHouse)
+                if (tile.Type != TileType.Cliff)
                 {
                     continue;
                 }
 
-                var block = new GameObject(isRock ? "Rock" : "House");
+                var block = new GameObject("Rock");
                 block.transform.SetParent(obstacleRoot.transform, false);
 
-                float height = isHouse ? ObstacleHeight * 0.8f : ObstacleHeight;
+                float height = ObstacleHeight;
 
                 block.transform.position = tile.WorldCenter + Vector3.up * (height * 0.5f);
                 block.transform.localScale = new Vector3(
@@ -187,7 +179,7 @@ namespace SRPG.Gameplay.Island
                     grid.CellSize * ObstacleWidth);
 
                 block.AddComponent<MeshFilter>().sharedMesh = PrototypeVisuals.GetCubeMesh();
-                block.AddComponent<MeshRenderer>().sharedMaterial = isRock ? rockMaterial : houseMaterial;
+                block.AddComponent<MeshRenderer>().sharedMaterial = rockMaterial;
             }
 
             // 장애물은 통행에도 클릭에도 영향을 주지 않습니다.

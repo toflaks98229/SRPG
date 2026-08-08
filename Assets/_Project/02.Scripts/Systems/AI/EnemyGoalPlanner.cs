@@ -5,29 +5,21 @@ using UnityEngine;
 
 namespace SRPG.Systems.AI
 {
-    /// <summary>목표의 종류입니다. 가치 평가의 기준이 됩니다.</summary>
-    public enum GoalKind
-    {
-        /// <summary>가옥입니다. 침공의 최종 목적이므로 가치가 가장 높습니다.</summary>
-        House = 0,
-
-        /// <summary>플레이어 분대입니다. 길을 막고 있으므로 치워야 할 대상입니다.</summary>
-        PlayerSquad = 1,
-    }
-
-    /// <summary>평가 대상이 되는 목표 하나입니다.</summary>
+    /// <summary>
+    /// 평가 대상이 되는 목표 하나입니다.
+    ///
+    /// 지금은 좌표뿐입니다. 예전에는 종류(가옥/분대)를 함께 들고 가치를 매겼지만,
+    /// 야전에는 지킬 가옥이 없고 <b>칠 부대만</b> 있습니다.
+    /// 고지 점령 같은 것이 붙으면 그때 다시 갈래가 생깁니다.
+    /// </summary>
     public readonly struct GoalCandidate
     {
         /// <summary>목표 위치입니다.</summary>
         public readonly GridCoord Coord;
 
-        /// <summary>목표의 종류입니다.</summary>
-        public readonly GoalKind Kind;
-
-        public GoalCandidate(GridCoord coord, GoalKind kind)
+        public GoalCandidate(GridCoord coord)
         {
             Coord = coord;
-            Kind = kind;
         }
     }
 
@@ -40,17 +32,23 @@ namespace SRPG.Systems.AI
     /// 그러면 적은 방어가 가장 두꺼운 곳으로 곧장 걸어 들어갑니다. 플레이어는 한 곳만 막으면 되고,
     /// 조사 보고서가 Fire Emblem식 규칙 기반의 한계로 지적한 그 모습이 그대로 나옵니다.
     ///
-    /// 여기서는 후보마다 네 가지를 <b>동시에</b> 따집니다.
+    /// 여기서는 후보마다 세 가지를 <b>동시에</b> 따집니다.
     ///
-    ///   1. 근접성   — 가까울수록 좋다 (급감 곡선: 멀면 다 비슷하게 시들하다)
-    ///   2. 가치     — 가옥이 분대보다 중요하다
-    ///   3. 방어 얇음 — 그 지점의 플레이어 영향력이 낮을수록 좋다
-    ///   4. 개활지   — 초크포인트일수록 나쁘다 (좁은 길은 방어자에게 유리하다)
+    ///   1. 근접성 — 가까울수록 좋다 (급감 곡선: 멀면 다 비슷하게 시들하다)
+    ///   2. 고립   — 그 지점의 플레이어 영향력이 낮을수록 좋다
+    ///   3. 개활지 — 초크포인트일수록 나쁘다 (좁은 길은 방어자에게 유리하다)
     ///
-    /// <b>3번과 4번이 이 판단의 핵심입니다.</b>
-    /// "가옥으로 가되 방어가 얇은 쪽으로"가 성립하면 그 결과가 곧 <b>측면 우회</b>입니다.
-    /// 우회하라는 규칙을 따로 쓰지 않았는데 우회가 나오고, 플레이어는 전선을 나눠야 합니다.
-    /// 조사에서 확인한 Bad North의 압박 구조가 여기서 만들어집니다.
+    /// <b>2번이 이 판단의 핵심입니다.</b>
+    ///
+    /// 목표가 적 부대 자체이므로, 그 자리의 아군 영향력이 낮다는 것은
+    /// <b>주위에 도와줄 부대가 없다</b>는 뜻입니다. 즉 "고립된 쪽을 친다"가 됩니다.
+    /// 각개격파하라는 규칙을 따로 쓰지 않았는데 각개격파가 나오고,
+    /// 플레이어는 전선을 붙여 두어야 할 이유를 갖게 됩니다.
+    ///
+    /// <b>가옥이 빠진 자리입니다.</b>
+    /// 상륙을 막던 시절에는 "가옥으로 가되 방어가 얇은 쪽으로"가 측면 우회를 만들었습니다.
+    /// 야전에는 지킬 가옥이 없으므로 가치 항목이 사라지고, 대신 같은 계산이
+    /// 부대 사이의 우열을 읽는 데 쓰입니다.
     ///
     /// MonoBehaviour에 의존하지 않는 순수 판단이라 EditMode 테스트로 직접 검증할 수 있습니다.
     /// </summary>
@@ -66,11 +64,8 @@ namespace SRPG.Systems.AI
             /// <summary>가까운 목표를 얼마나 선호할지입니다.</summary>
             public float Proximity;
 
-            /// <summary>목표 종류의 가치 차이를 얼마나 반영할지입니다.</summary>
-            public float Value;
-
-            /// <summary>방어가 얇은 곳을 얼마나 선호할지입니다. 높으면 우회를 자주 시도합니다.</summary>
-            public float Undefended;
+            /// <summary>고립된 부대를 얼마나 노릴지입니다. 높으면 각개격파를 자주 시도합니다.</summary>
+            public float Isolation;
 
             /// <summary>초크포인트를 얼마나 피할지입니다.</summary>
             public float OpenGround;
@@ -79,8 +74,7 @@ namespace SRPG.Systems.AI
             public static Weights Default => new Weights
             {
                 Proximity = 0.7f,
-                Value = 1f,
-                Undefended = 0.85f,
+                Isolation = 0.85f,
                 OpenGround = 0.45f,
             };
         }
@@ -90,13 +84,7 @@ namespace SRPG.Systems.AI
         // ====================================================================================================
 
         /// <summary>고려사항 개수입니다.</summary>
-        private const int ConsiderationCount = 4;
-
-        /// <summary>가옥의 기본 가치입니다.</summary>
-        private const float HouseValue = 1f;
-
-        /// <summary>플레이어 분대의 기본 가치입니다. 가옥보다 낮게 두어 우회를 유도합니다.</summary>
-        private const float PlayerSquadValue = 0.55f;
+        private const int ConsiderationCount = 3;
 
         /// <summary>
         /// 근접성 평가에서 "충분히 멀다"고 보는 격자 거리입니다.
@@ -112,7 +100,7 @@ namespace SRPG.Systems.AI
         private readonly float[] _weights = new float[ConsiderationCount];
 
         private static readonly ResponseCurve ProximityCurve = ResponseCurve.SharpFalloff;
-        private static readonly ResponseCurve UndefendedCurve = ResponseCurve.Decreasing;
+        private static readonly ResponseCurve IsolationCurve = ResponseCurve.Decreasing;
         private static readonly ResponseCurve OpenGroundCurve = ResponseCurve.Decreasing;
 
         // ====================================================================================================
@@ -185,20 +173,16 @@ namespace SRPG.Systems.AI
             float distance = GridCoord.ManhattanDistance(from, candidate.Coord);
             _scores[0] = ProximityCurve.Evaluate(Mathf.Clamp01(distance / FarDistance));
 
-            // 2. 가치 — 목표 종류에 따른 고정값입니다.
-            _scores[1] = candidate.Kind == GoalKind.House ? HouseValue : PlayerSquadValue;
-
-            // 3. 방어 얇음 — 위협이 낮을수록 좋습니다.
+            // 2. 고립 — 그 자리의 아군 영향력이 낮을수록, 즉 도와줄 부대가 멀수록 좋습니다.
             float normalizedThreat = threat != null ? threat.SampleNormalized(candidate.Coord) : 0f;
-            _scores[2] = UndefendedCurve.Evaluate(normalizedThreat);
+            _scores[1] = IsolationCurve.Evaluate(normalizedThreat);
 
-            // 4. 개활지 — 초크 점수가 낮을수록 좋습니다.
-            _scores[3] = OpenGroundCurve.Evaluate(tile.ChokeScore);
+            // 3. 개활지 — 초크 점수가 낮을수록 좋습니다.
+            _scores[2] = OpenGroundCurve.Evaluate(tile.ChokeScore);
 
             _weights[0] = weights.Proximity;
-            _weights[1] = weights.Value;
-            _weights[2] = weights.Undefended;
-            _weights[3] = weights.OpenGround;
+            _weights[1] = weights.Isolation;
+            _weights[2] = weights.OpenGround;
 
             return UtilityScorer.CombineWeighted(_scores, _weights, ConsiderationCount);
         }

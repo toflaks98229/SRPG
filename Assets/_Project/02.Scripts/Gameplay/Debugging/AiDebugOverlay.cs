@@ -202,9 +202,8 @@ namespace SRPG.Gameplay.Debugging
                 Vector3 from = squad.AnchorPosition + Vector3.up * 0.5f;
                 Vector3 to = _grid.CoordToWorld(squad.GoalCoord) + Vector3.up * 0.5f;
 
-                Gizmos.color = squad.GoalKind == GoalKind.House
-                    ? new Color(1f, 0.4f, 0.2f)
-                    : new Color(1f, 0.85f, 0.2f);
+                // 야전의 목표는 언제나 적 부대입니다. 색으로 가를 종류가 없습니다.
+                Gizmos.color = new Color(1f, 0.85f, 0.2f);
 
                 Gizmos.DrawLine(from, to);
                 Gizmos.DrawWireSphere(to, _grid.CellSize * 0.35f);

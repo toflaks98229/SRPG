@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace SRPG.Data
 {
@@ -206,13 +206,11 @@ namespace SRPG.Data
         public float AiProximityWeight = 0.7f;
 
         [Range(0f, 1f)]
-        [Tooltip("목표 종류의 가치 차이(가옥 > 분대)를 얼마나 반영할지입니다.")]
-        public float AiValueWeight = 1f;
-
-        [Range(0f, 1f)]
-        [Tooltip("방어가 얇은 곳을 얼마나 선호할지입니다.\n" +
-                 "<b>이 값이 우회 성향을 결정합니다.</b> 0이면 방어를 무시하고 정면으로 걸어 들어갑니다.")]
-        public float AiUndefendedWeight = 0.85f;
+        [Tooltip("고립된 부대를 얼마나 노릴지입니다.\n" +
+                 "<b>이 값이 각개격파 성향을 결정합니다.</b>\n" +
+                 "목표 자리의 아군 영향력이 낮다는 것은 도와줄 부대가 멀다는 뜻입니다.\n" +
+                 "높이면 떨어져 나온 분대를 집요하게 물고, 0이면 가까운 쪽으로만 갑니다.")]
+        public float AiIsolationWeight = 0.85f;
 
         [Range(0f, 1f)]
         [Tooltip("초크포인트를 얼마나 피할지입니다. 높이면 좁은 길을 우회합니다.")]

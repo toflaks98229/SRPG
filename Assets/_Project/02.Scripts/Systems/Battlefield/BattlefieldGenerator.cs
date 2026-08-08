@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.Deployment;
@@ -134,11 +134,6 @@ namespace SRPG.Systems.Battlefield
 
             PlaceObstacles(grid, profile, random);
             grid.RebuildDerivedData();
-
-            PlaceHouses(grid, profile, random);
-            grid.RebuildDerivedData();
-
-            BuildApproaches(grid, profile);
 
             // 야전의 전개 구역입니다. 축을 시드로 뽑으므로 같은 전장이면 같은 대치 구도가 나옵니다.
             DeploymentZones.Build(grid, seed);
@@ -428,111 +423,5 @@ namespace SRPG.Systems.Battlefield
             }
         }
 
-        /// <summary>
-        /// 가옥을 놓습니다. 적 AI가 노리는 목표입니다.
-        ///
-        /// 벌판에 아무 기준점이 없으면 어디서 싸우든 똑같아 보입니다.
-        /// </summary>
-        private static void PlaceHouses(IslandGrid grid, BattlefieldProfile profile, System.Random random)
-        {
-            if (profile.HouseCount <= 0)
-            {
-                return;
-            }
-
-            var candidates = new List<Tile>();
-
-            for (int i = 0; i < grid.WalkableTiles.Count; i++)
-            {
-                var tile = grid.WalkableTiles[i];
-
-                if (tile.Type == TileType.Ground && !tile.IsCoastal)
-                {
-                    candidates.Add(tile);
-                }
-            }
-
-            if (candidates.Count == 0)
-            {
-                candidates.AddRange(grid.WalkableTiles);
-            }
-
-            for (int i = candidates.Count - 1; i > 0; i--)
-            {
-                int j = random.Next(i + 1);
-                (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
-            }
-
-            for (int i = 0; i < candidates.Count && i < profile.HouseCount; i++)
-            {
-                candidates[i].Type = TileType.House;
-            }
-        }
-
-        /// <summary>
-        /// 적이 밀려드는 구역을 물가에 나눠 둡니다.
-        ///
-        /// 각도로 가르므로 구역들이 전장 둘레에 고르게 흩어집니다.
-        /// 한쪽에 몰리면 반대편을 지킬 이유가 없어집니다.
-        /// </summary>
-        private static void BuildApproaches(IslandGrid grid, BattlefieldProfile profile)
-        {
-            grid.LandingZones.Clear();
-
-            var coastal = new List<Tile>();
-
-            for (int i = 0; i < grid.WalkableTiles.Count; i++)
-            {
-                var tile = grid.WalkableTiles[i];
-
-                if (tile.IsCoastal && tile.Type == TileType.Beach)
-                {
-                    coastal.Add(tile);
-                }
-            }
-
-            if (coastal.Count == 0)
-            {
-                return;
-            }
-
-            int zoneCount = Mathf.Clamp(profile.ApproachCount, 1, coastal.Count);
-            var buckets = new List<Tile>[zoneCount];
-
-            for (int i = 0; i < zoneCount; i++)
-            {
-                buckets[i] = new List<Tile>();
-            }
-
-            float cx = (grid.Width - 1) * 0.5f;
-            float cy = (grid.Depth - 1) * 0.5f;
-
-            for (int i = 0; i < coastal.Count; i++)
-            {
-                float angle = Mathf.Atan2(coastal[i].Coord.Y - cy, coastal[i].Coord.X - cx);
-                float normalized = (angle + Mathf.PI) / (2f * Mathf.PI);
-
-                int bucket = Mathf.Clamp(Mathf.FloorToInt(normalized * zoneCount), 0, zoneCount - 1);
-                buckets[bucket].Add(coastal[i]);
-            }
-
-            int zoneId = 0;
-
-            for (int i = 0; i < zoneCount; i++)
-            {
-                if (buckets[i].Count == 0)
-                {
-                    continue;
-                }
-
-                for (int t = 0; t < buckets[i].Count; t++)
-                {
-                    buckets[i][t].LandingZoneId = zoneId;
-                }
-
-                grid.LandingZones.Add(buckets[i]);
-                zoneId++;
-            }
-        }
     }
 }

@@ -166,7 +166,7 @@ namespace SRPG.UI.HUD
         /// 적 분대가 무슨 판단을 했는지 씁니다.
         ///
         /// AI를 튜닝할 때 가장 먼저 보게 되는 정보입니다.
-        /// "가옥으로 가는가, 분대를 치러 가는가"와 그 판단의 점수가 여기 나옵니다.
+        /// "어느 부대를 치러 가는가"와 그 판단의 점수가 여기 나옵니다.
         /// 실제 경로는 씬 뷰의 <c>AiDebugOverlay</c> 기즈모로 확인합니다.
         /// </summary>
         private void AppendEnemySquads()
@@ -195,8 +195,7 @@ namespace SRPG.UI.HUD
                     continue;
                 }
 
-                string goal = squad.GoalKind == GoalKind.House ? "가옥" : "분대";
-                _builder.AppendLine($"   {squad.AliveCount}명 → {goal} {squad.GoalCoord}  ({squad.GoalScore:F2})");
+                _builder.AppendLine($"   {squad.AliveCount}명 → {squad.GoalCoord}  ({squad.GoalScore:F2})");
             }
         }
 

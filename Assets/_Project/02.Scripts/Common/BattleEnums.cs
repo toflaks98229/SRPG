@@ -16,9 +16,6 @@
 
         /// <summary>절벽입니다. 높이 차가 커서 통행할 수 없습니다.</summary>
         Cliff = 3,
-
-        /// <summary>가옥입니다. 방어 목표이자 병력 충원 지점입니다.</summary>
-        House = 4,
     }
 
     /// <summary>

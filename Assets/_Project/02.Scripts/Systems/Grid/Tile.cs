@@ -36,11 +36,6 @@ namespace SRPG.Systems.Grid
         public bool IsCoastal;
 
         /// <summary>
-        /// 이 타일이 속한 상륙 구역 ID입니다. 상륙 가능한 해변에만 0 이상의 값이 붙고, 그 외에는 -1입니다.
-        /// </summary>
-        public int LandingZoneId = -1;
-
-        /// <summary>
         /// 걸어서 지나갈 수 있는 이웃의 수입니다. 값이 작을수록 초크포인트에 가깝습니다.
         /// 창병 배치 판단과 영향력 맵의 <c>ChokePointValue</c> 레이어의 기초 입력이 됩니다.
         /// </summary>

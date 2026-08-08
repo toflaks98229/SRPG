@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
@@ -203,7 +203,7 @@ namespace SRPG.Tests
 
             float score = planner.ScoreCandidate(
                 grid.WalkableTiles[0].Coord,
-                new GoalCandidate(water, GoalKind.House),
+                new GoalCandidate(water),
                 grid,
                 null,
                 EnemyGoalPlanner.Weights.Default);
@@ -227,8 +227,8 @@ namespace SRPG.Tests
 
             var candidates = new List<GoalCandidate>
             {
-                new GoalCandidate(far, GoalKind.House),
-                new GoalCandidate(near, GoalKind.House),
+                new GoalCandidate(far),
+                new GoalCandidate(near),
             };
 
             Assert.IsTrue(planner.TrySelectGoal(
@@ -237,8 +237,17 @@ namespace SRPG.Tests
             Assert.AreEqual(near, best.Coord, "더 먼 목표를 골랐습니다.");
         }
 
+        /// <summary>
+        /// 같은 후보는 언제나 같은 점수를 냅니다.
+        ///
+        /// 야전에는 목표 종류가 없습니다 — 칠 부대만 있습니다.
+        /// 예전에는 여기서 "가옥이 분대보다 가치가 높다"를 확인했지만,
+        /// 지킬 가옥이 사라지면서 그 갈래도 함께 사라졌습니다.
+        /// 남은 것은 판단이 <b>결정적</b>이라는 사실이고, 그것은 여전히 지켜져야 합니다.
+        /// 점수가 흔들리면 목표 전환 마진이 의미를 잃고 AI가 갈팡질팡합니다.
+        /// </summary>
         [Test]
-        public void 거리가_같으면_가옥을_분대보다_우선한다()
+        public void 같은_후보는_언제나_같은_점수를_낸다()
         {
             var grid = CreateIsland();
             var planner = new EnemyGoalPlanner();
@@ -247,19 +256,22 @@ namespace SRPG.Tests
             var target = FindWalkableAtDistance(grid, from, 6);
             Assert.IsTrue(target.IsValid);
 
-            float houseScore = planner.ScoreCandidate(
-                from, new GoalCandidate(target, GoalKind.House), grid, null, EnemyGoalPlanner.Weights.Default);
+            float first = planner.ScoreCandidate(
+                from, new GoalCandidate(target), grid, null, EnemyGoalPlanner.Weights.Default);
 
-            float squadScore = planner.ScoreCandidate(
-                from, new GoalCandidate(target, GoalKind.PlayerSquad), grid, null, EnemyGoalPlanner.Weights.Default);
+            for (int i = 0; i < 10; i++)
+            {
+                float again = planner.ScoreCandidate(
+                    from, new GoalCandidate(target), grid, null, EnemyGoalPlanner.Weights.Default);
 
-            Assert.Greater(houseScore, squadScore, "같은 자리인데 가옥이 분대보다 낮게 평가됐습니다.");
+                Assert.AreEqual(first, again, 0.0001f, "같은 후보의 점수가 호출마다 달라집니다.");
+            }
         }
 
         /// <summary>
         /// <b>이 테스트가 3순위 작업의 핵심입니다.</b>
         ///
-        /// 방어가 두꺼운 목표의 점수가 낮아져야 우회가 나옵니다.
+        /// 아군이 두껍게 몰린 곳의 점수가 낮아져야 각개격파가 나옵니다.
         /// 이 성질이 깨지면 적은 예전처럼 정면으로 걸어 들어가고, 전선 분산 압박이 사라집니다.
         /// </summary>
         [Test]
@@ -272,7 +284,7 @@ namespace SRPG.Tests
             var target = FindWalkableAtDistance(grid, from, 8);
             Assert.IsTrue(target.IsValid);
 
-            var candidate = new GoalCandidate(target, GoalKind.House);
+            var candidate = new GoalCandidate(target);
             var weights = EnemyGoalPlanner.Weights.Default;
 
             float undefended = planner.ScoreCandidate(from, candidate, grid, null, weights);
@@ -297,10 +309,10 @@ namespace SRPG.Tests
             var target = FindWalkableAtDistance(grid, from, 8);
             Assert.IsTrue(target.IsValid);
 
-            var candidate = new GoalCandidate(target, GoalKind.House);
+            var candidate = new GoalCandidate(target);
 
             var weights = EnemyGoalPlanner.Weights.Default;
-            weights.Undefended = 0f;
+            weights.Isolation = 0f;
 
             var threat = new InfluenceMap(grid);
             threat.AddSource(target, 1f);
@@ -330,13 +342,13 @@ namespace SRPG.Tests
 
             var candidates = new List<GoalCandidate>
             {
-                new GoalCandidate(defended, GoalKind.House),
-                new GoalCandidate(open, GoalKind.House),
+                new GoalCandidate(defended),
+                new GoalCandidate(open),
             };
 
             // 방어 고려를 강하게, 거리 고려를 약하게 두어 판단을 뚜렷하게 만듭니다.
             var weights = EnemyGoalPlanner.Weights.Default;
-            weights.Undefended = 1f;
+            weights.Isolation = 1f;
             weights.Proximity = 0.2f;
 
             Assert.IsTrue(planner.TrySelectGoal(from, candidates, grid, threat, weights, out var best, out _));
