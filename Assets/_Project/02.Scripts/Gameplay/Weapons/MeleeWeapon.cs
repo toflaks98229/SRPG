@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using SRPG.Common;
+using SRPG.Data;
 using SRPG.Gameplay.Units;
 using UnityEngine;
 
@@ -41,15 +42,6 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>한 번에 감지할 수 있는 최대 대상 수입니다.</summary>
         private const int MaxHitBuffer = 12;
 
-        /// <summary>튜닝이 없을 때 쓰는 대열 이탈 거리(칸)입니다.</summary>
-        private const float DefaultBreakFormationTiles = 2f;
-
-        /// <summary>튜닝이 없을 때 쓰는 도약 세기입니다.</summary>
-        private const float DefaultLungeForce = 3.6f;
-
-        /// <summary>튜닝이 없을 때 쓰는 최소 도약 거리입니다.</summary>
-        private const float DefaultLungeMinDistance = 0.7f;
-
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -78,7 +70,7 @@ namespace SRPG.Gameplay.Weapons
         /// 별도의 "복귀" 규칙 없이 이탈 시간이 스스로 제한됩니다.
         /// </summary>
         public override float FormationBreakTiles =>
-            Tuning != null ? Tuning.MeleeBreakFormationTiles : DefaultBreakFormationTiles;
+            Tuning != null ? Tuning.MeleeBreakFormationTiles : BattleTuning.DefaultMeleeBreakFormationTiles;
 
         // ====================================================================================================
         // 3. Overrides - Lifecycle
@@ -88,7 +80,7 @@ namespace SRPG.Gameplay.Weapons
         /// 검병은 <b>몸을 던지며</b> 벱니다. 제자리에서 휘두르면 판정이 아무리 정확해도 답답해 보입니다.
         /// </summary>
         public override float LungeForce =>
-            Tuning != null ? Tuning.MeleeLungeForce : DefaultLungeForce;
+            Tuning != null ? Tuning.MeleeLungeForce : BattleTuning.DefaultMeleeLungeForce;
 
         protected override void OnAttackBegan(Unit target)
         {
@@ -121,7 +113,9 @@ namespace SRPG.Gameplay.Weapons
             toTarget.y = 0f;
 
             float distance = toTarget.magnitude;
-            float minimum = Tuning != null ? Tuning.MeleeLungeMinDistance : DefaultLungeMinDistance;
+            float minimum = Tuning != null
+                ? Tuning.MeleeLungeMinDistance
+                : BattleTuning.DefaultMeleeLungeMinDistance;
 
             if (distance <= minimum)
             {

@@ -163,7 +163,10 @@ namespace SRPG.Tests
                 {
                     case UnitRole.Archer:
                         Assert.AreEqual(AttackStyle.Projectile, definition.Style, $"{definition.name} 궁수가 투사체 방식이 아닙니다.");
-                        Assert.IsTrue(definition.IsRangedAttack, $"{definition.name} 궁수의 IsRangedAttack 이 false 입니다.");
+
+                        // IsRanged 는 Style 에서 파생되므로 어긋날 수 없습니다.
+                        // 예전에는 별도 필드라 둘이 따로 놀 수 있었고, 그것을 여기서 막고 있었습니다.
+                        Assert.IsTrue(definition.IsRanged, $"{definition.name} 궁수가 원거리로 읽히지 않습니다.");
                         break;
 
                     case UnitRole.Pike:

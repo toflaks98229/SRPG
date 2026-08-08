@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using SRPG.Common;
+using SRPG.Data;
 using SRPG.Gameplay.Squads;
 using SRPG.Gameplay.Visual;
 using SRPG.Systems.Grid;
@@ -28,9 +29,6 @@ namespace SRPG.Gameplay.Selection
         // 1. Constants
         // ====================================================================================================
 
-        /// <summary>클릭 지점이 이 거리 안에 있으면 분대를 선택한 것으로 봅니다.</summary>
-        private const float SquadPickRadius = 2.2f;
-
         /// <summary>지형 레이캐스트의 최대 거리입니다.</summary>
         private const float RaycastDistance = 500f;
 
@@ -42,6 +40,7 @@ namespace SRPG.Gameplay.Selection
 
         private IslandGrid _grid;
         private TacticalTimeController _clock;
+        private BattleTuning _tuning;
         private Camera _camera;
         private Squad _selected;
 
@@ -100,18 +99,21 @@ namespace SRPG.Gameplay.Selection
         /// </summary>
         /// <param name="grid">클릭 지점을 타일로 옮기는 데 쓰는 지형입니다.</param>
         /// <param name="clock">명령 입력 중 시간을 늦추는 제어기입니다.</param>
+        /// <param name="tuning">조작감 수치입니다. 분대를 고르는 클릭 반경이 여기 있습니다.</param>
         /// <param name="battleCamera">클릭 레이캐스트에 사용할 카메라입니다.</param>
         /// <param name="selectionMarkerPrefab">선택 표시 프리팹입니다. null이면 프리미티브로 대체합니다.</param>
         /// <param name="orderMarkerPrefab">명령 지점 표시 프리팹입니다. null이면 프리미티브로 대체합니다.</param>
         public void Initialize(
             IslandGrid grid,
             TacticalTimeController clock,
+            BattleTuning tuning,
             Camera battleCamera,
             GameObject selectionMarkerPrefab = null,
             GameObject orderMarkerPrefab = null)
         {
             _grid = grid;
             _clock = clock;
+            _tuning = tuning;
             _camera = battleCamera;
             _selectionMarkerPrefab = selectionMarkerPrefab;
             _orderMarkerPrefab = orderMarkerPrefab;
@@ -232,8 +234,10 @@ namespace SRPG.Gameplay.Selection
         /// </summary>
         private Squad FindSquadNear(Vector3 worldPoint)
         {
+            float pickRadius = _tuning != null ? _tuning.SquadPickRadius : BattleTuning.DefaultSquadPickRadius;
+
             Squad best = null;
-            float bestSqr = SquadPickRadius * SquadPickRadius;
+            float bestSqr = pickRadius * pickRadius;
 
             for (int i = 0; i < _squads.Count; i++)
             {

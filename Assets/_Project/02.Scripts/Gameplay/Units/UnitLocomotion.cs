@@ -32,9 +32,6 @@ namespace SRPG.Gameplay.Units
         /// <summary>도약 속도가 초당 얼마나 줄어드는지입니다. 넉백보다 빨리 잦아듭니다.</summary>
         public const float LungeDecay = 20f;
 
-        /// <summary>이 속도 이상으로 밀려나는 중이면 물 위로도 밀려납니다(= 익사할 수 있습니다).</summary>
-        public const float DrownKnockbackThreshold = 1.2f;
-
         /// <summary>유닛 반경 대비 분리 조향이 작용하는 거리의 배수입니다.</summary>
         private const float SeparationRadiusFactor = 2.4f;
 
@@ -178,7 +175,7 @@ namespace SRPG.Gameplay.Units
                 _grid,
                 position,
                 desired,
-                _impulses.IsPushedFasterThan(DrownKnockbackThreshold),
+                _impulses.IsPushedFasterThan(_tuning.DrownKnockbackThreshold),
                 out next);
 
             return step == GroundStep.Moved;

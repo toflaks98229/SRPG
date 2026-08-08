@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using SRPG.Common;
+using SRPG.Data;
 using SRPG.Gameplay.Units;
 using SRPG.Systems.Combat;
 using UnityEngine;
@@ -65,25 +66,6 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>운반 자세와 겨눔 자세 사이를 오가는 속도입니다.</summary>
         private const float PoseBlendSpeed = 9f;
 
-        /// <summary>튜닝이 없을 때 쓰는 안쪽 사각지대 비율입니다.</summary>
-        private const float DefaultInnerDeadZoneRatio = 0.45f;
-
-        /// <summary>튜닝이 없을 때 쓰는 준비 동작 보정(초)입니다.</summary>
-        private const float DefaultAimLeadSeconds = 0.15f;
-
-        /// <summary>튜닝이 없을 때 쓰는 예측 상한(초)입니다.</summary>
-        private const float DefaultMaxAimLeadSeconds = 1.2f;
-
-        /// <summary>튜닝이 없을 때 쓰는 표적 고정 시간(초)입니다.</summary>
-        private const float DefaultTargetLockSeconds = 1.1f;
-
-        /// <summary>튜닝이 없을 때 쓰는 회전 스프링 값입니다.</summary>
-        private const float DefaultTurnSpringFrequency = 1.4f;
-        private const float DefaultTurnSpringDamping = 0.5f;
-
-        /// <summary>튜닝이 없을 때 쓰는 진형 붕괴 지속 시간(초)입니다.</summary>
-        private const float DefaultBreakRecoverySeconds = 1.4f;
-
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -111,7 +93,10 @@ namespace SRPG.Gameplay.Weapons
         {
             get
             {
-                float ratio = Tuning != null ? Tuning.PikeInnerDeadZoneRatio : DefaultInnerDeadZoneRatio;
+                float ratio = Tuning != null
+                    ? Tuning.PikeInnerDeadZoneRatio
+                    : BattleTuning.DefaultPikeInnerDeadZoneRatio;
+
                 float length = Definition != null ? Definition.WeaponLength : 1f;
 
                 // 사각지대가 자루 전체를 먹으면 창이 아무도 못 찌릅니다.
@@ -126,7 +111,7 @@ namespace SRPG.Gameplay.Weapons
         /// 결국 아무도 막지 않는 구멍이 생깁니다. 굳건히 버티는 것이 창병의 일입니다.
         /// </summary>
         public override float TargetLockSeconds =>
-            Tuning != null ? Tuning.PikeTargetLockSeconds : DefaultTargetLockSeconds;
+            Tuning != null ? Tuning.PikeTargetLockSeconds : BattleTuning.DefaultPikeTargetLockSeconds;
 
         /// <summary>
         /// 창병은 공격 대기열을 씁니다.
@@ -151,10 +136,10 @@ namespace SRPG.Gameplay.Weapons
         public override bool PrefersLineFormation => true;
 
         public override float TurnSpringFrequency =>
-            Tuning != null ? Tuning.PikeTurnSpringFrequency : DefaultTurnSpringFrequency;
+            Tuning != null ? Tuning.PikeTurnSpringFrequency : BattleTuning.DefaultPikeTurnSpringFrequency;
 
         public override float TurnSpringDamping =>
-            Tuning != null ? Tuning.PikeTurnSpringDamping : DefaultTurnSpringDamping;
+            Tuning != null ? Tuning.PikeTurnSpringDamping : BattleTuning.DefaultPikeTurnSpringDamping;
 
         // ====================================================================================================
         // 3. Overrides - Lifecycle
@@ -248,7 +233,9 @@ namespace SRPG.Gameplay.Weapons
             }
 
             _intruderPosition = intruder.Position;
-            _breakTimer = Tuning != null ? Tuning.PikeBreakRecoverySeconds : DefaultBreakRecoverySeconds;
+            _breakTimer = Tuning != null
+                ? Tuning.PikeBreakRecoverySeconds
+                : BattleTuning.DefaultPikeBreakRecoverySeconds;
         }
 
         /// <summary>무너진 동안에는 찌를 수 없습니다.</summary>
@@ -283,8 +270,13 @@ namespace SRPG.Gameplay.Weapons
                 return false;
             }
 
-            float lead = Tuning != null ? Tuning.PikeAimLeadSeconds : DefaultAimLeadSeconds;
-            float maxLead = Tuning != null ? Tuning.PikeMaxAimLeadSeconds : DefaultMaxAimLeadSeconds;
+            float lead = Tuning != null
+                ? Tuning.PikeAimLeadSeconds
+                : BattleTuning.DefaultPikeAimLeadSeconds;
+
+            float maxLead = Tuning != null
+                ? Tuning.PikeMaxAimLeadSeconds
+                : BattleTuning.DefaultPikeMaxAimLeadSeconds;
 
             // 창끝이 닿기 시작하는 거리를 기준으로 도착 시점을 잡습니다.
             float effectiveRange = Definition != null ? Definition.AttackRange : 2f;

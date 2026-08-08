@@ -56,13 +56,14 @@ namespace SRPG.Systems.Battlefield
         ///
         /// <b>왜 상수가 아닌가</b>
         ///
-        /// 길찾기는 이웃과의 고도 단차가 1을 넘으면 못 간다고 봅니다. 그런데 이 지형에서
-        /// 오를 수 있는지를 정하는 것은 경사입니다. 눈금을 아무 값으로나 두면 두 규칙이
-        /// 어긋나 <b>보기에는 완만한 비탈인데 길찾기가 막힌 땅</b>이 생깁니다.
+        /// 통행 규칙(<see cref="TraversalRules.MaxHeightDelta"/>)은 이웃과의 고도 단차가
+        /// 한 단을 넘으면 못 간다고 봅니다. 그런데 이 지형에서 오를 수 있는지를 정하는 것은 경사입니다.
+        /// 눈금을 아무 값으로나 두면 두 규칙이 어긋나
+        /// <b>보기에는 완만한 비탈인데 길찾기가 막힌 땅</b>이 생깁니다.
         /// 실제로 구릉 전장이 그렇게 갈라졌습니다.
         ///
         /// 한 단을 <b>한 칸을 건너며 오를 수 있는 최대 높이</b>로 두면 그 어긋남이 사라집니다.
-        /// 경사가 한계 안이면 이웃과의 높이 차가 한 단 안이고, 따라서 단차도 반드시 1 이하입니다.
+        /// 경사가 한계 안이면 이웃과의 높이 차가 한 단 안이고, 따라서 단차도 반드시 한 단 이하입니다.
         /// 두 규칙이 같은 것을 말하게 됩니다.
         /// </summary>
         public static float ResolveHeightStep(float climbLimitDegrees)
@@ -384,8 +385,9 @@ namespace SRPG.Systems.Battlefield
         /// <summary>
         /// 한 칸에서 실제로 갈 수 있는 칸들을 모읍니다.
         ///
-        /// 여기서 쓰는 이동 규칙은 <b>길찾기가 쓰는 것과 같아야 합니다.</b>
-        /// 다르면 생성기가 "이어져 있다"고 판단한 땅을 부대가 못 갑니다.
+        /// 이동 규칙은 <see cref="TraversalRules"/>가 유일하게 들고 있습니다.
+        /// 길찾기도 격자도 같은 함수를 부르므로, 생성기가 "이어져 있다"고 판단한 땅을
+        /// 부대가 못 가는 일이 구조적으로 생기지 않습니다.
         /// </summary>
         /// <returns>닿은 칸의 수입니다.</returns>
         private static int FloodFrom(IslandGrid grid, Tile start, List<Tile> result)
@@ -406,12 +408,7 @@ namespace SRPG.Systems.Battlefield
                 {
                     var neighbor = grid.GetTile(current.Coord + GridCoord.Neighbors4[n]);
 
-                    if (neighbor == null || !neighbor.IsWalkable || visited.Contains(neighbor.Coord))
-                    {
-                        continue;
-                    }
-
-                    if (Mathf.Abs(neighbor.Height - current.Height) > 1)
+                    if (!TraversalRules.CanStep(current, neighbor) || visited.Contains(neighbor.Coord))
                     {
                         continue;
                     }

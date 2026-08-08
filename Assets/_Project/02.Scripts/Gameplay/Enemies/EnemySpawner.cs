@@ -59,14 +59,6 @@ namespace SRPG.Gameplay.Enemies
             }
         }
 
-        /// <summary>모든 웨이브가 끝나고 남은 적도 없는지 여부입니다.</summary>
-        public bool IsCleared =>
-            _scheduler != null &&
-            _scheduler.IsFinished &&
-            ActiveShipCount == 0 &&
-            _context != null &&
-            _context.EnemyUnits.Count == 0;
-
         // ====================================================================================================
         // 4. Unity Lifecycle
         // ====================================================================================================

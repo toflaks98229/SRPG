@@ -34,9 +34,6 @@ namespace SRPG.Systems.Pathfinding
         /// <summary>고도 한 단계를 오르내릴 때 추가되는 이동 비용입니다. 경사를 우회하도록 유도합니다.</summary>
         private const float SlopeCost = 1.5f;
 
-        /// <summary>통행 가능한 최대 고도 차입니다. 이보다 크면 절벽으로 간주해 막습니다.</summary>
-        private const int MaxTraversableHeightDelta = 1;
-
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
@@ -152,16 +149,15 @@ namespace SRPG.Systems.Pathfinding
                     var neighborCoord = currentCoord + offset;
 
                     var neighbor = _grid.GetTile(neighborCoord);
-                    if (neighbor == null || !neighbor.IsWalkable)
+
+                    // 통행 가능 여부와 단차를 한 규칙으로 봅니다.
+                    // 생성기의 연결성 검사와 격자의 이웃 계산이 같은 함수를 씁니다.
+                    if (!TraversalRules.CanStep(currentTile, neighbor))
                     {
                         continue;
                     }
 
                     int heightDelta = Mathf.Abs(neighbor.Height - currentTile.Height);
-                    if (heightDelta > MaxTraversableHeightDelta)
-                    {
-                        continue;
-                    }
 
                     bool isDiagonal = offset.X != 0 && offset.Y != 0;
 
@@ -370,9 +366,7 @@ namespace SRPG.Systems.Pathfinding
         /// <summary>옆 칸이 열려 있는지 확인합니다. 통행 가능하고 고도 차도 넘을 수 있어야 합니다.</summary>
         private static bool IsSideOpen(Tile from, Tile side)
         {
-            return side != null
-                   && side.IsWalkable
-                   && Mathf.Abs(side.Height - from.Height) <= MaxTraversableHeightDelta;
+            return TraversalRules.CanStep(from, side);
         }
 
         private int ToIndex(GridCoord coord) => coord.Y * _grid.Width + coord.X;

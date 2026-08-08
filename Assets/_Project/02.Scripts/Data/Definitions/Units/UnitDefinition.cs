@@ -87,15 +87,23 @@ namespace SRPG.Data
         [Tooltip("공격 간격(초)입니다.")]
         public float AttackInterval = 1.1f;
 
-        [Tooltip("투사체 공격 여부입니다. 방패 저항의 적용 대상을 가릅니다.")]
-        public bool IsRangedAttack = false;
-
         [Tooltip("이동 중에도 공격할 수 있는지 여부입니다. 창병은 false로 두어 자리 선점을 강제합니다.")]
         public bool CanAttackWhileMoving = true;
 
         [Min(0f)]
         [Tooltip("교전 대상을 탐색하는 반경입니다. 공격 사거리보다 넉넉하게 잡아 접근을 유도합니다.")]
         public float EngageRadius = 2.5f;
+
+        /// <summary>
+        /// 원거리 병과인지 여부입니다. <b>저장하지 않고 <see cref="Style"/>에서 파생합니다.</b>
+        ///
+        /// 예전에는 <c>IsRangedAttack</c> 이라는 별도 필드가 있었습니다. 같은 사실을 두 곳이
+        /// 말하고 있었고, 실제로 읽는 쪽은 아무도 없었으며(런타임 참조가 0이었습니다),
+        /// 검증 테스트만 "둘이 어긋나지 않았는가"를 확인하고 있었습니다.
+        ///
+        /// 어긋날 수 없게 만들면 그 검증 자체가 필요 없어집니다.
+        /// </summary>
+        public bool IsRanged => Style == AttackStyle.Projectile;
 
         // ====================================================================================================
         // 6. Weapon
@@ -221,7 +229,6 @@ namespace SRPG.Data
                     def.AttackRange = 9f;
                     def.AttackDamage = 7f;
                     def.AttackInterval = 1.4f;
-                    def.IsRangedAttack = true;
                     def.EngageRadius = 10f;
                     def.DebugColor = new Color(0.45f, 0.85f, 0.45f);
 

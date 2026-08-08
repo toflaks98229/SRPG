@@ -472,6 +472,7 @@ namespace SRPG.Composition
             _selectionController.Initialize(
                 _context.Grid,
                 _context.TimeController,
+                _context.Tuning,
                 battleCamera,
                 _setup != null ? _setup.SelectionMarkerPrefab : null,
                 _setup != null ? _setup.OrderMarkerPrefab : null);

@@ -221,18 +221,6 @@ namespace SRPG.Systems.Grid
             return tile != null && tile.IsWalkable ? tile.WorldCenter.y : 0f;
         }
 
-        /// <summary>
-        /// 월드 좌표에서의 지표면 법선입니다. 지금은 언제나 수직입니다.
-        ///
-        /// 타일 윗면이 평면이므로 법선도 하나뿐입니다.
-        /// 지형에 굴곡이 생기면 여기서 실제 기울기를 돌려주어야 합니다.
-        /// </summary>
-        public Vector3 SampleGroundNormal(Vector3 world)
-        {
-            _ = world;
-            return Vector3.up;
-        }
-
         // ====================================================================================================
         // 6. Public Methods - Neighbors
         // ====================================================================================================
@@ -303,8 +291,10 @@ namespace SRPG.Systems.Grid
                         touchesWater = true;
                     }
 
-                    // 고도 차가 1을 넘으면 절벽으로 간주해 통행 불가로 봅니다.
-                    if (neighbor.IsWalkable && tile.IsWalkable && Mathf.Abs(neighbor.Height - tile.Height) <= 1)
+                    // 단차가 크면 절벽이라 이웃으로 세지 않습니다.
+                    // 길찾기·생성기와 <b>같은 규칙</b>을 봅니다. 어긋나면 초크포인트 점수가
+                    // 실제 통행과 다른 지형을 가리키게 됩니다.
+                    if (TraversalRules.CanStep(tile, neighbor))
                     {
                         walkableNeighbors++;
                     }

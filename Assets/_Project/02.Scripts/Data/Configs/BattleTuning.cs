@@ -26,10 +26,47 @@ namespace SRPG.Data
         // ====================================================================================================
 
         /// <summary>
-        /// 방패 상방 판정의 기본 여유각입니다.
-        /// 에셋이 없을 때의 폴백과 필드 초기값이 같은 곳을 보게 하려고 상수로 둡니다.
+        /// <b>기본값은 전부 여기 있습니다.</b>
+        ///
+        /// 아래 필드 초기값과, 튜닝 에셋이 연결되지 않았을 때 소비자가 쓰는 폴백이
+        /// <b>같은 상수</b>를 봐야 합니다. 예전에는 무기마다 자기 폴백 상수를 따로 들고 있어서
+        /// 한쪽만 고치면 "에셋을 연결했을 때와 안 했을 때 감각이 다른" 상태가 조용히 생겼습니다.
+        /// 그런 어긋남은 재현 조건이 "에셋 연결 여부"라 원인을 찾기가 특히 어렵습니다.
         /// </summary>
         public const float DefaultSteepBlockMarginDegrees = 11f;
+
+        /// <summary>검병이 대열을 풀고 나갈 수 있는 기본 격자 거리(칸)입니다.</summary>
+        public const float DefaultMeleeBreakFormationTiles = 2f;
+
+        /// <summary>검병이 벨 때 앞으로 몸을 던지는 기본 세기입니다.</summary>
+        public const float DefaultMeleeLungeForce = 3.6f;
+
+        /// <summary>이보다 가까우면 도약하지 않는 기본 거리입니다.</summary>
+        public const float DefaultMeleeLungeMinDistance = 0.7f;
+
+        /// <summary>자루 길이 대비 안쪽 사각지대의 기본 비율입니다.</summary>
+        public const float DefaultPikeInnerDeadZoneRatio = 0.45f;
+
+        /// <summary>창을 겨눌 때 더하는 기본 준비 동작 보정(초)입니다.</summary>
+        public const float DefaultPikeAimLeadSeconds = 0.15f;
+
+        /// <summary>접근 예측 시간의 기본 상한(초)입니다.</summary>
+        public const float DefaultPikeMaxAimLeadSeconds = 1.2f;
+
+        /// <summary>한 번 겨눈 적을 놓지 않는 기본 시간(초)입니다.</summary>
+        public const float DefaultPikeTargetLockSeconds = 1.1f;
+
+        /// <summary>창 회전 스프링의 기본 진동수입니다.</summary>
+        public const float DefaultPikeTurnSpringFrequency = 1.4f;
+
+        /// <summary>창 회전 스프링의 기본 감쇠입니다.</summary>
+        public const float DefaultPikeTurnSpringDamping = 0.5f;
+
+        /// <summary>품 안을 내준 뒤 창을 다시 내리기까지의 기본 시간(초)입니다.</summary>
+        public const float DefaultPikeBreakRecoverySeconds = 1.4f;
+
+        /// <summary>분대를 고르는 기본 클릭 반경입니다.</summary>
+        public const float DefaultSquadPickRadius = 2.2f;
 
         // ====================================================================================================
         // 2. Time
@@ -60,6 +97,23 @@ namespace SRPG.Data
                  "1에 가까우면 병사들이 앵커를 놓치고 대열이 길게 늘어집니다.")]
         public float AnchorSpeedFactor = 0.92f;
 
+        [Min(0.05f)]
+        [Tooltip("병사와 진형 슬롯의 짝을 다시 짜는 주기(초)입니다.\n" +
+                 "짧으면 미세한 위치 변화로 슬롯이 서로 뒤바뀌며 병사들이 자리를 두고 떱니다.\n" +
+                 "길면 인원이 줄어든 뒤 대열이 한동안 비뚤어진 채로 남습니다.")]
+        public float SquadAssignmentInterval = 0.35f;
+
+        [Min(0.05f)]
+        [Tooltip("전열이 향할 방향을 다시 살피는 주기(초)입니다.\n" +
+                 "짧으면 위협이 조금만 움직여도 전원이 고개를 돌립니다.")]
+        public float SquadFacingScanInterval = 0.4f;
+
+        [Min(0.2f)]
+        [Tooltip("클릭 지점이 분대 중심에서 이 거리 안이면 분대를 고른 것으로 봅니다.\n" +
+                 "<b>조작감에 직결됩니다.</b> 좁으면 정확히 찍어야 하고,\n" +
+                 "넓으면 분대 옆 지형으로 보내려던 명령이 선택으로 먹힙니다.")]
+        public float SquadPickRadius = DefaultSquadPickRadius;
+
         // ====================================================================================================
         // 4. Unit
         // ====================================================================================================
@@ -69,12 +123,12 @@ namespace SRPG.Data
         [Tooltip("검병이 벨 때 <b>몸을 앞으로 던지는</b> 세기입니다.\n" +
                  "0이면 제자리에서 허공에 칼을 휘두르는 것처럼 보입니다.\n" +
                  "크면 적을 지나쳐 뚫고 나갑니다.")]
-        public float MeleeLungeForce = 3.6f;
+        public float MeleeLungeForce = DefaultMeleeLungeForce;
 
         [Min(0f)]
         [Tooltip("이 거리보다 가까우면 도약하지 않습니다.\n" +
                  "밀고 들어갈 공간이 없는데 힘을 주면 서로 통과하거나 어색하게 미끄러집니다.")]
-        public float MeleeLungeMinDistance = 0.7f;
+        public float MeleeLungeMinDistance = DefaultMeleeLungeMinDistance;
 
         [Range(0f, 4f)]
         [Tooltip("아군끼리 서로 밀어내는 세기입니다.\n" +
@@ -99,22 +153,19 @@ namespace SRPG.Data
         [Tooltip("근접병이 대열을 풀고 적에게 다가갈 수 있는 최대 <b>격자 거리(칸)</b>입니다.\n" +
                  "크면 병사들이 적을 따라 흩어지고, 작으면 자리를 지키느라 눈앞의 적을 놓칩니다.\n" +
                  "창병과 궁수는 이 값과 무관하게 자리를 지킵니다.")]
-        public float MeleeBreakFormationTiles = 2f;
+        public float MeleeBreakFormationTiles = DefaultMeleeBreakFormationTiles;
+
+        [Min(0f)]
+        [Tooltip("<b>이 속도 이상으로 밀려나는 중이면 물 위로도 밀려납니다 — 곧 익사합니다.</b>\n" +
+                 "이 게임의 주요 사망 수단이라 물가의 위험도가 이 값 하나로 정해집니다.\n" +
+                 "낮추면 스치듯 맞아도 물에 빠지고, 높이면 넉백이 밀치기 연출에 가까워집니다.")]
+        public float DrownKnockbackThreshold = 1.2f;
 
         // ====================================================================================================
         // 5. Enemy
         // ====================================================================================================
 
         [Header("적")]
-        [Min(0f)]
-        [Tooltip("적이 플레이어 유닛을 인지하는 반경입니다. 적 AI 공격성의 핵심 변수입니다.")]
-        public float EnemyAggroRadius = 11f;
-
-        [Min(0.1f)]
-        [Tooltip("적이 경로를 다시 계산하는 주기(초)입니다.\n" +
-                 "짧으면 반응이 빨라지지만 경로 탐색 비용이 그만큼 늘어납니다.")]
-        public float EnemyRepathInterval = 0.9f;
-
         [Min(0.2f)]
         [Tooltip("적 분대가 목표를 다시 고르는 주기(초)입니다.\n" +
                  "짧으면 상황 변화에 민감해지지만, 너무 짧으면 목표를 계속 바꾸며 갈팡질팡합니다.")]
@@ -230,36 +281,36 @@ namespace SRPG.Data
         [Tooltip("자루 길이 대비 <b>안쪽 사각지대</b> 비율입니다.\n" +
                  "이 안쪽으로 파고든 적은 찌르기에 맞지 않습니다.\n" +
                  "0이면 품 안의 적도 찔러 창병에게 약점이 없어지고, 크면 파고들기만 하면 무력해집니다.")]
-        public float PikeInnerDeadZoneRatio = 0.45f;
+        public float PikeInnerDeadZoneRatio = DefaultPikeInnerDeadZoneRatio;
 
         [Min(0f)]
         [Tooltip("창을 겨눌 때 더하는 준비 동작 보정(초)입니다.\n" +
                  "찌르기는 즉시 나가지 않으므로 그만큼 더 앞을 봐야 합니다.")]
-        public float PikeAimLeadSeconds = 0.15f;
+        public float PikeAimLeadSeconds = DefaultPikeAimLeadSeconds;
 
         [Min(0f)]
         [Tooltip("접근 예측 시간의 상한(초)입니다.\n" +
                  "거의 멈춰 선 적을 향해 도착 시간을 그대로 쓰면 예측 지점이 지평선까지 날아갑니다.")]
-        public float PikeMaxAimLeadSeconds = 1.2f;
+        public float PikeMaxAimLeadSeconds = DefaultPikeMaxAimLeadSeconds;
 
         [Min(0f)]
         [Tooltip("한 번 겨눈 적을 놓지 않는 시간(초)입니다.\n" +
                  "0이면 더 가까운 적이 나타날 때마다 창끝이 돌아가 방어선에 구멍이 납니다.")]
-        public float PikeTargetLockSeconds = 1.1f;
+        public float PikeTargetLockSeconds = DefaultPikeTargetLockSeconds;
 
         [Min(0.1f)]
         [Tooltip("창 회전 스프링의 진동수입니다. 클수록 빠르게 따라붙습니다.")]
-        public float PikeTurnSpringFrequency = 1.4f;
+        public float PikeTurnSpringFrequency = DefaultPikeTurnSpringFrequency;
 
         [Range(0.05f, 2f)]
         [Tooltip("창 회전 스프링의 감쇠입니다.\n" +
                  "1 미만이면 목표를 지나쳤다 돌아와 무게감이 생기고, 1을 넘으면 굼떠집니다.")]
-        public float PikeTurnSpringDamping = 0.5f;
+        public float PikeTurnSpringDamping = DefaultPikeTurnSpringDamping;
 
         [Min(0f)]
         [Tooltip("품 안을 내준 뒤 창을 다시 내리기까지의 시간(초)입니다.\n" +
                  "이 동안 창병은 공격하지 못하고 물러납니다. 길수록 진형 붕괴가 치명적입니다.")]
-        public float PikeBreakRecoverySeconds = 1.4f;
+        public float PikeBreakRecoverySeconds = DefaultPikeBreakRecoverySeconds;
 
         // ====================================================================================================
         // 7-2. Attack Queue

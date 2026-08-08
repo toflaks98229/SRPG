@@ -33,12 +33,6 @@ namespace SRPG.Gameplay.Squads
         // 1. Constants
         // ====================================================================================================
 
-        /// <summary>슬롯 배정을 다시 짜는 주기(초)입니다. 매 프레임 짜면 병사들이 자리를 두고 떱니다.</summary>
-        private const float AssignmentInterval = 0.35f;
-
-        /// <summary>전열이 향할 방향을 다시 살피는 주기(초)입니다.</summary>
-        private const float FacingScanInterval = 0.4f;
-
         /// <summary>적이 분대에 닿았다고 보는 거리(칸)입니다. 접근 예측의 목표 지점이 됩니다.</summary>
         private const float ContactRangeTiles = 1.5f;
 
@@ -502,7 +496,7 @@ namespace SRPG.Gameplay.Squads
         {
             if (_facingScanTimer <= 0f)
             {
-                _facingScanTimer = FacingScanInterval;
+                _facingScanTimer = _context.Tuning.SquadFacingScanInterval;
                 _lineFacing = ComputeFacing();
             }
 
@@ -592,7 +586,7 @@ namespace SRPG.Gameplay.Squads
                 return;
             }
 
-            _assignmentTimer = AssignmentInterval;
+            _assignmentTimer = _context.Tuning.SquadAssignmentInterval;
 
             _positionBuffer.Clear();
             int commanderIndex = -1;
