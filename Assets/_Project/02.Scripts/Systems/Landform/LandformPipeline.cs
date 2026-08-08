@@ -91,11 +91,11 @@ namespace SRPG.Systems.Landform
         /// <param name="simulation">침식이 끝난 지형입니다.</param>
         /// <param name="grid">타일 격자입니다. 원점과 가옥 위치를 씁니다.</param>
         /// <param name="maxLevel">최대 고도 단계입니다.</param>
-        public static HeightField Finish(TerrainSimulation simulation, IslandGrid grid, int maxLevel)
+        public static void CarveRoadsAndPads(TerrainSimulation simulation, IslandGrid grid)
         {
             if (simulation == null || grid == null)
             {
-                return null;
+                return;
             }
 
             // 사람이 땅을 건드린 자국입니다. 침식이 끝난 뒤, 다지기 전에 넣습니다.
@@ -119,6 +119,22 @@ namespace SRPG.Systems.Landform
                     coord.Y * TerrainSimulation.Subdivision + half,
                     PadRadius,
                     PadBlend);
+            }
+
+        }
+
+        /// <summary>
+        /// 완성된 지형을 게임이 쓸 형태로 굽습니다.
+        ///
+        /// <b>이 뒤로는 지형을 건드리지 않습니다.</b>
+        /// 여기서 만든 것이 화면에 그려지고 유닛이 딛는 면이므로,
+        /// 이 뒤에 지형을 또 깎으면 타일이 들고 있는 값과 어긋납니다.
+        /// </summary>
+        public static HeightField BuildField(TerrainSimulation simulation, IslandGrid grid, int maxLevel)
+        {
+            if (simulation == null || grid == null)
+            {
+                return null;
             }
 
             return new HeightField(simulation, grid.Origin, grid.HeightStep, maxLevel);
@@ -196,6 +212,31 @@ namespace SRPG.Systems.Landform
             }
 
             return best;
+        }
+
+        /// <summary>
+        /// 침식된 지형을 계단식 대지로 다집니다.
+        ///
+        /// <b>계단은 여기서 생깁니다.</b>
+        /// 침식이 끝난 지형은 매끈해서 절벽이 없습니다. 상판을 단 높이로 눌러야
+        /// 판과 판 사이에 면이 서고, 그 면이 곧 오를 수 없는 벽이 됩니다.
+        ///
+        /// 그래서 이 단계가 <b>타일을 읽기 전에</b> 와야 합니다.
+        /// 다지기 전의 지형에서 절벽을 찾으면 하나도 나오지 않습니다.
+        /// </summary>
+        public static void Quantize(TerrainSimulation simulation, float heightStep, int maxLevel)
+        {
+            if (simulation == null)
+            {
+                return;
+            }
+
+            var level = new int[simulation.Width * simulation.Depth];
+
+            TerrainFlattening.Apply(
+                simulation.Height, level, simulation.Land,
+                simulation.Width, simulation.Depth, simulation.Spacing,
+                heightStep, maxLevel);
         }
 
         /// <summary>

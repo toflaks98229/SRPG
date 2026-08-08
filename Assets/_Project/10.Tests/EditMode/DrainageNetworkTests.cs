@@ -155,17 +155,25 @@ namespace SRPG.Tests
                     continue;
                 }
 
+                // 절벽은 낙차가 커도 됩니다. 어차피 오를 수 없는 면이니까요.
+                if (!tile.IsWalkable)
+                {
+                    continue;
+                }
+
                 for (int n = 0; n < SRPG.Common.GridCoord.Neighbors4.Length; n++)
                 {
                     var neighbor = grid.GetTile(tile.Coord + SRPG.Common.GridCoord.Neighbors4[n]);
 
-                    // 물과 맞닿은 육지는 0단이어야 합니다. 아니면 물속에서 절벽이 솟습니다.
-                    int neighborHeight = neighbor == null || neighbor.IsWater ? 0 : neighbor.Height;
+                    if (neighbor == null || !neighbor.IsWalkable)
+                    {
+                        continue;
+                    }
 
                     Assert.LessOrEqual(
-                        tile.Height - neighborHeight,
+                        Mathf.Abs(tile.Height - neighbor.Height),
                         1,
-                        $"{tile.Coord}({tile.Height}) 와 이웃({neighborHeight}) 의 차이가 1을 넘습니다.");
+                        $"{tile.Coord}({tile.Height}) 와 걸을 수 있는 이웃({neighbor.Height}) 의 차이가 1을 넘습니다.");
                 }
             }
         }

@@ -16,14 +16,14 @@ namespace SRPG.Tests
     /// 예전에는 타일의 고도 단계가 먼저 있고 그 안에서 침식을 돌렸습니다.
     /// 이제는 물과 중력이 지형을 먼저 만들고, 타일이 그 결과를 읽습니다.
     ///
-    /// 그래서 여기서 보는 것도 달라졌습니다.
-    ///   · 물이 실제로 골을 팠는가 — 지류가 합쳐지는 위상이 나왔는가
-    ///   · 직각이 남아 있지 않은가 — 안식각을 넘는 면이 없는가
-    ///   · 딛을 평지가 있는가     — 다지기가 실제로 평면을 만들었는가
-    ///   · 판독이 사는가         — 평지와 사면이 또렷이 갈리는가
+    /// 그리고 그 결과를 <b>계단식 대지</b>로 다집니다. 평평한 상판과 가파른 절벽면이
+    /// 쌓인 형태입니다 — 이 게임의 룩은 자연 그대로가 아니라 쌓인 판입니다.
     ///
-    /// 특히 둘째가 이번 작업의 목적입니다.
-    /// 수직 벽이 사라졌으므로 <b>지형 어디에도 90도가 없어야</b> 합니다.
+    /// 그래서 여기서 보는 것은 이렇습니다.
+    ///   · 상판이 완전히 평평한가   — 판으로 보이려면 기울면 안 됩니다
+    ///   · 윤곽이 격자를 벗어나는가 — 경계가 셀을 가로질러야 계단이 아닙니다
+    ///   · 물이 실제로 골을 팠는가  — 판의 배치를 침식이 정합니다
+    ///   · 딛을 평지가 충분한가     — 온통 절벽이면 부대가 설 자리가 없습니다
     /// </summary>
     public sealed class LandformTests
     {
@@ -41,24 +41,16 @@ namespace SRPG.Tests
         // ====================================================================================================
 
         /// <summary>
-        /// 이 테스트가 이번 작업의 목적입니다.
+        /// <b>상판은 완전히 평평해야 합니다.</b>
         ///
-        /// 예전에는 단 사이를 수직 벽으로 이었습니다. 벽은 어디서 보든 90도이고
-        /// 바닥과 만나는 자리도 90도입니다. 자연에 그런 면은 없습니다.
-        ///
-        /// 이제 단 사이는 침식이 남긴 사면이므로, 지형 어디에도 안식각을 크게 넘는
-        /// 면이 있어서는 안 됩니다.
+        /// 이 게임의 룩은 쌓인 판입니다. 상판이 조금이라도 기울면 판으로 안 보이고,
+        /// 그 위에 선 부대의 대열도 흐트러져 보입니다.
+        /// 자연스러움은 판의 <b>윤곽</b>이 맡습니다 — 그건 침식이 정합니다.
         /// </summary>
         [Test]
-        public void 지형에_수직에_가까운_면이_없다()
+        public void 상판이_완전히_평평하다()
         {
             var field = CreateIsland().Height;
-
-            // 안식각 34도에 여유를 둡니다. tan(50도) = 1.19.
-            const float NearVertical = 1.19f;
-
-            float steepest = 0f;
-            int violations = 0;
 
             for (int sy = 0; sy < field.SamplesY; sy++)
             {
@@ -69,83 +61,112 @@ namespace SRPG.Tests
                         continue;
                     }
 
-                    float slope = field.GetSlope(sx, sy);
-                    steepest = Mathf.Max(steepest, slope);
+                    // 높이는 언제나 단의 정수배여야 합니다.
+                    float height = field.GetSurface(sx, sy);
+                    float band = field.GetLevel(sx, sy) * field.HeightStep;
 
-                    if (slope > NearVertical)
-                    {
-                        violations++;
-                    }
+                    Assert.AreEqual(band, height, 0.0001f, $"({sx},{sy}) 의 상판이 단 높이에서 벗어났습니다.");
                 }
             }
-
-            Assert.AreEqual(
-                0,
-                violations,
-                $"수직에 가까운 면이 {violations}곳 있습니다. 가장 가파른 곳은 {Mathf.Atan(steepest) * Mathf.Rad2Deg:F1}도입니다.");
         }
 
         /// <summary>
-        /// 사면의 밑동이 바닥과 <b>부드럽게</b> 만나야 합니다.
+        /// 이웃한 표본의 단 차이가 1을 넘으면 안 됩니다.
         ///
-        /// 무너져 쌓인 흙(애추)이 거기 깔려 있기 때문입니다.
-        /// 급경사 바로 아래가 곧바로 평지면 그건 무너지지 않은 인공 절벽입니다.
+        /// 그리기가 한 셀 안에서 두 종류의 높이만 다루도록 만들어 둔 약속입니다.
+        /// 어기면 마칭 스퀘어가 표현할 수 없는 형태가 나옵니다.
         /// </summary>
         [Test]
-        public void 사면의_밑동에_비탈이_깔려_있다()
+        public void 이웃_표본의_단_차이가_1을_넘지_않는다()
         {
-            var field = CreateIsland();
-            var height = field.Height;
+            var field = CreateIsland().Height;
 
-            int feet = 0;
-            int cushioned = 0;
-
-            for (int sy = 2; sy < height.SamplesY - 2; sy++)
+            for (int sy = 0; sy < field.SamplesY; sy++)
             {
-                for (int sx = 2; sx < height.SamplesX - 2; sx++)
+                for (int sx = 0; sx < field.SamplesX; sx++)
                 {
-                    if (!height.IsLand(sx, sy) || height.GetSlope(sx, sy) > 0.35f)
+                    if (!field.IsLand(sx, sy))
                     {
                         continue;
                     }
 
-                    // 두 칸 위가 가파른 자리를 찾습니다. 그곳이 사면의 발치입니다.
-                    bool underSlope = false;
+                    int here = field.GetLevel(sx, sy);
 
-                    for (int n = 0; n < GridCoord.Neighbors8.Length; n++)
+                    for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
                     {
-                        int nx = sx + GridCoord.Neighbors8[n].X * 2;
-                        int ny = sy + GridCoord.Neighbors8[n].Y * 2;
+                        int nx = sx + GridCoord.Neighbors4[n].X;
+                        int ny = sy + GridCoord.Neighbors4[n].Y;
 
-                        if (height.IsLand(nx, ny)
-                            && height.GetSlope(nx, ny) > 0.62f
-                            && height.GetSurface(nx, ny) > height.GetSurface(sx, sy))
+                        if (!field.IsInside(nx, ny))
                         {
-                            underSlope = true;
-                            break;
+                            continue;
                         }
-                    }
 
-                    if (!underSlope)
+                        int there = field.IsLand(nx, ny) ? field.GetLevel(nx, ny) : 0;
+
+                        Assert.LessOrEqual(here - there, 1,
+                            $"({sx},{sy}) 의 단 {here} 와 이웃 {there} 의 차이가 1을 넘습니다.");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// <b>단 경계가 격자를 따라가면 안 됩니다.</b>
+        ///
+        /// 경계를 셀 변을 따라 그리면 윤곽이 축에 정렬된 계단이 됩니다.
+        /// 셀을 아무리 잘게 나눠도 계단은 계단이고, 눈은 그 규칙을 즉시 찾아냅니다.
+        ///
+        /// 마칭 스퀘어는 경계를 셀 <b>안쪽으로 가로질러</b> 긋습니다.
+        /// 그 대각선이 실제로 생기려면 한 셀 안에 두 단이 함께 있어야 합니다.
+        /// </summary>
+        [Test]
+        public void 단_경계가_셀을_가로지른다()
+        {
+            var field = CreateIsland().Height;
+
+            int mixed = 0;
+            int boundary = 0;
+
+            for (int sy = 0; sy < field.SamplesY - 1; sy++)
+            {
+                for (int sx = 0; sx < field.SamplesX - 1; sx++)
+                {
+                    if (!field.IsLand(sx, sy) || !field.IsLand(sx + 1, sy)
+                        || !field.IsLand(sx, sy + 1) || !field.IsLand(sx + 1, sy + 1))
                     {
                         continue;
                     }
 
-                    feet++;
+                    int a = field.GetLevel(sx, sy);
+                    int b = field.GetLevel(sx + 1, sy);
+                    int c = field.GetLevel(sx, sy + 1);
+                    int e = field.GetLevel(sx + 1, sy + 1);
 
-                    // 바로 옆이 완전 평지가 아니라 살짝 기울어 있어야 합니다.
-                    if (height.GetSlope(sx, sy) > 0.03f)
+                    int low = Mathf.Min(Mathf.Min(a, b), Mathf.Min(c, e));
+                    int high = Mathf.Max(Mathf.Max(a, b), Mathf.Max(c, e));
+
+                    if (high == low)
                     {
-                        cushioned++;
+                        continue;
+                    }
+
+                    boundary++;
+
+                    // 네 모서리가 2:2 로 갈리지 않으면 대각선이 생깁니다.
+                    int highCount = (a == high ? 1 : 0) + (b == high ? 1 : 0)
+                                  + (c == high ? 1 : 0) + (e == high ? 1 : 0);
+
+                    if (highCount == 1 || highCount == 3)
+                    {
+                        mixed++;
                     }
                 }
             }
 
-            Assert.Greater(feet, 0, "사면의 발치를 찾지 못했습니다.");
-            Assert.Greater(
-                cushioned,
-                feet * 0.6f,
-                $"발치 {feet}곳 중 {cushioned}곳만 기울어 있습니다. 나머지는 직각으로 꺾입니다.");
+            Assert.Greater(boundary, 0, "단 경계가 하나도 없습니다.");
+            Assert.Greater(mixed, boundary * 0.15f,
+                $"경계 셀 {boundary}개 중 {mixed}개만 대각선을 만듭니다. 윤곽이 계단으로 남습니다.");
         }
 
         // ====================================================================================================
@@ -259,7 +280,7 @@ namespace SRPG.Tests
 
                     land++;
 
-                    // tan(12도) = 0.21. 이보다 완만하면 서 있을 만합니다.
+                    // 상판이 평평하므로 경사는 단 경계에만 있습니다.
                     if (field.GetSlope(sx, sy) < 0.21f)
                     {
                         flat++;
@@ -272,43 +293,6 @@ namespace SRPG.Tests
                 flat,
                 land * 0.45f,
                 $"육지 {land}곳 중 {flat}곳만 평지입니다. 온통 비탈이라 부대가 설 자리가 없습니다.");
-        }
-
-        /// <summary>
-        /// 평지와 사면이 <b>또렷이 갈려야</b> 판독이 됩니다.
-        ///
-        /// 전부 어중간하게 기울어 있으면 어디가 딛는 곳인지 눈으로 알 수 없습니다.
-        /// 완만한 쪽과 가파른 쪽에 몰리고 가운데가 적어야 합니다.
-        /// </summary>
-        [Test]
-        public void 평지와_사면이_또렷이_갈린다()
-        {
-            var field = CreateIsland().Height;
-
-            int flat = 0;
-            int middle = 0;
-            int steep = 0;
-
-            for (int sy = 0; sy < field.SamplesY; sy++)
-            {
-                for (int sx = 0; sx < field.SamplesX; sx++)
-                {
-                    if (!field.IsLand(sx, sy))
-                    {
-                        continue;
-                    }
-
-                    float slope = field.GetSlope(sx, sy);
-
-                    if (slope < 0.21f) flat++;
-                    else if (slope < 0.62f) middle++;
-                    else steep++;
-                }
-            }
-
-            Assert.Greater(flat, 0, "평지가 없습니다.");
-            Assert.Greater(steep, 0, "가파른 사면이 없습니다. 전부 밋밋합니다.");
-            Assert.Less(middle, flat, "어중간한 경사가 평지보다 많습니다. 판독이 흐려집니다.");
         }
 
         // ====================================================================================================
@@ -332,15 +316,25 @@ namespace SRPG.Tests
                     continue;
                 }
 
+                // 절벽은 낙차가 커도 됩니다. 오를 수 없는 면이니까요.
+                if (!tile.IsWalkable)
+                {
+                    continue;
+                }
+
                 for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
                 {
                     var neighbor = grid.GetTile(tile.Coord + GridCoord.Neighbors4[n]);
-                    int neighborHeight = neighbor == null || neighbor.IsWater ? 0 : neighbor.Height;
+
+                    if (neighbor == null || !neighbor.IsWalkable)
+                    {
+                        continue;
+                    }
 
                     Assert.LessOrEqual(
-                        tile.Height - neighborHeight,
+                        Mathf.Abs(tile.Height - neighbor.Height),
                         1,
-                        $"{tile.Coord}({tile.Height}) 와 이웃({neighborHeight}) 의 차이가 1을 넘습니다.");
+                        $"{tile.Coord}({tile.Height}) 와 걸을 수 있는 이웃({neighbor.Height}) 의 차이가 1을 넘습니다.");
                 }
             }
         }
@@ -486,7 +480,7 @@ namespace SRPG.Tests
         [Test]
         public void 격자가_없어도_터지지_않는다()
         {
-            Assert.IsNull(LandformPipeline.Finish(null, null, 4));
+            Assert.IsNull(LandformPipeline.BuildField(null, null, 4));
             Assert.DoesNotThrow(() => HydraulicErosion.Apply(null, 0, 0, null, 10, 0));
             Assert.DoesNotThrow(() => TerrainFlattening.Apply(null, null, null, 0, 0, 1f, 1f, 4));
         }

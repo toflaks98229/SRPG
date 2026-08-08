@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
@@ -13,23 +13,16 @@ namespace SRPG.Systems.Grid
     /// 생성 순서
     ///   1) 반경 + 노이즈로 섬 윤곽을 결정한다
     ///   2) 가장 큰 연결 덩어리만 남겨 고립된 섬 조각을 제거한다
-    ///   3) 바다로부터의 거리로 고도를 계단식으로 부여한다
-    ///   4) 바위(절벽)를 배치해 초크포인트를 만든다. 단, 섬을 단절시키면 되돌린다
-    ///   5) 가옥을 서로 떨어뜨려 배치한다
-    ///   6) 해안을 각도 기준으로 나눠 상륙 구역을 만든다
+    ///   3) <b>지형을 시뮬레이션한다</b> — 물과 중력이 골짜기와 능선을 만든다
+    ///   4) 그 지형에서 고도 단계와 통행 불가를 <b>읽어 낸다</b>
+    ///   5) 걸을 수 있는 땅이 이어지도록 경사로를 깎는다 — 그 경사로가 초크포인트가 된다
+    ///   6) 가옥을 서로 떨어뜨려 배치한다
+    ///   7) 해안을 각도 기준으로 나눠 상륙 구역을 만든다
+    ///
+    /// 3번과 4번의 순서가 핵심입니다. 타일은 지형을 만들지 않고 읽습니다.
     /// </summary>
     public static class IslandGenerator
     {
-        // ====================================================================================================
-        // 1. Constants
-        // ====================================================================================================
-
-        /// <summary>고도 한 단계가 차지하는 해안으로부터의 거리(칸)입니다. 클수록 완만한 섬이 됩니다.</summary>
-        private const int HeightBandWidth = 2;
-
-        /// <summary>바위 배치를 시도하는 횟수의 상한입니다. 무한 루프를 막습니다.</summary>
-        private const int MaxRockAttempts = 40;
-
         // ====================================================================================================
         // 2. Public Methods
         // ====================================================================================================
@@ -82,17 +75,147 @@ namespace SRPG.Systems.Grid
                 seed,
                 settings.MaxHeightLevel * settings.HeightStep);
 
-            // 만들어진 지형을 읽어 고도 단계를 정합니다.
+            // 침식된 지형을 계단식 대지로 다집니다.
+            //
+            // <b>이것이 타일을 읽기 전에 와야 합니다.</b>
+            // 침식이 끝난 지형은 매끈해서 절벽이 없습니다. 다지기 전에 절벽을 찾으면
+            // 하나도 나오지 않고, 그러면 장벽도 초크포인트도 없는 섬이 됩니다.
+            Landform.LandformPipeline.Quantize(simulation, settings.HeightStep, settings.MaxHeightLevel);
+
+            // 다져진 지형을 읽어 고도 단계를 정합니다.
             Landform.LandformPipeline.ReadTileHeights(
                 simulation, w, d, isLand, settings.HeightStep, settings.MaxHeightLevel, height);
 
-            // 통행 판정이 "고도차 1 이하"를 쓰므로 반드시 강제해야 합니다.
-            // 어기면 섬이 걸어서 못 가는 조각으로 쪼개집니다.
-            DrainageNetwork.EnforceStepLimit(w, d, isLand, height);
+            // 통행 불가를 경사에서 읽어 냅니다.
+            //
+            // <b>여기서 섬 전체를 평평하게 만들면 안 됩니다.</b>
+            // 예전에는 고도차를 1 이하로 강제해 모든 곳을 걸을 수 있게 만들었는데,
+            // 그러면 장벽이 사라져 초크포인트가 없어지고 전선이 사방으로 열립니다.
+            // 지킬 곳이 없는 섬은 전술 게임이 아닙니다.
+            //
+            // 대신 오를 수 없는 면을 그대로 두고, 걸을 수 있는 땅만 이어 줍니다.
+            TacticalShaping.MarkCliffs(simulation, w, d, isLand, height, isRock, settings.HeightStep);
 
-            PlaceRocks(settings, rng, w, d, isLand, height, isRock);
+            TacticalShaping.ConnectRegions(
+                simulation, w, d, isLand, height, isRock,
+                settings.HeightStep, settings.MaxHeightLevel);
 
-            // 지형 확정
+            ApplyTerrain(grid, w, d, isLand, isRock, distToWater, height);
+
+            grid.RebuildDerivedData();
+
+            PlaceHouses(settings, rng, grid);
+            grid.RebuildDerivedData();
+
+            BuildLandingZones(settings, grid);
+
+            // 가옥과 상륙 지점이 정해졌으니 길과 터를 깎습니다.
+            // 지형을 바꾸는 마지막 작업입니다.
+            Landform.LandformPipeline.CarveRoadsAndPads(simulation, grid);
+            Landform.LandformPipeline.Quantize(simulation, settings.HeightStep, settings.MaxHeightLevel);
+
+            // <b>여기서 한 번에 확정합니다.</b>
+            //
+            // 지형을 깎을 때마다 타일을 다시 읽어야 하는데, 읽고 나서 또 깎으면
+            // 끝없이 어긋납니다. 그래서 지형 변경을 여기까지로 못 박고
+            // 그 뒤에 딱 한 번 읽습니다.
+            Landform.LandformPipeline.ReadTileHeights(
+                simulation, w, d, isLand, settings.HeightStep, settings.MaxHeightLevel, height);
+
+            // <b>통로를 벽 판정보다 먼저 냅니다.</b>
+            //
+            // 예전에는 벽을 정한 뒤에 통로를 뚫었는데, 그러면 나중에 낸 통로가
+            // 앞서 낸 통로를 다시 막는 되먹임이 생겨 끝내 수렴하지 않았습니다.
+            // 먼저 길을 내고, 그 길을 건드리지 않는다는 조건으로 벽을 정합니다.
+            var carved = EnsureObjectivesReachable(grid, simulation, w, d, isLand, height, settings);
+
+            TacticalShaping.MarkCliffs(
+                simulation, w, d, isLand, height, isRock, settings.HeightStep, carved);
+
+            TacticalShaping.ConnectRegions(
+                simulation, w, d, isLand, height, isRock,
+                settings.HeightStep, settings.MaxHeightLevel, carved);
+
+            ApplyTerrain(grid, w, d, isLand, isRock, distToWater, height);
+            grid.RebuildDerivedData();
+
+            grid.Height = Landform.LandformPipeline.BuildField(simulation, grid, settings.MaxHeightLevel);
+
+            return grid;
+        }
+
+
+        /// <summary>
+        /// 모든 상륙 지점에서 모든 가옥까지 걸어갈 수 있게 만듭니다.
+        ///
+        /// <b>왜 여기만 따로 보장하는가</b>
+        ///
+        /// 연결 복구는 가장 싼 자리를 골라 조금씩 깎는 방식이라 대개 잘 듣지만,
+        /// 깎은 자리가 다시 벽으로 판정되는 되먹임에 걸리면 수렴하지 못합니다.
+        ///
+        /// 다른 자리는 못 이어도 그만입니다 — 절벽 위 좁은 턱 같은 것들입니다.
+        /// 하지만 <b>가옥에 못 닿으면 지킬 것이 없고, 상륙 지점에서 못 나가면 적이 갇힙니다.</b>
+        /// 그 둘은 게임의 전제라서 확실히 뚫어야 합니다.
+        /// </summary>
+        private static bool[] EnsureObjectivesReachable(
+            IslandGrid grid, Landform.TerrainSimulation simulation,
+            int w, int d, bool[] isLand, int[] height,
+            IslandSettings settings)
+        {
+            var carved = new bool[w * d];
+
+            if (grid.HouseTiles.Count == 0)
+            {
+                return carved;
+            }
+
+            int anchor = grid.HouseTiles[0].Coord.Y * w + grid.HouseTiles[0].Coord.X;
+
+            // 이미 낸 길을 기억해 둡니다. 나중 통로가 앞 통로를 막으면 안 됩니다.
+            carved[anchor] = true;
+
+            var ignored = new bool[w * d];
+
+            for (int i = 1; i < grid.HouseTiles.Count; i++)
+            {
+                var coord = grid.HouseTiles[i].Coord;
+
+                TacticalShaping.ForceCorridor(
+                    simulation, w, d, isLand, height, ignored,
+                    anchor, coord.Y * w + coord.X,
+                    settings.HeightStep, settings.MaxHeightLevel, carved);
+            }
+
+            for (int z = 0; z < grid.LandingZones.Count; z++)
+            {
+                var zone = grid.LandingZones[z];
+
+                if (zone.Count == 0)
+                {
+                    continue;
+                }
+
+                var coord = zone[zone.Count / 2].Coord;
+
+                TacticalShaping.ForceCorridor(
+                    simulation, w, d, isLand, height, ignored,
+                    anchor, coord.Y * w + coord.X,
+                    settings.HeightStep, settings.MaxHeightLevel, carved);
+            }
+
+            return carved;
+        }
+
+        /// <summary>
+        /// 계산된 고도와 통행 불가를 타일에 옮겨 적습니다.
+        ///
+        /// 지형을 깎을 때마다 불러야 합니다. 타일은 언제나 지금의 지형을 읽고 있어야
+        /// "보이는 것과 갈 수 있는 곳"이 어긋나지 않습니다.
+        /// </summary>
+        private static void ApplyTerrain(
+            IslandGrid grid, int w, int d,
+            bool[] isLand, bool[] isRock, int[] distToWater, int[] height)
+        {
             for (int y = 0; y < d; y++)
             {
                 for (int x = 0; x < w; x++)
@@ -109,6 +232,18 @@ namespace SRPG.Systems.Grid
 
                     tile.Height = height[i];
 
+                    // 가옥은 이미 정해진 목표입니다. 지형을 다시 읽는다고 지워지면 안 됩니다.
+                    //
+                    // 이 함수는 지형을 깎을 때마다 다시 불리는데, 그때마다 종류를 새로 쓰면
+                    // 나중에 배치한 가옥이 통째로 사라집니다. 실제로 그렇게 되어
+                    // "가옥이 없습니다"로 검사가 잡았습니다.
+                    if (tile.Type == TileType.House)
+                    {
+                        // 가옥 터는 다져 놓은 평지라 벽이 될 수 없습니다.
+                        isRock[i] = false;
+                        continue;
+                    }
+
                     if (isRock[i])
                     {
                         tile.Type = TileType.Cliff;
@@ -123,18 +258,6 @@ namespace SRPG.Systems.Grid
                     }
                 }
             }
-
-            grid.RebuildDerivedData();
-
-            PlaceHouses(settings, rng, grid);
-            grid.RebuildDerivedData();
-
-            BuildLandingZones(settings, grid);
-
-            // 가옥 자리가 정해졌으니 그 터를 다지고 지형을 완성합니다.
-            grid.Height = Landform.LandformPipeline.Finish(simulation, grid, settings.MaxHeightLevel);
-
-            return grid;
         }
 
         // ====================================================================================================
@@ -311,117 +434,6 @@ namespace SRPG.Systems.Grid
             }
         }
 
-
-        // ====================================================================================================
-        // 5. Private Methods - Rocks
-        // ====================================================================================================
-
-        /// <summary>
-        /// 고지대에 바위를 놓아 통행을 막고 초크포인트를 만듭니다.
-        /// 섬을 두 조각으로 갈라 버리면 방어가 불가능해지므로, 배치할 때마다 연결성을 검사하고 어기면 되돌립니다.
-        /// </summary>
-        private static void PlaceRocks(IslandSettings settings, System.Random rng, int w, int d, bool[] isLand, int[] height, bool[] isRock)
-        {
-            var candidates = new List<int>();
-            for (int i = 0; i < isLand.Length; i++)
-            {
-                // 해안(거리 1)은 상륙 지점이므로 막지 않습니다.
-                if (isLand[i] && height[i] >= 1)
-                {
-                    candidates.Add(i);
-                }
-            }
-
-            if (candidates.Count == 0)
-            {
-                return;
-            }
-
-            int targetRockCount = Mathf.Max(1, candidates.Count / 12);
-            int placed = 0;
-
-            for (int attempt = 0; attempt < MaxRockAttempts && placed < targetRockCount; attempt++)
-            {
-                int pick = candidates[rng.Next(candidates.Count)];
-                if (isRock[pick])
-                {
-                    continue;
-                }
-
-                isRock[pick] = true;
-
-                if (IsConnected(w, d, isLand, isRock))
-                {
-                    placed++;
-                }
-                else
-                {
-                    isRock[pick] = false;
-                }
-            }
-        }
-
-        /// <summary>
-        /// 바위를 제외한 육지가 하나로 이어져 있는지 확인합니다.
-        /// </summary>
-        private static bool IsConnected(int w, int d, bool[] isLand, bool[] isRock)
-        {
-            int start = -1;
-            int total = 0;
-
-            for (int i = 0; i < isLand.Length; i++)
-            {
-                if (isLand[i] && !isRock[i])
-                {
-                    total++;
-                    if (start < 0)
-                    {
-                        start = i;
-                    }
-                }
-            }
-
-            if (start < 0)
-            {
-                return false;
-            }
-
-            var visited = new bool[isLand.Length];
-            var queue = new Queue<int>();
-            queue.Enqueue(start);
-            visited[start] = true;
-            int reached = 0;
-
-            while (queue.Count > 0)
-            {
-                int current = queue.Dequeue();
-                reached++;
-
-                int cx = current % w;
-                int cy = current / w;
-
-                for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
-                {
-                    int nx = cx + GridCoord.Neighbors4[n].X;
-                    int ny = cy + GridCoord.Neighbors4[n].Y;
-
-                    if (nx < 0 || nx >= w || ny < 0 || ny >= d)
-                    {
-                        continue;
-                    }
-
-                    int ni = ny * w + nx;
-                    if (!visited[ni] && isLand[ni] && !isRock[ni])
-                    {
-                        visited[ni] = true;
-                        queue.Enqueue(ni);
-                    }
-                }
-            }
-
-            return reached == total;
-        }
-
         // ====================================================================================================
         // 6. Private Methods - Houses
         // ====================================================================================================
@@ -441,6 +453,13 @@ namespace SRPG.Systems.Grid
                 {
                     candidates.Add(tile);
                 }
+            }
+
+            // 절벽이 많은 섬에서는 내륙 평지가 아예 없을 수 있습니다.
+            // 가옥이 없으면 지킬 목표가 없어 전투가 성립하지 않으므로, 조건을 풀어 다시 찾습니다.
+            if (candidates.Count == 0)
+            {
+                candidates.AddRange(grid.WalkableTiles);
             }
 
             if (candidates.Count == 0)

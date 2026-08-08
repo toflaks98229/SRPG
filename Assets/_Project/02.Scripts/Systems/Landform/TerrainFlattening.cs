@@ -105,46 +105,80 @@ namespace SRPG.Systems.Landform
                     int band = Mathf.Clamp(Mathf.RoundToInt(surface[i] / heightStep), 0, maxLevel);
                     level[i] = band;
 
-                    float target = band * heightStep;
-
-                    // 얼마나 가파른가로 다지는 정도를 정합니다.
-                    float slope = SlopeAt(surface, land, width, depth, spacing, x, y);
-                    float flatness = 1f - Mathf.InverseLerp(flatLimit, keepLimit, slope);
-
-                    // 완만한 곳은 단 높이로 끌어당기고, 가파른 곳은 그대로 둡니다.
-                    float pulled = Mathf.Lerp(surface[i], target, flatness);
-
-                    // 다져도 아주 조금은 남깁니다. 완벽한 평면은 인공물로 보입니다.
-                    flattened[i] = Mathf.Lerp(pulled, surface[i], ResidualRoughness * flatness);
+                    // <b>상판은 완전히 평평합니다.</b>
+                    //
+                    // 이 게임의 룩은 쌓인 판입니다. 상판이 조금이라도 기울면
+                    // 판으로 안 보이고, 그 위에 선 부대의 대열도 흐트러져 보입니다.
+                    // 자연스러움은 <b>판의 윤곽</b>이 맡습니다 — 그건 침식이 정합니다.
+                    flattened[i] = band * heightStep;
                 }
             }
 
             System.Array.Copy(flattened, surface, surface.Length);
 
-            // <b>다지고 나면 반드시 다시 무너뜨려야 합니다.</b>
+            // 이웃한 표본의 단 차이를 1 이하로 눌러 둡니다.
             //
-            // 완만한 곳만 단 높이로 끌어당겼으므로, 그대로 둔 사면과의 이음매에
-            // 새로운 급경사가 생깁니다. 그것을 두면 수직 벽이 되살아납니다 —
-            // 벽을 없애려고 한 일이 벽을 다시 만드는 셈입니다.
+            // 한 칸에 두 단이 떨어지면 그리기가 감당하지 못합니다.
+            // 한 셀 안에서 두 종류의 높이만 다루면 되도록 만들어 두는 것입니다.
             //
-            // 평지는 이미 안식각 안이라 이 과정에서 움직이지 않습니다.
-            // 이음매만 무너져 발치에 비탈이 깔립니다.
-            TerrainSimulation.Settle(surface, land, width, depth, spacing, SettleAfterFlatten);
+            // <b>낮추기만 합니다.</b> 올리면 파인 골이 메워집니다.
+            ClampLevelSteps(level, land, width, depth);
 
             for (int i = 0; i < surface.Length; i++)
             {
-                if (!land[i])
+                if (land[i])
                 {
-                    continue;
+                    surface[i] = level[i] * heightStep;
                 }
+            }
+        }
 
-                // 육지가 해수면 아래로 내려가면 안 됩니다.
-                // 물이 깎다 보면 해안 근처가 0 밑으로 파이는데, 그대로 두면
-                // 걸을 수 있는 땅이 물에 잠겨 보입니다.
-                surface[i] = Mathf.Max(0f, surface[i]);
+        /// <summary>
+        /// 이웃한 표본의 단 차이를 1 이하로 만듭니다. 낮추기만 합니다.
+        /// </summary>
+        private static void ClampLevelSteps(int[] level, bool[] land, int width, int depth)
+        {
+            bool changed = true;
+            int guard = 0;
 
-                // 무너지면서 단 경계가 조금 움직였으므로 다시 읽습니다.
-                level[i] = Mathf.Clamp(Mathf.RoundToInt(surface[i] / heightStep), 0, maxLevel);
+            while (changed && guard++ < 32)
+            {
+                changed = false;
+
+                for (int y = 0; y < depth; y++)
+                {
+                    for (int x = 0; x < width; x++)
+                    {
+                        int i = y * width + x;
+
+                        if (!land[i])
+                        {
+                            continue;
+                        }
+
+                        for (int n = 0; n < GridCoord.Neighbors4.Length; n++)
+                        {
+                            int nx = x + GridCoord.Neighbors4[n].X;
+                            int ny = y + GridCoord.Neighbors4[n].Y;
+
+                            if (nx < 0 || nx >= width || ny < 0 || ny >= depth)
+                            {
+                                continue;
+                            }
+
+                            int ni = ny * width + nx;
+
+                            // 바다는 0단으로 봅니다. 물속에서 절벽이 두 단 솟으면 안 됩니다.
+                            int there = land[ni] ? level[ni] : 0;
+
+                            if (level[i] - there > 1)
+                            {
+                                level[i] = there + 1;
+                                changed = true;
+                            }
+                        }
+                    }
+                }
             }
         }
 

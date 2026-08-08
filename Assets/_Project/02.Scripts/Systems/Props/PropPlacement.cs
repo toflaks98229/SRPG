@@ -62,7 +62,7 @@ namespace SRPG.Systems.Props
         /// 무거운 바위는 비탈면과 나란히 눕지 않습니다. 무게중심이 아래를 향하도록
         /// 자리를 잡으며 파고들어, 지면보다 곧게 섭니다.
         /// </summary>
-        private const float SurfaceAlignment = 0.55f;
+        private const float SurfaceAlignment = 0.32f;
 
         // ====================================================================================================
         // 2. Public Methods

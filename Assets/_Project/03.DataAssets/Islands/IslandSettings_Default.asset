@@ -15,8 +15,8 @@ MonoBehaviour:
   Width: 30
   Depth: 30
   CellSize: 2
-  HeightStep: 0.5
-  MaxHeightLevel: 4
+  HeightStep: 0.7
+  MaxHeightLevel: 6
   IslandRadius: 0.36
   NoiseScale: 4.5
   NoiseStrength: 0.16

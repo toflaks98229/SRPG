@@ -196,50 +196,30 @@ namespace SRPG.Gameplay.Island
                         continue;
                     }
 
-                    // 네 모서리 중 가장 가파른 것이 이 면의 성격을 정합니다.
-                    // 평균을 쓰면 절벽 가장자리가 잔디로 새어 나옵니다.
-                    float slope = Mathf.Max(
-                        Mathf.Max(field.GetSlope(sx, sy), field.GetSlope(sx + 1, sy)),
-                        Mathf.Max(field.GetSlope(sx, sy + 1), field.GetSlope(sx + 1, sy + 1)));
+                    var cell = new PlateauMesher.Cell
+                    {
+                        Corner00 = field.GetLevel(sx, sy),
+                        Corner01 = field.GetLevel(sx, sy + 1),
+                        Corner11 = field.GetLevel(sx + 1, sy + 1),
+                        Corner10 = field.GetLevel(sx + 1, sy),
 
-                    var buffer = slope >= RockSlopeThreshold
-                        ? rock
-                        : (TileTypeAt(field, sx, sy) == TileType.Beach ? sand : grass);
+                        MinX = field.Origin.x + sx * field.Spacing,
+                        MinZ = field.Origin.z + sy * field.Spacing,
+                        Size = field.Spacing,
+                        HeightStep = field.HeightStep,
+                    };
 
-                    AddSurfaceQuad(buffer, field, sx, sy, slope);
+                    // 상판은 지표 재질, 절벽면은 언제나 암반입니다.
+                    // 딛을 수 있는 면과 없는 면이 재질로 갈리는 규칙은 그대로입니다.
+                    var top = TileTypeAt(field, sx, sy) == TileType.Beach ? sand : grass;
+
+                    PlateauMesher.AddCell(top, rock, cell);
                 }
             }
 
             CreateMeshObject("Terrain_Top_Ground", grass, WalkableGrassColor, _materials.Ground);
             CreateMeshObject("Terrain_Top_Beach", sand, WalkableSandColor, _materials.Beach);
             CreateMeshObject("Terrain_Rock", rock, RockColor, _materials.Cliff);
-        }
-
-        /// <summary>
-        /// 표면 사각형 하나입니다. 네 모서리가 각자 지형 높이를 따릅니다.
-        ///
-        /// 음영은 경사에서 나옵니다. 가파를수록 어둡습니다.
-        /// 예전에는 벽의 위아래에 손으로 음영을 넣었는데, 벽이 사라졌으니
-        /// 같은 정보를 경사에서 뽑습니다. 결과는 같습니다 — 고도 차가 눈에 들어옵니다.
-        /// </summary>
-        private void AddSurfaceQuad(MeshBuffer buffer, HeightField field, int sx, int sy, float slope)
-        {
-            float size = field.Spacing;
-
-            float x0 = field.Origin.x + sx * size;
-            float z0 = field.Origin.z + sy * size;
-            float x1 = x0 + size;
-            float z1 = z0 + size;
-
-            float shade = Mathf.Lerp(TopShade, WallBottomShade, Mathf.InverseLerp(0.2f, 1.1f, slope));
-
-            buffer.AddQuad(
-                new Vector3(x0, field.GetSurface(sx, sy), z0),
-                new Vector3(x0, field.GetSurface(sx, sy + 1), z1),
-                new Vector3(x1, field.GetSurface(sx + 1, sy + 1), z1),
-                new Vector3(x1, field.GetSurface(sx + 1, sy), z0),
-                Vector3.up,
-                shade);
         }
 
         /// <summary>네 모서리가 모두 육지인지 봅니다.</summary>
