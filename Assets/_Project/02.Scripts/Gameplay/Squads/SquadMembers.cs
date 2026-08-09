@@ -34,6 +34,7 @@ namespace SRPG.Gameplay.Squads
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>소속 병사입니다. 쓰러지면 걸러집니다.</summary>
         private readonly List<Unit> _units;
 
         /// <summary>병사별로 맡은 슬롯 인덱스입니다. <see cref="_units"/>와 같은 순서입니다.</summary>
@@ -42,6 +43,7 @@ namespace SRPG.Gameplay.Squads
         /// <summary>배정에 넘길 위치를 담는 재사용 버퍼입니다.</summary>
         private readonly List<Vector3> _positionBuffer;
 
+        /// <summary>다음 재배정까지 남은 시간입니다. 0 이하가 되면 짝을 다시 짭니다.</summary>
         private float _assignmentTimer;
 
         // ====================================================================================================
@@ -76,6 +78,7 @@ namespace SRPG.Gameplay.Squads
         // ====================================================================================================
 
         /// <summary>병사를 명부에 넣습니다.</summary>
+        /// <param name="unit">명부에 넣을 병사입니다. null이면 아무것도 하지 않습니다.</param>
         public void Add(Unit unit)
         {
             if (unit != null)
@@ -169,6 +172,9 @@ namespace SRPG.Gameplay.Squads
         /// 병사가 엉뚱한 곳으로 한 걸음 걸었다 돌아옵니다.
         /// </summary>
         /// <returns>배정된 자리가 있으면 true입니다.</returns>
+        /// <param name="memberIndex">병사의 순번입니다.</param>
+        /// <param name="slots">진형 슬롯 위치입니다.</param>
+        /// <param name="slot">배정된 자리입니다. 없으면 원점입니다.</param>
         public bool TryGetSlot(int memberIndex, IReadOnlyList<Vector3> slots, out Vector3 slot)
         {
             slot = Vector3.zero;

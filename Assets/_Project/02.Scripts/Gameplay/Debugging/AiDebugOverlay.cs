@@ -59,8 +59,11 @@ namespace SRPG.Gameplay.Debugging
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>기즈모를 그릴 기준이 되는 지형입니다.</summary>
         private IslandGrid _grid;
+        /// <summary>위협 분포를 읽을 공급자입니다.</summary>
         private IThreatProvider _threat;
+        /// <summary>목표 선을 그릴 적 분대 명부입니다.</summary>
         private ISquadRoster _enemySquads;
 
         // ====================================================================================================
@@ -73,6 +76,9 @@ namespace SRPG.Gameplay.Debugging
         /// 그릴 지형과 그릴 판단, 둘뿐입니다. 표시 코드가 전투 상태를 바꿀 수 있으면
         /// 디버그 도구가 디버그 대상을 흔드는 일이 생깁니다.
         /// </summary>
+        /// <param name="grid">기즈모를 그릴 기준이 되는 지형입니다.</param>
+        /// <param name="threat">위협 분포를 읽을 공급자입니다.</param>
+        /// <param name="enemySquads">목표 선을 그릴 적 분대 명부입니다.</param>
         public void Initialize(IslandGrid grid, IThreatProvider threat, ISquadRoster enemySquads)
         {
             _grid = grid;

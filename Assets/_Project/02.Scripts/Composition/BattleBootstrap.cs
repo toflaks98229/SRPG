@@ -84,20 +84,30 @@ namespace SRPG.Composition
 
         private readonly Dictionary<UnitDefinition, Material> _materialCache = new Dictionary<UnitDefinition, Material>();
 
+        /// <summary>이번 판의 런타임 컨텍스트입니다. 조립 지점만이 이것을 통째로 듭니다.</summary>
         private BattleContext _context;
+        /// <summary>슬로우모션을 거는 전술 시간 제어기입니다.</summary>
         private TacticalTimeController _timeController;
+        /// <summary>플레이어의 유일한 조작 창구입니다.</summary>
         private SquadSelectionController _selectionController;
+        /// <summary>양측을 세우고 지원군을 올려보내는 전개기입니다.</summary>
         private SquadDeployer _deployer;
+        /// <summary>생성된 유닛이 붙을 부모입니다.</summary>
         private Transform _unitRoot;
+        /// <summary>접지 그림자가 붙을 부모입니다. 첫 유닛을 만들 때 생깁니다.</summary>
         private Transform _shadowRoot;
 
+        /// <summary>확정된 아군 병과 목록입니다. 에셋이 없으면 코드 기본값입니다.</summary>
         private UnitDefinition[] _playerRoster;
+        /// <summary>확정된 적 병과 목록입니다. 에셋이 없으면 코드 기본값입니다.</summary>
         private UnitDefinition[] _enemyRoster;
 
         /// <summary>전황을 관측해 결말을 판정하고 보고서를 씁니다. 조립 지점은 그 결과만 발행합니다.</summary>
         private readonly BattleReporter _reporter = new BattleReporter();
 
+        /// <summary>이번 판에 실제로 쓰인 주문서입니다.</summary>
         private BattleRequest _activeRequest;
+        /// <summary>이번 판에 만들어진 전장입니다. 바깥이 격자만 꽂아 준 경우에는 비어 있습니다.</summary>
         private Battlefield _battlefield;
 
         // ====================================================================================================

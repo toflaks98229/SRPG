@@ -36,9 +36,12 @@ namespace SRPG.Gameplay.Squads
         /// <summary>병사 명부와 슬롯 배정입니다. 적 분대와 <b>같은 장부</b>를 씁니다.</summary>
         private readonly SquadMembers _members = new SquadMembers(12);
 
+        /// <summary>앵커가 따라갈 경로입니다.</summary>
         private readonly List<GridCoord> _path = new List<GridCoord>(64);
+        /// <summary>이번 진형의 슬롯 위치입니다.</summary>
         private readonly List<Vector3> _slots = new List<Vector3>(12);
 
+        /// <summary>전열이 향할 방향을 다시 살피기까지 남은 시간입니다.</summary>
         private float _facingScanTimer;
         /// <summary>
         /// 병사들이 <b>고개를 돌릴</b> 방향입니다. 계속 갱신되며 슬롯에는 영향을 주지 않습니다.
@@ -60,8 +63,11 @@ namespace SRPG.Gameplay.Squads
         /// <summary>앵커 전진은 적 분대와 공유하는 순수 로직입니다.</summary>
         private readonly FormationMotor _motor = new FormationMotor();
 
+        /// <summary>분대가 볼 수 있는 것만 담긴 컨텍스트입니다.</summary>
         private ISquadContext<Squad> _context;
+        /// <summary>지휘관(깃발병)입니다. 쓰러지면 분대가 영구 소멸합니다.</summary>
         private Unit _commander;
+        /// <summary>앵커가 전진하는 속도입니다. 병사 이동 속도에서 유도합니다.</summary>
         private float _anchorSpeed = 3f;
 
         // ====================================================================================================
@@ -215,6 +221,7 @@ namespace SRPG.Gameplay.Squads
         /// 지정 타일로 이동을 명령합니다. 플레이어의 유일한 조작입니다.
         /// </summary>
         /// <returns>경로를 찾아 명령을 수락했으면 true입니다.</returns>
+        /// <param name="target">가고자 하는 타일입니다. 점유됐거나 통행 불가면 가장 가까운 빈 칸으로 보정합니다.</param>
         public bool IssueMoveOrder(GridCoord target)
         {
             if (State == SquadState.Destroyed || _context == null)
@@ -287,6 +294,7 @@ namespace SRPG.Gameplay.Squads
         /// <summary>
         /// 분대 랭크를 올립니다. 소속 병사 전원에게 즉시 반영됩니다.
         /// </summary>
+        /// <param name="rank">올릴 숙련도입니다. 허용 범위를 벗어나면 잘립니다.</param>
         public void PromoteTo(int rank)
         {
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);

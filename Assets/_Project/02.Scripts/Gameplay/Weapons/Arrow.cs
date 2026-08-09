@@ -36,17 +36,28 @@ namespace SRPG.Gameplay.Weapons
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>이 화살을 쏜 병사입니다. 자기 자신은 맞지 않습니다.</summary>
         private Unit _shooter;
+        /// <summary>쏜 쪽의 진영입니다. 아군 오사를 가릅니다.</summary>
         private Team _shooterTeam;
+        /// <summary>현재 비행 속도입니다. 매 프레임 중력이 더해집니다.</summary>
         private Vector3 _velocity;
+        /// <summary>이 화살에 적용할 중력 배율입니다.</summary>
         private float _gravityScale;
+        /// <summary>명중했을 때 줄 피해량입니다. 감쇠 이전 값입니다.</summary>
         private float _damage;
+        /// <summary>명중했을 때 밀어낼 세기입니다.</summary>
         private float _knockback;
+        /// <summary>명중했을 때 줄 경직 시간입니다.</summary>
         private float _stagger;
+        /// <summary>발사각입니다. 방패의 상방 판정 기준선이 여기서 파생됩니다.</summary>
         private float _arcAngleDegrees;
+        /// <summary>날아다닌 시간입니다. 너무 오래되면 스스로 회수됩니다.</summary>
         private float _lifetime;
+        /// <summary>이미 어딘가에 박혔는지 여부입니다. 박힌 뒤에는 판정하지 않습니다.</summary>
         private bool _isStuck;
 
+        /// <summary>회수될 풀입니다. 없으면 그냥 파괴됩니다.</summary>
         private ProjectilePool _pool;
 
         // ====================================================================================================

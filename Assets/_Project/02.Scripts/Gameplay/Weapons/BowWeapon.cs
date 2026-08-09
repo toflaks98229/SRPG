@@ -41,8 +41,11 @@ namespace SRPG.Gameplay.Weapons
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>이번 동작에서 겨눈 대상입니다.</summary>
         private Unit _currentTarget;
+        /// <summary>이번 동작에서 화살을 이미 쏘았는지 여부입니다. 한 동작에 한 발만 나갑니다.</summary>
         private bool _hasReleased;
+        /// <summary>활의 대기 자세입니다. 동작이 끝나면 여기로 돌아옵니다.</summary>
         private Vector3 _restLocalPosition;
 
         // ====================================================================================================

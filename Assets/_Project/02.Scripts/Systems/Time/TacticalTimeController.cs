@@ -18,10 +18,14 @@ namespace SRPG.Systems.Time
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>슬로우모션일 때의 타임스케일입니다.</summary>
         private readonly float _slowMotionScale;
+        /// <summary>타임스케일이 목표값으로 수렴하는 속도입니다.</summary>
         private readonly float _transitionSpeed;
 
+        /// <summary>지금 슬로우모션이 요청된 상태인지 여부입니다.</summary>
         private bool _slowMotionRequested;
+        /// <summary>보간 중인 현재 타임스케일입니다.</summary>
         private float _currentScale = 1f;
 
         // ====================================================================================================

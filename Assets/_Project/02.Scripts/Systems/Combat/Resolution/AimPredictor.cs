@@ -104,6 +104,7 @@ namespace SRPG.Systems.Combat
         /// <param name="effectiveRange">공격할 수 있는 거리입니다.</param>
         /// <param name="extraLeadSeconds">준비 동작 보정입니다.</param>
         /// <param name="maxLeadSeconds">예측 시간의 상한입니다.</param>
+        /// <returns>대상이 사거리에 닿을 것으로 예측한 월드 좌표입니다. 높이는 무시합니다.</returns>
         public static Vector3 PredictApproachPoint(
             Vector3 selfPosition,
             Vector3 targetPosition,

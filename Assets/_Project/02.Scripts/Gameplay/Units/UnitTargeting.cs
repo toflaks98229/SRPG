@@ -57,13 +57,19 @@ namespace SRPG.Gameplay.Units
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>대기열을 쓰는 무기가 후보를 훑을 때 쓰는 재사용 버퍼입니다.</summary>
         private readonly List<Unit> _candidateBuffer = new List<Unit>(16);
 
+        /// <summary>이 표적 판단을 소유한 병사입니다.</summary>
         private Unit _owner;
+        /// <summary>주변 유닛을 찾는 공간 질의입니다.</summary>
         private ISpatialQuery _spatial;
+        /// <summary>병과 정의입니다. 교전 반경과 피해량을 읽습니다.</summary>
         private UnitDefinition _definition;
 
+        /// <summary>현재 교전 대상입니다.</summary>
         private Unit _target;
+        /// <summary>표적을 다시 고르기까지 남은 시간입니다.</summary>
         private float _lockTimer;
 
         // ====================================================================================================
@@ -90,6 +96,9 @@ namespace SRPG.Gameplay.Units
         /// 표적을 고르는 데 필요한 것은 "내 주변에 누가 있는가"가 전부입니다.
         /// 지형도 경로 탐색기도 타일 점유도 여기서는 손댈 수 없습니다.
         /// </summary>
+        /// <param name="owner">이 표적 판단을 소유한 병사입니다.</param>
+        /// <param name="spatial">주변 유닛을 찾는 공간 질의입니다.</param>
+        /// <param name="definition">병과 정의입니다. 교전 반경과 피해량을 읽습니다.</param>
         public void Configure(Unit owner, ISpatialQuery spatial, UnitDefinition definition)
         {
             _owner = owner;
@@ -105,6 +114,7 @@ namespace SRPG.Gameplay.Units
         // ====================================================================================================
 
         /// <summary>시간을 흘려보냅니다.</summary>
+        /// <param name="deltaTime">지난 시간입니다. 표적 고정 시간을 줄이는 데 씁니다.</param>
         public void Tick(float deltaTime)
         {
             _lockTimer -= deltaTime;

@@ -26,6 +26,7 @@ namespace SRPG.Gameplay.Units
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>지금 이 병사를 치기로 예약한 적들입니다.</summary>
         private readonly HashSet<Unit> _committed = new HashSet<Unit>();
 
         /// <summary>

@@ -99,11 +99,16 @@ namespace SRPG.Systems.AI
         // 3. Fields
         // ====================================================================================================
 
+        /// <summary>고려사항별 점수를 담는 재사용 버퍼입니다.</summary>
         private readonly float[] _scores = new float[ConsiderationCount];
+        /// <summary>고려사항별 가중치를 담는 재사용 버퍼입니다.</summary>
         private readonly float[] _weights = new float[ConsiderationCount];
 
+        /// <summary>근접성 곡선입니다. 가까운 것을 크게 벌리고 먼 것은 비슷하게 눕힙니다.</summary>
         private static readonly ResponseCurve ProximityCurve = ResponseCurve.SharpFalloff;
+        /// <summary>고립 곡선입니다. 아군 영향력이 낮을수록 좋게 봅니다.</summary>
         private static readonly ResponseCurve IsolationCurve = ResponseCurve.Decreasing;
+        /// <summary>개활지 곡선입니다. 초크 점수가 높을수록 나쁘게 봅니다.</summary>
         private static readonly ResponseCurve OpenGroundCurve = ResponseCurve.Decreasing;
 
         // ====================================================================================================
@@ -210,6 +215,12 @@ namespace SRPG.Systems.AI
         /// <summary>
         /// 후보 하나의 점수를 냅니다. 디버그 표시에서 개별 점수를 보고 싶을 때도 씁니다.
         /// </summary>
+        /// <param name="from">판단 주체의 현재 격자 위치입니다.</param>
+        /// <param name="candidate">점수를 낼 목표 후보입니다.</param>
+        /// <param name="grid">지형입니다. 통행 판정과 초크 점수를 읽습니다.</param>
+        /// <param name="threat">플레이어 위협 영향력 맵입니다. null이면 고립 고려를 건너뜁니다.</param>
+        /// <param name="weights">고려사항별 가중치입니다.</param>
+        /// <returns>0~1 유용도입니다. 갈 수 없는 곳이면 0입니다.</returns>
         public float ScoreCandidate(
             GridCoord from,
             GoalCandidate candidate,

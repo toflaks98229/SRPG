@@ -37,7 +37,9 @@ namespace SRPG.Systems.Deployment
         /// <summary>아직 전장에 나가지 않은 분대들입니다. 앞에서부터 나갑니다.</summary>
         private readonly Queue<SquadOrder> _waiting = new Queue<SquadOrder>();
 
+        /// <summary>한 진영이 전장에 동시에 세울 수 있는 분대 수입니다.</summary>
         private readonly int _fieldCap;
+        /// <summary>지원군이 올라오는 최소 간격(초)입니다.</summary>
         private readonly float _interval;
 
         /// <summary>다음 투입까지 남은 시간입니다.</summary>
@@ -98,6 +100,7 @@ namespace SRPG.Systems.Deployment
         /// 슬로우모션의 영향을 받도록 스케일된 시간으로 부릅니다.
         /// 명령을 내리는 동안 지원군이 그대로 밀려오면 슬로우모션이 곧 이득이 되어 버립니다.
         /// </summary>
+        /// <param name="deltaTime">지난 시간입니다. 지원군 간격을 줄이는 데 씁니다.</param>
         public void Tick(float deltaTime)
         {
             if (_cooldown > 0f)

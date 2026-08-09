@@ -26,16 +26,26 @@ namespace SRPG.Gameplay.Visual
         /// <summary>접지 그림자 셰이더의 이름입니다.</summary>
         public const string ContactShadowShaderName = "SRPG/ContactShadow";
 
+        /// <summary>URP Lit 의 기본 색 프로퍼티 식별자입니다.</summary>
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        /// <summary>지형 셰이더의 해수면 프로퍼티 식별자입니다.</summary>
         private static readonly int SeaLevelId = Shader.PropertyToID("_SeaLevel");
+        /// <summary>지형 셰이더의 고도폭 프로퍼티 식별자입니다.</summary>
         private static readonly int HeightRangeId = Shader.PropertyToID("_HeightRange");
+        /// <summary>지형 셰이더의 등반 한계 프로퍼티 식별자입니다.</summary>
         private static readonly int ClimbLimitId = Shader.PropertyToID("_ClimbLimit");
 
+        /// <summary>공유 캡슐 메시 캐시입니다.</summary>
         private static Mesh s_capsuleMesh;
+        /// <summary>공유 큐브 메시 캐시입니다.</summary>
         private static Mesh s_cubeMesh;
+        /// <summary>밑변이 원점에 오는 공유 쿼드 메시 캐시입니다.</summary>
         private static Mesh s_groundedQuadMesh;
+        /// <summary>원점이 가운데인 공유 쿼드 메시 캐시입니다.</summary>
         private static Mesh s_centeredQuadMesh;
+        /// <summary>모든 접지 그림자가 공유하는 머티리얼입니다.</summary>
         private static Material s_contactShadowMaterial;
+        /// <summary>셰이더 누락 경고를 이미 냈는지 여부입니다.</summary>
         private static bool s_warnedMissingShader;
 
         /// <summary>

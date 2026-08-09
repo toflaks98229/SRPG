@@ -58,6 +58,7 @@ namespace SRPG.Data
         /// <summary>
         /// 플레이어 병과 목록을 반환합니다. 비어 있으면 null을 돌려 부트스트랩이 폴백을 쓰게 합니다.
         /// </summary>
+        /// <returns>아군 병과 목록입니다. 비어 있으면 null이며, 호출부가 코드 기본값으로 대체합니다.</returns>
         public UnitDefinition[] GetPlayerRosterOrNull()
         {
             return PlayerRoster != null && PlayerRoster.Length > 0 ? PlayerRoster : null;
@@ -66,6 +67,7 @@ namespace SRPG.Data
         /// <summary>
         /// 적 병과 목록을 반환합니다. 비어 있으면 null을 돌려 부트스트랩이 폴백을 쓰게 합니다.
         /// </summary>
+        /// <returns>적 병과 목록입니다. 비어 있으면 null이며, 호출부가 코드 기본값으로 대체합니다.</returns>
         public UnitDefinition[] GetEnemyRosterOrNull()
         {
             return EnemyRoster != null && EnemyRoster.Length > 0 ? EnemyRoster : null;

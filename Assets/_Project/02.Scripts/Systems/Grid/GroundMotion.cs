@@ -56,6 +56,7 @@ namespace SRPG.Systems.Grid
         /// 스스로 달려드는 힘(도약)으로는 물에 빠지지 않습니다.
         /// </param>
         /// <param name="next">확정된 위치입니다. 익사했다면 수면 높이의 낙수 지점입니다.</param>
+        /// <returns>실제로 옮겼는지, 벽에 막혔는지, 물에 빠졌는지입니다.</returns>
         public static GroundStep TryStep(
             IslandGrid grid, Vector3 from, Vector3 desired, bool mayDrown, out Vector3 next)
         {
@@ -130,6 +131,7 @@ namespace SRPG.Systems.Grid
         /// <param name="grid">지형입니다.</param>
         /// <param name="world">확인할 월드 좌표입니다.</param>
         /// <param name="groundHeight">설 수 있다면 그 자리의 지면 높이입니다.</param>
+        /// <returns>그 자리에 설 수 있으면 true입니다.</returns>
         public static bool TryStand(IslandGrid grid, Vector3 world, out float groundHeight)
         {
             groundHeight = 0f;
@@ -152,6 +154,9 @@ namespace SRPG.Systems.Grid
         /// <summary>
         /// 그 자리가 물인지 확인합니다. 격자 밖도 물로 봅니다.
         /// </summary>
+        /// <param name="grid">통행 판정을 읽을 지형입니다.</param>
+        /// <param name="world">확인할 월드 좌표입니다.</param>
+        /// <returns>그 자리가 물이면 true입니다. 격자 밖도 물로 봅니다.</returns>
         public static bool IsWater(IslandGrid grid, Vector3 world)
         {
             if (grid == null)

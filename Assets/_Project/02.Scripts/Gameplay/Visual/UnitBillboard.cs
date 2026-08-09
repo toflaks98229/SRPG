@@ -52,15 +52,23 @@ namespace SRPG.Gameplay.Visual
         // 3. Fields
         // ====================================================================================================
 
+        /// <summary>빌보드 셰이더의 방향 칸 수 프로퍼티 식별자입니다.</summary>
         private static readonly int FrameCountId = Shader.PropertyToID("_FrameCount");
+        /// <summary>빌보드 셰이더의 현재 방향 칸 프로퍼티 식별자입니다.</summary>
         private static readonly int FrameIndexId = Shader.PropertyToID("_FrameIndex");
+        /// <summary>빌보드 셰이더의 좌우 반전 프로퍼티 식별자입니다.</summary>
         private static readonly int FlipXId = Shader.PropertyToID("_FlipX");
 
+        /// <summary>머티리얼을 복제하지 않고 값만 바꾸기 위한 프로퍼티 블록입니다.</summary>
         private MaterialPropertyBlock _properties;
+        /// <summary>자기 트랜스폼 캐시입니다.</summary>
         private Transform _transform;
+        /// <summary>방향을 재는 기준이 되는 카메라입니다.</summary>
         private Camera _camera;
 
+        /// <summary>지금 그리고 있는 방향 칸입니다. -1이면 아직 정해지지 않았습니다.</summary>
         private int _currentIndex = -1;
+        /// <summary>마지막으로 계산한 상대 각도입니다. 변화가 없으면 갱신을 건너뜁니다.</summary>
         private float _lastAngle = -1f;
 
         // ====================================================================================================

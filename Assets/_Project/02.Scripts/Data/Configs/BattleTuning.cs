@@ -374,6 +374,7 @@ namespace SRPG.Data
         /// <summary>
         /// 에셋 없이 코드로 기본 설정을 만듭니다. 부트스트랩의 폴백 경로입니다.
         /// </summary>
+        /// <returns>필드 초기값이 그대로 담긴 튜닝 인스턴스입니다. 에셋으로 저장되지 않습니다.</returns>
         public static BattleTuning CreateDefault()
         {
             var tuning = CreateInstance<BattleTuning>();

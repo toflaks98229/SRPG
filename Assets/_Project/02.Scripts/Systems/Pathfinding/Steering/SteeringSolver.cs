@@ -21,6 +21,7 @@ namespace SRPG.Systems.Pathfinding
         /// <param name="target">목표 위치입니다.</param>
         /// <param name="maxSpeed">최대 속도입니다.</param>
         /// <param name="slowRadius">감속을 시작하는 반경입니다.</param>
+        /// <returns>감속 반경 안에서는 거리에 비례해 줄어드는 목표 속도입니다.</returns>
         public static Vector3 Arrive(Vector3 position, Vector3 target, float maxSpeed, float slowRadius)
         {
             Vector3 offset = target - position;
@@ -54,6 +55,7 @@ namespace SRPG.Systems.Pathfinding
         /// <param name="position">현재 위치입니다.</param>
         /// <param name="neighborPosition">이웃의 위치입니다.</param>
         /// <param name="separationRadius">분리가 작용하기 시작하는 거리입니다.</param>
+        /// <returns>이웃에게서 밀려나는 방향의 속도입니다. 반경 밖이면 0입니다.</returns>
         public static Vector3 SeparationFrom(Vector3 position, Vector3 neighborPosition, float separationRadius)
         {
             if (separationRadius <= 0.0001f)

@@ -36,17 +36,27 @@ namespace SRPG.Gameplay.Selection
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>조작할 수 있는 분대 목록입니다.</summary>
         private readonly List<Squad> _squads = new List<Squad>(8);
 
+        /// <summary>클릭 지점을 타일로 옮길 때 쓰는 지형입니다.</summary>
         private IslandGrid _grid;
+        /// <summary>명령 입력 중 시간을 늦추는 제어기입니다.</summary>
         private TacticalTimeController _clock;
+        /// <summary>조작감 수치입니다. 분대를 고르는 클릭 반경이 여기 있습니다.</summary>
         private BattleTuning _tuning;
+        /// <summary>클릭 레이캐스트에 쓰는 카메라입니다.</summary>
         private Camera _camera;
+        /// <summary>현재 선택된 분대입니다. 없으면 null입니다.</summary>
         private Squad _selected;
 
+        /// <summary>선택 표시 프리팹입니다. 비어 있으면 프리미티브로 대체합니다.</summary>
         private GameObject _selectionMarkerPrefab;
+        /// <summary>명령 지점 표시 프리팹입니다. 비어 있으면 프리미티브로 대체합니다.</summary>
         private GameObject _orderMarkerPrefab;
+        /// <summary>선택된 분대 발밑에 놓이는 표시입니다.</summary>
         private Transform _selectionMarker;
+        /// <summary>명령받은 지점에 놓이는 표시입니다.</summary>
         private Transform _orderMarker;
 
         /// <summary>
@@ -124,6 +134,7 @@ namespace SRPG.Gameplay.Selection
         /// <summary>
         /// 조작 대상 분대를 등록합니다.
         /// </summary>
+        /// <param name="squad">조작 대상으로 삼을 분대입니다. 이미 등록됐으면 무시합니다.</param>
         public void RegisterSquad(Squad squad)
         {
             if (squad == null || _squads.Contains(squad))

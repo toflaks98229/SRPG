@@ -123,6 +123,7 @@ namespace SRPG.Systems.Combat
         /// <param name="gravity">적용할 중력 크기(양수)입니다. 0이면 직사로 계산합니다.</param>
         /// <param name="launchVelocity">구해진 발사 속도입니다.</param>
         /// <param name="useHighArc">true면 높은 궤도를 고릅니다.</param>
+        /// <returns>사거리 안이라 해를 구했으면 true입니다.</returns>
         public static bool TrySolveLaunchVelocity(
             Vector3 from,
             Vector3 to,
@@ -205,6 +206,7 @@ namespace SRPG.Systems.Combat
         /// <param name="gravity">중력 크기(양수)입니다.</param>
         /// <param name="launchVelocity">구해진 발사 속도입니다.</param>
         /// <param name="flightTime">목표까지 걸리는 비행 시간입니다.</param>
+        /// <returns>고정한 발사각으로 목표 높이에 닿을 수 있으면 true입니다.</returns>
         public static bool TrySolveArcingLaunch(
             Vector3 from,
             Vector3 to,
@@ -279,6 +281,7 @@ namespace SRPG.Systems.Combat
         /// <param name="launchVelocity">구해진 발사 속도입니다.</param>
         /// <param name="aimPoint">최종 조준 지점입니다.</param>
         /// <param name="iterations">수렴 반복 횟수입니다.</param>
+        /// <returns>움직이는 대상과 만날 해를 구했으면 true입니다.</returns>
         public static bool TrySolveArcingIntercept(
             Vector3 from,
             Vector3 targetPosition,
@@ -332,6 +335,7 @@ namespace SRPG.Systems.Combat
         /// <param name="velocity">원래 발사 속도입니다.</param>
         /// <param name="spreadDegrees">원뿔의 반각(도)입니다.</param>
         /// <param name="random">난수원입니다. 테스트에서 고정 시드를 넣을 수 있게 받습니다.</param>
+        /// <returns>속력은 그대로 두고 방향만 흩뜨린 발사 속도입니다.</returns>
         public static Vector3 ApplySpread(Vector3 velocity, float spreadDegrees, System.Random random = null)
         {
             if (spreadDegrees <= 0.0001f || velocity.sqrMagnitude < 0.0001f)
@@ -363,6 +367,7 @@ namespace SRPG.Systems.Combat
         /// <param name="maxRank">최고 랭크입니다.</param>
         /// <param name="spreadAtLowestRank">최하 랭크의 산포(도)입니다.</param>
         /// <param name="spreadAtHighestRank">최고 랭크의 산포(도)입니다.</param>
+        /// <returns>그 랭크의 산포 각도(도)입니다. 랭크가 높을수록 작아집니다.</returns>
         public static float GetSpreadForRank(int rank, int maxRank, float spreadAtLowestRank, float spreadAtHighestRank)
         {
             if (maxRank <= 1)

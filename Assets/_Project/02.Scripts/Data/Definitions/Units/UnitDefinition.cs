@@ -196,6 +196,8 @@ namespace SRPG.Data
         /// 에셋 없이 코드로 기본 병과 정의를 만듭니다.
         /// 부트스트랩이 정의 에셋 없이도 바로 실행될 수 있도록 하는 프로토타입용 진입점입니다.
         /// </summary>
+        /// <param name="role">만들 병과입니다.</param>
+        /// <returns>그 병과의 아군 기본 수치가 채워진 정의입니다.</returns>
         public static UnitDefinition CreateDefault(UnitRole role)
         {
             var def = CreateInstance<UnitDefinition>();
@@ -297,6 +299,8 @@ namespace SRPG.Data
         /// <summary>
         /// 적 유닛의 기본 정의를 만듭니다.
         /// </summary>
+        /// <param name="role">만들 병과입니다.</param>
+        /// <returns>아군 기본값에서 체력을 낮춘 적 정의입니다.</returns>
         public static UnitDefinition CreateEnemyDefault(UnitRole role)
         {
             var def = CreateDefault(role);

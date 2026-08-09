@@ -52,12 +52,18 @@ namespace SRPG.Systems.Spatial
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>색인이 덮는 영역의 좌하단 월드 좌표입니다.</summary>
         private readonly Vector3 _origin;
+        /// <summary>셀 한 칸의 월드 크기입니다.</summary>
         private readonly float _cellSize;
+        /// <summary>셀 크기의 역수입니다. 나눗셈을 곱셈으로 바꾸기 위해 미리 구해 둡니다.</summary>
         private readonly float _inverseCellSize;
+        /// <summary>색인의 가로 셀 수입니다.</summary>
         private readonly int _columns;
+        /// <summary>색인의 세로 셀 수입니다.</summary>
         private readonly int _rows;
 
+        /// <summary>셀별 항목 목록입니다. 조밀 배열이라 인덱스 산술만으로 접근합니다.</summary>
         private readonly List<Entry>[] _buckets;
 
         /// <summary>
@@ -133,6 +139,8 @@ namespace SRPG.Systems.Spatial
         /// <summary>
         /// 대상 하나를 색인에 넣습니다. 영역 밖이면 가장 가까운 가장자리 셀에 들어갑니다.
         /// </summary>
+        /// <param name="position">항목의 월드 좌표입니다. 결과와 함께 저장됩니다.</param>
+        /// <param name="item">색인에 넣을 항목입니다.</param>
         public void Insert(Vector3 position, T item)
         {
             if (item == null)

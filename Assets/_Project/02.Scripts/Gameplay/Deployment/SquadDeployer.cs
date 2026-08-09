@@ -36,12 +36,18 @@ namespace SRPG.Gameplay.Deployment
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>아군이 설 자리입니다. 지원군이 같은 곳에서 올라오도록 미리 골라 둡니다.</summary>
         private readonly List<Tile> _playerSlots = new List<Tile>(8);
+        /// <summary>적이 설 자리입니다.</summary>
         private readonly List<Tile> _enemySlots = new List<Tile>(8);
+        /// <summary>초기 전개에서 한 번에 세울 분대를 담는 재사용 버퍼입니다.</summary>
         private readonly List<SquadOrder> _batch = new List<SquadOrder>(8);
 
+        /// <summary>전개기가 볼 수 있는 것만 담긴 컨텍스트입니다.</summary>
         private IDeploymentContext _context;
+        /// <summary>아직 전장에 나가지 않은 아군 분대의 대기열입니다.</summary>
         private ReinforcementPool _playerPool;
+        /// <summary>아직 전장에 나가지 않은 적 분대의 대기열입니다.</summary>
         private ReinforcementPool _enemyPool;
 
         private Action<SquadOrder, GridCoord> _playerFactory;
@@ -49,6 +55,7 @@ namespace SRPG.Gameplay.Deployment
 
         /// <summary>다음 지원군이 설 자리입니다. 진영마다 돌아가며 씁니다.</summary>
         private int _playerSlotCursor;
+        /// <summary>다음 적 지원군이 설 자리의 순번입니다. 자리를 돌아가며 씁니다.</summary>
         private int _enemySlotCursor;
 
         // ====================================================================================================

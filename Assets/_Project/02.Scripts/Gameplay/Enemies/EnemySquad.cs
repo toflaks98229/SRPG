@@ -55,19 +55,28 @@ namespace SRPG.Gameplay.Enemies
         /// <summary>병사 명부와 슬롯 배정입니다. 아군 분대와 <b>같은 장부</b>를 씁니다.</summary>
         private readonly SquadMembers _members = new SquadMembers(8);
 
+        /// <summary>이번 진형의 슬롯 위치입니다.</summary>
         private readonly List<Vector3> _slots = new List<Vector3>(8);
+        /// <summary>앵커가 따라갈 경로입니다.</summary>
         private readonly List<GridCoord> _path = new List<GridCoord>(64);
+        /// <summary>이번 판단에서 평가할 목표 후보입니다.</summary>
         private readonly List<GoalCandidate> _candidates = new List<GoalCandidate>(16);
 
         /// <summary>목표 후보를 모을 때 쓰는 적 부대 중심 버퍼입니다. 매 판단마다 다시 채웁니다.</summary>
         private readonly List<Vector3> _anchorBuffer = new List<Vector3>(8);
 
+        /// <summary>앵커 전진입니다. 아군 분대와 공유하는 순수 로직입니다.</summary>
         private readonly FormationMotor _motor = new FormationMotor();
+        /// <summary>목표를 고르는 유틸리티 판단부입니다.</summary>
         private readonly EnemyGoalPlanner _planner = new EnemyGoalPlanner();
 
+        /// <summary>적 분대가 볼 수 있는 것만 담긴 컨텍스트입니다.</summary>
         private IEnemySquadContext _context;
+        /// <summary>다음 목표 재판단까지 남은 시간입니다.</summary>
         private float _replanTimer;
+        /// <summary>앵커가 전진하는 속도입니다. 병사 이동 속도에서 유도합니다.</summary>
         private float _anchorSpeed = 3f;
+        /// <summary>지금 향하는 목표의 유용도 점수입니다. 목표를 바꿀지 견주는 기준입니다.</summary>
         private float _currentGoalScore;
 
         // ====================================================================================================

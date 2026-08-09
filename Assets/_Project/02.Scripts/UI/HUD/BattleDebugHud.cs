@@ -24,16 +24,25 @@ namespace SRPG.UI.HUD
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>표시 문자열을 조립하는 재사용 버퍼입니다. OnGUI 는 한 프레임에 여러 번 돕니다.</summary>
         private readonly StringBuilder _builder = new StringBuilder(512);
 
+        /// <summary>유닛 수를 셀 명부입니다.</summary>
         private IUnitRoster _roster;
+        /// <summary>분대 상태를 읽을 명부입니다.</summary>
         private ISquadRoster _squads;
+        /// <summary>타임스케일을 표시할 시간 제어기입니다.</summary>
         private TacticalTimeController _clock;
+        /// <summary>선택된 분대를 읽을 컨트롤러입니다.</summary>
         private SquadSelectionController _selection;
+        /// <summary>예비대와 지원군 시각을 읽을 전개기입니다.</summary>
         private SquadDeployer _deployer;
 
+        /// <summary>패널 배경 스타일입니다. OnGUI 에서 매번 만들지 않도록 한 번만 준비합니다.</summary>
         private GUIStyle _panelStyle;
+        /// <summary>본문 글자 스타일입니다.</summary>
         private GUIStyle _labelStyle;
+        /// <summary>패널 배경 텍스처입니다. 파괴할 때 함께 정리합니다.</summary>
         private Texture2D _panelTexture;
 
         // ====================================================================================================
@@ -73,6 +82,11 @@ namespace SRPG.UI.HUD
         /// 표시용 화면이 경로 탐색기나 타일 점유에 손댈 일은 없고,
         /// 받을 수 있게 두면 언젠가 손댑니다.
         /// </summary>
+        /// <param name="roster">유닛 수를 셀 명부입니다.</param>
+        /// <param name="squads">분대 상태를 읽을 명부입니다.</param>
+        /// <param name="clock">타임스케일을 표시할 시간 제어기입니다.</param>
+        /// <param name="selection">선택된 분대를 읽을 컨트롤러입니다.</param>
+        /// <param name="deployer">예비대와 지원군 시각을 읽을 전개기입니다.</param>
         public void Initialize(
             IUnitRoster roster,
             ISquadRoster squads,

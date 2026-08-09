@@ -93,6 +93,13 @@ namespace SRPG.Systems.Combat
         /// 새 속도를 먼저 구하고 그것으로 위치를 옮기면, 명시적 적분보다 훨씬 늦게 발산합니다.
         /// 여기에 시간 간격 상한까지 두어 프레임이 크게 튀어도 안전하게 만듭니다.
         /// </summary>
+        /// <param name="current">현재 값입니다.</param>
+        /// <param name="target">따라갈 목표 값입니다.</param>
+        /// <param name="velocity">각속도 상태입니다. 호출할 때마다 갱신됩니다.</param>
+        /// <param name="frequency">진동수입니다. 클수록 빠르게 따라붙습니다.</param>
+        /// <param name="damping">감쇠입니다. 1 미만이면 목표를 지나쳤다 돌아옵니다.</param>
+        /// <param name="deltaTime">지난 시간입니다. 한 호출에서 시뮬레이션하는 상한이 있습니다.</param>
+        /// <returns>이번 걸음 뒤의 값입니다.</returns>
         public static float Step(
             float current,
             float target,

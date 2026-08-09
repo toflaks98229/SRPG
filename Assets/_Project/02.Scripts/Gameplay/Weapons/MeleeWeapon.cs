@@ -46,10 +46,14 @@ namespace SRPG.Gameplay.Weapons
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>이번 동작에서 이미 맞은 적입니다. 같은 휘두름에 두 번 맞지 않게 합니다.</summary>
         private readonly HashSet<Unit> _alreadyHit = new HashSet<Unit>();
+        /// <summary>물리 질의 결과를 담는 재사용 버퍼입니다. 할당을 만들지 않기 위한 것입니다.</summary>
         private readonly Collider[] _hitBuffer = new Collider[MaxHitBuffer];
 
+        /// <summary>직전 프레임의 칼끝 위치입니다. 훑은 자리를 캡슐로 잇는 기준입니다.</summary>
         private Vector3 _previousBladeTip;
+        /// <summary>직전 칼끝 위치가 기록됐는지 여부입니다. 첫 프레임에는 스윕하지 않습니다.</summary>
         private bool _hasPreviousTip;
 
         // ====================================================================================================

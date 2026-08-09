@@ -30,6 +30,7 @@ namespace SRPG.Gameplay.Weapons
         private readonly Dictionary<GameObject, Stack<Arrow>> _idle =
             new Dictionary<GameObject, Stack<Arrow>>(4);
 
+        /// <summary>대기 중인 투사체가 모이는 부모입니다.</summary>
         private Transform _root;
 
         // ====================================================================================================
@@ -64,6 +65,7 @@ namespace SRPG.Gameplay.Weapons
         /// 지정하지 않으면 풀이 씬 루트에 오브젝트를 하나 만듭니다. 동작에는 문제가 없지만,
         /// 전투가 끝나도 남아 하이라키에 쌓입니다. 전투와 수명을 같이하게 두는 편이 낫습니다.
         /// </summary>
+        /// <param name="root">대기 중인 투사체가 모일 부모입니다.</param>
         public void SetRoot(Transform root)
         {
             if (root == null || _root == root)
@@ -132,6 +134,7 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>
         /// 다 쓴 화살을 돌려받습니다. <see cref="Arrow"/>가 스스로 호출합니다.
         /// </summary>
+        /// <param name="arrow">풀로 돌려보낼 투사체입니다.</param>
         public void Return(Arrow arrow)
         {
             if (arrow == null)

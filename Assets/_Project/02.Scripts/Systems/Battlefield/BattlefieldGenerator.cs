@@ -67,6 +67,8 @@ namespace SRPG.Systems.Battlefield
         /// 경사가 한계 안이면 이웃과의 높이 차가 한 단 안이고, 따라서 단차도 반드시 한 단 이하입니다.
         /// 두 규칙이 같은 것을 말하게 됩니다.
         /// </summary>
+        /// <param name="climbLimitDegrees">오를 수 있는 최대 경사(도)입니다.</param>
+        /// <returns>이웃 간 단차가 통행 규칙을 넘지 않도록 유도한 고도 한 단의 높이입니다.</returns>
         public static float ResolveHeightStep(float climbLimitDegrees)
         {
             float limit = Mathf.Clamp(climbLimitDegrees, 5f, 80f);
@@ -79,6 +81,7 @@ namespace SRPG.Systems.Battlefield
         /// </summary>
         /// <param name="spec">어디서 싸우는지에 대한 지시입니다.</param>
         /// <param name="profile">그 지형의 성격입니다. null이면 코드 기본값을 씁니다.</param>
+        /// <returns>지형·격자·전개 구역이 모두 채워진 전장입니다.</returns>
         public static Battlefield Generate(BattlefieldSpec spec, BattlefieldProfile profile = null)
         {
             spec = spec.WithDefaults();

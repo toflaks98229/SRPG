@@ -31,13 +31,16 @@ namespace SRPG.Systems.Grid
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>연결성을 따질 지형입니다.</summary>
         private readonly IslandGrid _grid;
 
         /// <summary>각 칸이 마지막으로 닿은 탐색 번호입니다. 현재 세대와 다르면 아직 안 닿은 것입니다.</summary>
         private readonly int[] _stamp;
 
+        /// <summary>너비 우선 탐색의 대기열입니다.</summary>
         private readonly Queue<Tile> _frontier;
 
+        /// <summary>현재 탐색 번호입니다. 방문 배열을 매번 비우지 않기 위한 세대 스탬프입니다.</summary>
         private int _generation;
 
         // ====================================================================================================

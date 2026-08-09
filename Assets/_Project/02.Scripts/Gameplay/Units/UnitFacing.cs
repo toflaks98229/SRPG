@@ -38,18 +38,25 @@ namespace SRPG.Gameplay.Units
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>이 시선을 소유한 병사입니다.</summary>
         private Unit _owner;
+        /// <summary>회전을 적용할 트랜스폼입니다. 매 프레임 접근하므로 미리 받아 둡니다.</summary>
         private Transform _transform;
+        /// <summary>위협을 찾는 공간 질의입니다.</summary>
         private ISpatialQuery _spatial;
+        /// <summary>위협 탐지 반경이 담긴 튜닝입니다.</summary>
         private BattleTuning _tuning;
+        /// <summary>병과 정의입니다. 교전 반경과 회전 속도를 읽습니다.</summary>
         private UnitDefinition _definition;
 
         /// <summary>방패병이 몸을 돌릴 위협 대상입니다. 공격 대상과는 별개입니다.</summary>
         private Unit _threatSource;
+        /// <summary>다음 위협 탐색까지 남은 시간입니다. 매 프레임 질의하지 않기 위한 것입니다.</summary>
         private float _threatScanTimer;
 
         /// <summary>분대가 지정한 대기 방향입니다. 교전 대상이 없을 때 이쪽을 봅니다.</summary>
         private Vector3 _idleFacing;
+        /// <summary>분대가 대기 방향을 지정했는지 여부입니다. 없으면 마지막 방향을 유지합니다.</summary>
         private bool _hasIdleFacing;
 
         /// <summary>회전 스프링의 각속도입니다. 무기가 무게를 가질 때만 씁니다.</summary>

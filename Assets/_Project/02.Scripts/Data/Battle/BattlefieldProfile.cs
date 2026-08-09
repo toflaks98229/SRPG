@@ -122,6 +122,8 @@ namespace SRPG.Data
         /// 에셋이 아직 없어도 전투가 돌아가야 합니다.
         /// 프로필 하나 때문에 프로젝트가 실행조차 안 되면 안 됩니다.
         /// </summary>
+        /// <param name="kind">만들 지형 종류입니다.</param>
+        /// <returns>그 종류의 기본 수치가 채워진 프로필입니다.</returns>
         public static BattlefieldProfile CreateDefault(TerrainKind kind = TerrainKind.Plains)
         {
             var profile = CreateInstance<BattlefieldProfile>();

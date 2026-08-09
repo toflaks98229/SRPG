@@ -28,13 +28,21 @@ namespace SRPG.Editor.Tools
         // 1. Constants
         // ====================================================================================================
 
+        /// <summary>머티리얼이 저장되는 폴더입니다.</summary>
         private const string MaterialDir = "Assets/_Project/04.Art/03.Shaders/Materials";
+        /// <summary>아군 유닛 프리팹이 저장되는 폴더입니다.</summary>
         private const string UnitPrefabDir = "Assets/_Project/05.Prefabs/Units";
+        /// <summary>적 유닛 프리팹이 저장되는 폴더입니다.</summary>
         private const string EnemyPrefabDir = "Assets/_Project/05.Prefabs/Enemies";
+        /// <summary>마커 같은 시스템 프리팹이 저장되는 폴더입니다.</summary>
         private const string SystemPrefabDir = "Assets/_Project/05.Prefabs/Systems";
+        /// <summary>아군 병과 정의가 저장되는 폴더입니다.</summary>
         private const string UnitDataDir = "Assets/_Project/03.DataAssets/Units";
+        /// <summary>적 병과 정의가 저장되는 폴더입니다.</summary>
         private const string EnemyDataDir = "Assets/_Project/03.DataAssets/Enemies";
+        /// <summary>전투 구성·튜닝 에셋이 저장되는 폴더입니다.</summary>
         private const string ConfigDataDir = "Assets/_Project/03.DataAssets/Configs";
+        /// <summary>전장 프로필이 저장되는 폴더입니다.</summary>
         private const string TerrainDataDir = "Assets/_Project/03.DataAssets/Battlefields";
 
         /// <summary>전투 구성 에셋의 경로입니다. 씬 빌더가 이 경로를 참조합니다.</summary>

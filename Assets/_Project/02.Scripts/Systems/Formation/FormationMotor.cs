@@ -31,7 +31,9 @@ namespace SRPG.Systems.Formation
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>앵커가 따라갈 경유점입니다. 호출부 버퍼를 그대로 들지 않도록 복사해 둡니다.</summary>
         private readonly List<GridCoord> _path = new List<GridCoord>(64);
+        /// <summary>지금 향하고 있는 경유점의 순번입니다.</summary>
         private int _index;
 
         // ====================================================================================================
@@ -60,6 +62,8 @@ namespace SRPG.Systems.Formation
         /// <summary>
         /// 앵커를 지정 위치로 즉시 옮기고 경로를 지웁니다. 초기 배치에 씁니다.
         /// </summary>
+        /// <param name="world">앵커를 즉시 옮길 월드 좌표입니다.</param>
+        /// <param name="coord">그 자리에 해당하는 격자 좌표입니다. 목적지로도 기록됩니다.</param>
         public void Teleport(Vector3 world, GridCoord coord)
         {
             Anchor = world;
@@ -93,6 +97,7 @@ namespace SRPG.Systems.Formation
         /// <summary>
         /// 이동을 멈추고 현재 자리를 목적지로 삼습니다.
         /// </summary>
+        /// <param name="here">멈춘 자리의 격자 좌표입니다. 새 목적지로 기록됩니다.</param>
         public void Stop(GridCoord here)
         {
             _path.Clear();

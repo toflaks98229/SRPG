@@ -82,6 +82,7 @@ namespace SRPG.Systems.Rendering
         /// </summary>
         /// <param name="relativeAngle">0~360 상대 각도입니다.</param>
         /// <param name="directionCount">쓸 방향 수입니다. 보통 8입니다.</param>
+        /// <returns>0부터 <paramref name="directionCount"/>−1 사이의 방향 칸 번호입니다.</returns>
         public static int ToIndex(float relativeAngle, int directionCount = DirectionCount)
         {
             int count = Mathf.Max(1, directionCount);

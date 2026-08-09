@@ -62,6 +62,7 @@ namespace SRPG.Systems.Formation
         /// </summary>
         /// <param name="value">씨앗입니다.</param>
         /// <param name="salt">같은 씨앗에서 서로 다른 값을 뽑기 위한 소금입니다.</param>
+        /// <returns>같은 입력이면 언제나 같은 0~1 값입니다.</returns>
         public static float Hash01(int value, uint salt)
         {
             unchecked

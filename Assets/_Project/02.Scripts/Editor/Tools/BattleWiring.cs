@@ -34,10 +34,14 @@ namespace SRPG.Editor.Tools
         // 1. Constants
         // ====================================================================================================
 
+        /// <summary>렌더 파이프라인 설정 파일의 경로입니다.</summary>
         private const string GraphicsSettingsPath = "ProjectSettings/GraphicsSettings.asset";
+        /// <summary>생성한 머티리얼이 저장되는 폴더입니다.</summary>
         private const string MaterialDirectory = "Assets/_Project/04.Art/03.Shaders/Materials";
+        /// <summary>전투 구성 에셋이 저장되는 폴더입니다.</summary>
         private const string ConfigDirectory = "Assets/_Project/03.DataAssets/Configs";
 
+        /// <summary>기본 튜닝 에셋의 경로입니다.</summary>
         private const string TuningPath = ConfigDirectory + "/BattleTuning_Default.asset";
 
         /// <summary>빌드에 반드시 들어가야 하는 셰이더입니다.</summary>

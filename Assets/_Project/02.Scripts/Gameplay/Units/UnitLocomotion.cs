@@ -39,13 +39,20 @@ namespace SRPG.Gameplay.Units
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>넉백·도약·분리를 채널별로 들고 있는 외력 상태입니다.</summary>
         private readonly ImpulseState _impulses = new ImpulseState();
+        /// <summary>분리 조향의 이웃 질의에 쓰는 재사용 버퍼입니다.</summary>
         private readonly List<Unit> _neighborBuffer = new List<Unit>(16);
 
+        /// <summary>이 이동을 소유한 병사입니다.</summary>
         private Unit _owner;
+        /// <summary>설 수 있는 자리와 발 높이를 정하는 지형입니다.</summary>
         private IslandGrid _grid;
+        /// <summary>이웃을 찾는 공간 질의입니다.</summary>
         private ISpatialQuery _spatial;
+        /// <summary>분리 세기와 익사 문턱이 담긴 튜닝입니다.</summary>
         private BattleTuning _tuning;
+        /// <summary>병과 정의입니다. 이동 속도와 반경을 읽습니다.</summary>
         private UnitDefinition _definition;
 
         // ====================================================================================================

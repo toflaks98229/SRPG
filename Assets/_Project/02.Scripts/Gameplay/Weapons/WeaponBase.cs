@@ -43,6 +43,7 @@ namespace SRPG.Gameplay.Weapons
         [Tooltip("무기 모델의 루트입니다. 공격 동작에서 이 트랜스폼을 움직입니다.")]
         protected Transform WeaponPivot;
 
+        /// <summary>진행 중인 공격 동작의 남은 시간입니다. 0보다 크면 동작 중입니다.</summary>
         private float _actionTimer;
 
         // ====================================================================================================

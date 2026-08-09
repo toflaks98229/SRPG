@@ -40,8 +40,11 @@ namespace SRPG.Gameplay.Island
         // 1-1. Palette
         // ====================================================================================================
 
+        /// <summary>머티리얼이 없을 때 쓰는 지면 색입니다.</summary>
         private static readonly Color GroundColor = new Color(0.44f, 0.62f, 0.36f);
+        /// <summary>머티리얼이 없을 때 쓰는 바위 색입니다.</summary>
         private static readonly Color RockColor = new Color(0.42f, 0.40f, 0.43f);
+        /// <summary>머티리얼이 없을 때 쓰는 물 색입니다.</summary>
         private static readonly Color WaterColor = new Color(0.18f, 0.35f, 0.52f);
 
         // ====================================================================================================
@@ -58,6 +61,8 @@ namespace SRPG.Gameplay.Island
         /// <summary>
         /// 전장을 세웁니다. 이미 세워져 있으면 지우고 다시 만듭니다.
         /// </summary>
+        /// <param name="battlefield">화면에 세울 전장입니다. 지형과 물이 여기서 나옵니다.</param>
+        /// <param name="materials">지형·물 머티리얼 묶음입니다. 비어 있으면 코드로 만듭니다.</param>
         public void Build(Battlefield battlefield, TerrainMaterialSet materials = default)
         {
             ClearChildren();

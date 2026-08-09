@@ -34,8 +34,11 @@ namespace SRPG.Gameplay.Visual
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>그림자를 붙일 지면 높이를 읽을 지형입니다.</summary>
         private IslandGrid _grid;
+        /// <summary>그림자 자신의 트랜스폼입니다.</summary>
         private Transform _transform;
+        /// <summary>그림자가 따라다닐 유닛의 트랜스폼입니다.</summary>
         private Transform _owner;
 
         // ====================================================================================================

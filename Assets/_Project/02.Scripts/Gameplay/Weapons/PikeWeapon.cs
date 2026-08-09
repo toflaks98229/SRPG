@@ -58,6 +58,7 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>정면 판정으로 인정하는 각도(도)입니다. 이 밖은 창이 닿지 않습니다.</summary>
         private const float FrontalConeDegrees = 42f;
 
+        /// <summary>한 번의 찌르기에서 담을 수 있는 최대 판정 대상 수입니다.</summary>
         private const int MaxHitBuffer = 8;
 
         /// <summary>이동 중 창을 세우는 각도(도)입니다. 음수가 창끝을 위로 들어 올립니다.</summary>
@@ -70,9 +71,12 @@ namespace SRPG.Gameplay.Weapons
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>이번 동작에서 이미 맞은 적입니다.</summary>
         private readonly HashSet<Unit> _alreadyHit = new HashSet<Unit>();
+        /// <summary>물리 질의 결과를 담는 재사용 버퍼입니다.</summary>
         private readonly Collider[] _hitBuffer = new Collider[MaxHitBuffer];
 
+        /// <summary>창의 대기 자세입니다. 동작이 끝나면 여기로 돌아옵니다.</summary>
         private Vector3 _restLocalPosition;
 
         /// <summary>진형이 무너진 뒤 회복까지 남은 시간입니다. 0보다 크면 창을 들고 물러납니다.</summary>

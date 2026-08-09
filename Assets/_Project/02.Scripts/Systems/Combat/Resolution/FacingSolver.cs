@@ -62,6 +62,7 @@ namespace SRPG.Systems.Combat
         /// </summary>
         /// <param name="request">판단에 필요한 관측값입니다.</param>
         /// <param name="facing">정규화된 수평 방향입니다. 반환값이 <see cref="FacingSource.None"/>이면 0입니다.</param>
+        /// <returns>방향을 무엇에서 얻었는지입니다. 그 값이 곧 우선순위 중 어디서 걸렸는지를 말해 줍니다.</returns>
         public static FacingSource Resolve(in FacingRequest request, out Vector3 facing)
         {
             // 1. 교전 대상 — 무기가 겨눌 자리를 따로 가지고 있으면 그쪽입니다.

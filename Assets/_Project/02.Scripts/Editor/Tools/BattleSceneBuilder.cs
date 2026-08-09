@@ -28,7 +28,9 @@ namespace SRPG.Editor.Tools
         // 1. Constants
         // ====================================================================================================
 
+        /// <summary>전투 씬을 굽는 폴더입니다.</summary>
         private const string SceneDirectory = "Assets/_Project/01.Scenes/Battle";
+        /// <summary>전투 씬 에셋의 경로입니다.</summary>
         private const string ScenePath = SceneDirectory + "/Battle.unity";
 
         // ====================================================================================================

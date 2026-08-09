@@ -49,6 +49,7 @@ namespace SRPG.Systems.Combat
         /// </summary>
         /// <param name="arcAngleDegrees">평지 기준 하강각(도)입니다.</param>
         /// <param name="steepMarginDegrees">평지 사격보다 얼마나 더 가팔라야 상방으로 볼지(도)입니다.</param>
+        /// <returns>"위에서 내리꽂혔다"고 볼 하강 성분의 기준선입니다. 발사각에서 파생됩니다.</returns>
         public static float GetSteepBlockThreshold(float arcAngleDegrees, float steepMarginDegrees)
         {
             float degrees = Mathf.Clamp(arcAngleDegrees + steepMarginDegrees, 0f, 90f);
@@ -61,6 +62,7 @@ namespace SRPG.Systems.Combat
         /// </summary>
         /// <param name="incomingDirection">투사체가 진행한 방향입니다.</param>
         /// <param name="victimForward">피격자가 바라보는 방향입니다.</param>
+        /// <returns>정면에서 날아온 것으로 보면 true입니다.</returns>
         public static bool IsBlockedFromFront(Vector3 incomingDirection, Vector3 victimForward)
         {
             Vector3 facing = new Vector3(victimForward.x, 0f, victimForward.z);
@@ -81,6 +83,7 @@ namespace SRPG.Systems.Combat
         /// <param name="incomingDirection">투사체가 진행한 방향입니다.</param>
         /// <param name="arcAngleDegrees">평지 기준 하강각(도)입니다.</param>
         /// <param name="steepMarginDegrees">상방으로 인정할 추가 각도(도)입니다.</param>
+        /// <returns>평지 곡사보다 가파르게 떨어져 방패 위를 넘은 것으로 보면 true입니다.</returns>
         public static bool IsBlockedFromAbove(Vector3 incomingDirection, float arcAngleDegrees, float steepMarginDegrees)
         {
             if (incomingDirection.sqrMagnitude < 0.0001f)
@@ -103,6 +106,7 @@ namespace SRPG.Systems.Combat
         /// <param name="projectileResistance">피격자의 투사체 피해 감소율(0~1)입니다.</param>
         /// <param name="arcAngleDegrees">평지 기준 하강각(도)입니다.</param>
         /// <param name="steepMarginDegrees">상방으로 인정할 추가 각도(도)입니다.</param>
+        /// <returns>타격이 얼마나 통하는지입니다. 1이면 그대로 들어가고 0에 가까우면 거의 막힙니다.</returns>
         public static float ComputeBlockFactor(
             Vector3 incomingDirection,
             Vector3 victimForward,

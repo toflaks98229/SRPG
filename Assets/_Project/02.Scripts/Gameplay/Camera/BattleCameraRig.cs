@@ -34,10 +34,15 @@ namespace SRPG.Gameplay.CameraControl
         // 1. Constants
         // ====================================================================================================
 
+        /// <summary>카메라가 피벗에 다가갈 수 있는 최소 거리입니다.</summary>
         private const float MinDistance = 14f;
+        /// <summary>카메라가 피벗에서 물러날 수 있는 최대 거리입니다.</summary>
         private const float MaxDistance = 52f;
+        /// <summary>궤도 회전 속도입니다. 초당 각도입니다.</summary>
         private const float RotationSpeed = 90f;
+        /// <summary>휠 한 칸이 바꾸는 거리입니다.</summary>
         private const float ZoomSpeed = 6f;
+        /// <summary>회전·확대가 목표값을 따라가는 속도입니다.</summary>
         private const float SmoothSpeed = 10f;
 
         /// <summary>피벗이 지면 높이를 따라가는 속도입니다. 계단형 지형에서 튀지 않게 부드럽게 붙습니다.</summary>
@@ -78,16 +83,24 @@ namespace SRPG.Gameplay.CameraControl
         // 3. Fields
         // ====================================================================================================
 
+        /// <summary>이동 범위를 정할 때 기준이 되는 지형입니다.</summary>
         private IslandGrid _grid;
 
+        /// <summary>확대·축소가 수렴할 목표 거리입니다.</summary>
         private float _targetDistance;
+        /// <summary>궤도 회전이 수렴할 목표 각도입니다.</summary>
         private float _targetYaw;
 
         // 피벗이 벗어날 수 없는 XZ 범위입니다.
+        /// <summary>이동 범위가 계산됐는지 여부입니다. 지형이 없으면 범위를 두지 않습니다.</summary>
         private bool _hasBounds;
+        /// <summary>피벗이 갈 수 있는 최소 X입니다.</summary>
         private float _minX;
+        /// <summary>피벗이 갈 수 있는 최대 X입니다.</summary>
         private float _maxX;
+        /// <summary>피벗이 갈 수 있는 최소 Z입니다.</summary>
         private float _minZ;
+        /// <summary>피벗이 갈 수 있는 최대 Z입니다.</summary>
         private float _maxZ;
 
         // ====================================================================================================
@@ -140,6 +153,7 @@ namespace SRPG.Gameplay.CameraControl
         /// 피벗의 회전은 항상 기본값으로 되돌립니다. 회전은 자식 카메라가 전담해야
         /// 피벗의 월드 좌표가 곧 초점이라는 관계가 유지됩니다.
         /// </summary>
+        /// <param name="battleCamera">피벗의 자식으로 붙일 카메라입니다.</param>
         public void AttachCamera(Camera battleCamera)
         {
             if (battleCamera == null)
@@ -180,6 +194,7 @@ namespace SRPG.Gameplay.CameraControl
         /// <summary>
         /// 피벗을 지정 위치로 즉시 옮깁니다. 초기 배치에 씁니다.
         /// </summary>
+        /// <param name="world">피벗을 옮길 월드 좌표입니다. 높이는 지형을 따라 보정됩니다.</param>
         public void MoveTo(Vector3 world)
         {
             Vector3 clamped = ClampToBounds(world);
@@ -192,6 +207,7 @@ namespace SRPG.Gameplay.CameraControl
         /// <summary>
         /// 섬 크기에 맞춰 초기 거리를 잡습니다.
         /// </summary>
+        /// <param name="areaSize">화면에 담고 싶은 영역의 한 변 길이입니다.</param>
         public void FrameArea(float areaSize)
         {
             _targetDistance = Mathf.Clamp(areaSize * 0.85f, MinDistance, MaxDistance);

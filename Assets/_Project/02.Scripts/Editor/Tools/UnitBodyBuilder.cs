@@ -35,7 +35,9 @@ namespace SRPG.Editor.Tools
         // 1. Constants
         // ====================================================================================================
 
+        /// <summary>생성한 메시가 저장되는 폴더입니다.</summary>
         private const string MeshDirectory = "Assets/_Project/04.Art/02.Models";
+        /// <summary>밑변이 원점에 오는 공유 쿼드 메시의 경로입니다.</summary>
         private const string GroundedQuadPath = MeshDirectory + "/SRPG_GroundedQuad.mesh";
 
         /// <summary>쿼드의 가로가 유닛 반경의 몇 배인지입니다.</summary>
@@ -101,6 +103,8 @@ namespace SRPG.Editor.Tools
         /// <summary>
         /// 이 몸체가 이미 빌보드인지 봅니다.
         /// </summary>
+        /// <param name="root">검사할 유닛 프리팹의 루트입니다.</param>
+        /// <returns>몸체가 빌보드 쿼드로 만들어져 있으면 true입니다.</returns>
         public static bool IsBillboard(GameObject root)
         {
             if (root == null || root.GetComponent<UnitBillboard>() == null)
@@ -123,6 +127,7 @@ namespace SRPG.Editor.Tools
         /// 런타임 생성 메시는 <see cref="HideFlags.DontSave"/>라 프리팹이 참조할 수 없습니다.
         /// 형상은 런타임 쪽과 같은 정의에서 복사해 옵니다. 모양이 두 벌이면 반드시 갈라집니다.
         /// </summary>
+        /// <returns>밑변이 원점에 오는 공유 쿼드 메시 에셋입니다. 없으면 만들어 저장합니다.</returns>
         public static Mesh LoadOrCreateGroundedQuad()
         {
             var existing = AssetDatabase.LoadAssetAtPath<Mesh>(GroundedQuadPath);

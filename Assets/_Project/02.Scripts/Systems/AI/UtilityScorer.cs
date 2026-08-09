@@ -76,6 +76,7 @@ namespace SRPG.Systems.AI
         /// <param name="scores">각 고려사항의 0~1 점수입니다.</param>
         /// <param name="weights">각 고려사항의 0~1 가중치입니다.</param>
         /// <param name="count">사용할 개수입니다.</param>
+        /// <returns>고려사항 수에 맞춰 보상된 0~1 점수입니다. 하나라도 0이면 전체가 0입니다.</returns>
         public static float CombineWeighted(float[] scores, float[] weights, int count)
         {
             if (scores == null || weights == null || count <= 0)

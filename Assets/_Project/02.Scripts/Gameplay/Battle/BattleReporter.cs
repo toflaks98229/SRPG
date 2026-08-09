@@ -76,7 +76,9 @@ namespace SRPG.Gameplay.Battle
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>전장에 세운 분대의 기록입니다. 오브젝트가 사라져도 식별자와 배치 인원은 남습니다.</summary>
         private readonly List<Entry> _deployed = new List<Entry>(8);
+        /// <summary>승패 규칙입니다. 관측값을 넣으면 결말을 돌려줍니다.</summary>
         private readonly BattleConclusion _conclusion = new BattleConclusion();
 
         /// <summary>지금까지 전장에 나온 적의 총수입니다.</summary>
