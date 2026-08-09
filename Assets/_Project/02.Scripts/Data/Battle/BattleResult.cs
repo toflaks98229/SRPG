@@ -76,6 +76,8 @@ namespace SRPG.Data
         // 2. Public Methods
         // ====================================================================================================
 
+        /// <summary>디버그 표시용 문자열입니다.</summary>
+        /// <returns>결말·소요 시간·전과를 한 줄로 적은 문자열입니다.</returns>
         public override string ToString()
         {
             return $"{Outcome} · 분대 {SurvivingSquads}/{Squads.Count} 생존 · " +

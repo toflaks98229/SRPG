@@ -55,6 +55,9 @@ namespace SRPG.Gameplay.Visual
         /// 단색 머티리얼을 만듭니다.
         /// URP Lit은 색상 프로퍼티가 <c>_BaseColor</c>이므로 <c>Material.color</c>만으로는 색이 적용되지 않습니다.
         /// </summary>
+        /// <param name="color">칠할 기본 색입니다.</param>
+        /// <param name="smoothness">표면의 매끄러움입니다. 0에 가까울수록 무광입니다.</param>
+        /// <returns>색과 매끄러움이 적용된 새 머티리얼입니다.</returns>
         public static Material CreateMaterial(Color color, float smoothness = 0.05f)
         {
             var shader = Shader.Find("Universal Render Pipeline/Lit");
@@ -113,6 +116,7 @@ namespace SRPG.Gameplay.Visual
         /// <param name="seaLevel">해수면의 월드 높이입니다.</param>
         /// <param name="heightRange">해수면 위로 올라가는 높이의 폭입니다.</param>
         /// <param name="climbLimitDegrees">생성기가 절벽을 가른 기울기입니다.</param>
+        /// <returns>이번 전장의 세 숫자가 덮어써진 새 머티리얼입니다.</returns>
         public static Material CreateTerrainMaterial(
             Material source,
             float seaLevel,
@@ -148,6 +152,8 @@ namespace SRPG.Gameplay.Visual
         /// 셰이더를 찾지 못하면 불투명한 파란 판으로 물러납니다.
         /// 수심도 여울도 보이지 않지만, 적어도 물이 있어야 할 자리에 물이 있습니다.
         /// </summary>
+        /// <param name="fallbackColor">셰이더를 찾지 못했을 때 쓸 단색입니다.</param>
+        /// <returns>물 머티리얼입니다. 셰이더가 없으면 불투명한 대체 머티리얼입니다.</returns>
         public static Material CreateWaterMaterial(Color fallbackColor)
         {
             var shader = Shader.Find(WaterShaderName);
@@ -195,6 +201,11 @@ namespace SRPG.Gameplay.Visual
         ///
         /// 빌보드 셰이더가 없으면 캡슐로 물러납니다. 셰이더 하나 때문에 실행이 막히면 안 됩니다.
         /// </summary>
+        /// <param name="definition">병과 정의입니다. 몸체 크기를 여기서 읽습니다.</param>
+        /// <param name="team">소속 진영입니다. 임시 색을 가르는 기준입니다.</param>
+        /// <param name="isCommander">지휘관이면 깃대를 답니다.</param>
+        /// <param name="bodyMaterial">몸체에 입힐 머티리얼입니다.</param>
+        /// <returns>아직 <c>Unit</c> 컴포넌트가 붙지 않은 임시 몸체 오브젝트입니다.</returns>
         public static GameObject CreateUnitVisual(UnitDefinition definition, Team team, bool isCommander, Material bodyMaterial)
         {
             var root = new GameObject(isCommander ? $"{definition.DisplayName}(지휘관)" : definition.DisplayName);
@@ -294,6 +305,7 @@ namespace SRPG.Gameplay.Visual
         /// 유니티 기본 쿼드는 원점이 가운데라 그대로 쓰면 유닛이 땅에 반쯤 박힙니다.
         /// 발밑을 원점으로 두면 지면에 세우기만 하면 정확히 서 있습니다.
         /// </summary>
+        /// <returns>공유 쿼드 메시입니다. 처음 호출할 때 만들어 캐시합니다.</returns>
         public static Mesh GetGroundedQuadMesh()
         {
             if (s_groundedQuadMesh != null)
@@ -334,6 +346,7 @@ namespace SRPG.Gameplay.Visual
         /// <summary>
         /// 원점이 가운데인 1×1 쿼드입니다. 접지 그림자가 씁니다.
         /// </summary>
+        /// <returns>공유 쿼드 메시입니다. 처음 호출할 때 만들어 캐시합니다.</returns>
         public static Mesh GetCenteredQuadMesh()
         {
             if (s_centeredQuadMesh != null)
@@ -377,6 +390,8 @@ namespace SRPG.Gameplay.Visual
         /// 유닛마다 새로 만들면 수백 개의 머티리얼이 생기고 배칭이 통째로 깨집니다.
         /// 그림자는 전부 같은 모습이므로 하나로 충분합니다.
         /// </summary>
+        /// <param name="shader">그림자 셰이더입니다. 처음 호출할 때만 쓰입니다.</param>
+        /// <returns>모든 접지 그림자가 공유하는 머티리얼입니다.</returns>
         public static Material GetSharedContactShadowMaterial(Shader shader)
         {
             if (s_contactShadowMaterial != null)
@@ -393,7 +408,8 @@ namespace SRPG.Gameplay.Visual
             return s_contactShadowMaterial;
         }
 
-        /// <summary>공유 캡슐 메시입니다.</summary>
+        /// <summary>공유 캡슐 메시를 반환합니다.</summary>
+        /// <returns>프리미티브에서 한 번 뽑아 캐시해 둔 캡슐 메시입니다.</returns>
         public static Mesh GetCapsuleMesh()
         {
             if (s_capsuleMesh == null)
@@ -404,7 +420,8 @@ namespace SRPG.Gameplay.Visual
             return s_capsuleMesh;
         }
 
-        /// <summary>공유 큐브 메시입니다.</summary>
+        /// <summary>공유 큐브 메시를 반환합니다.</summary>
+        /// <returns>프리미티브에서 한 번 뽑아 캐시해 둔 큐브 메시입니다.</returns>
         public static Mesh GetCubeMesh()
         {
             if (s_cubeMesh == null)

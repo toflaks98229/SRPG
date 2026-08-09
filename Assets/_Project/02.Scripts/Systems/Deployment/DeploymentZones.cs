@@ -102,6 +102,9 @@ namespace SRPG.Systems.Deployment
         /// 전개 구역의 중심입니다. 부대가 처음 바라볼 방향을 정하는 기준이 됩니다.
         /// 비어 있으면 전장 중심을 돌려줍니다.
         /// </summary>
+        /// <param name="zone">중심을 구할 전개 구역입니다.</param>
+        /// <param name="grid">구역이 비었을 때 기준이 될 지형입니다.</param>
+        /// <returns>구역에 속한 칸들의 평균 위치입니다. 비어 있으면 전장 중심입니다.</returns>
         public static Vector3 CenterOf(IReadOnlyList<Tile> zone, IslandGrid grid)
         {
             if (zone == null || zone.Count == 0)

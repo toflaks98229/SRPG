@@ -239,9 +239,13 @@ namespace SRPG.Gameplay.Weapons
         }
 
         /// <summary>무너진 동안에는 찌를 수 없습니다.</summary>
+        /// <param name="target">치려는 대상입니다. 창은 대상을 가리지 않으므로 보지 않습니다.</param>
+        /// <returns>품 안을 내주어 무너진 상태가 아니면 true입니다.</returns>
         public override bool CanBeginAttack(Unit target) => !IsBroken;
 
         /// <summary>무너진 동안에는 파고든 적에게서 물러납니다.</summary>
+        /// <param name="threatPosition">물러날 기준이 되는 위협의 위치입니다.</param>
+        /// <returns>지금 물러나야 하면 true입니다.</returns>
         public override bool TryGetRetreatFrom(out Vector3 threatPosition)
         {
             threatPosition = _intruderPosition;
@@ -261,6 +265,9 @@ namespace SRPG.Gameplay.Weapons
         ///
         /// <b>이동 중에는 겨누지 않습니다.</b> 창을 세워 들고 걷는 중이라 겨눌 수가 없습니다.
         /// </summary>
+        /// <param name="target">겨눌 대상입니다.</param>
+        /// <param name="aimPoint">대상이 도착할 것으로 예측한 월드 좌표입니다.</param>
+        /// <returns>겨눌 지점을 구했으면 true입니다. 이동 중이면 false입니다.</returns>
         public override bool TryGetAimPoint(Unit target, out Vector3 aimPoint)
         {
             aimPoint = Vector3.zero;

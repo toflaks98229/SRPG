@@ -92,6 +92,10 @@ namespace SRPG.Systems.Pathfinding
         /// 대각으로 건너뛰는 걸음에서는 경로 탐색과 마찬가지로 <b>양옆 두 칸</b>을 함께 확인합니다.
         /// 여기서 빠뜨리면 A*가 막아 둔 모서리 통과가 다듬기 단계에서 그대로 되살아납니다.
         /// </summary>
+        /// <param name="grid">통행 규칙을 읽을 지형입니다.</param>
+        /// <param name="from">기준 칸입니다.</param>
+        /// <param name="to">바라보는 칸입니다.</param>
+        /// <returns>두 칸을 직선으로 이을 수 있으면 true입니다.</returns>
         public static bool HasLineOfSight(IslandGrid grid, GridCoord from, GridCoord to)
         {
             if (grid == null)

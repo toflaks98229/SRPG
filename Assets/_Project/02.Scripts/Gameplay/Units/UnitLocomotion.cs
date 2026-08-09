@@ -67,6 +67,11 @@ namespace SRPG.Gameplay.Units
         /// 경로 탐색기가 없는 것이 중요합니다 — 길을 잡는 것은 분대의 일이고,
         /// 병사는 가리키는 곳으로 조향할 뿐입니다.
         /// </summary>
+        /// <param name="owner">이 이동을 소유한 병사입니다. 진영을 읽는 데 씁니다.</param>
+        /// <param name="grid">지형입니다. 설 수 있는 자리와 발 높이를 정합니다.</param>
+        /// <param name="spatial">이웃을 찾는 공간 질의입니다. 분리 조향의 입력입니다.</param>
+        /// <param name="tuning">분리 세기와 익사 문턱이 담긴 튜닝입니다.</param>
+        /// <param name="definition">병과 정의입니다. 이동 속도와 반경을 읽습니다.</param>
         public void Configure(
             Unit owner,
             IslandGrid grid,
@@ -89,18 +94,21 @@ namespace SRPG.Gameplay.Units
         // ====================================================================================================
 
         /// <summary>맞아서 밀려납니다. 밀려난 자리가 물이면 익사합니다.</summary>
+        /// <param name="impulse">밀어내는 속도입니다.</param>
         public void AddKnockback(Vector3 impulse)
         {
             _impulses.AddKnockback(impulse);
         }
 
         /// <summary>스스로 앞으로 몸을 던집니다. 물로 밀려나지 않습니다.</summary>
+        /// <param name="impulse">앞으로 던지는 속도입니다.</param>
         public void AddLunge(Vector3 impulse)
         {
             _impulses.AddLunge(impulse);
         }
 
         /// <summary>외력을 감쇠시킵니다.</summary>
+        /// <param name="deltaTime">지난 시간입니다.</param>
         public void Decay(float deltaTime)
         {
             _impulses.Decay(deltaTime, KnockbackDecay, LungeDecay);
@@ -113,6 +121,10 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 이번 프레임의 목표 속도를 계산합니다. 도착 조향과 분리 조향의 합입니다.
         /// </summary>
+        /// <param name="order">슬롯·표적·리시·후퇴가 담긴 이번 프레임의 이동 지시입니다.</param>
+        /// <param name="position">병사의 현재 위치입니다.</param>
+        /// <param name="deltaTime">지난 시간입니다. 분리 성분의 보간에 씁니다.</param>
+        /// <returns>최대 이동 속도로 제한된 조향 속도입니다. 후퇴 중에는 제한을 타지 않습니다.</returns>
         public Vector3 Solve(in SteeringOrder order, Vector3 position, float deltaTime)
         {
             // 진형 붕괴: 품 안을 내준 무기는 싸울 방법이 없습니다. 물러나는 것이 유일한 반응입니다.

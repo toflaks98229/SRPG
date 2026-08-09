@@ -59,6 +59,8 @@ namespace SRPG.Systems.Grid
         /// 시작 칸에서 걸어 닿을 수 있는 칸의 수입니다. 시작 칸 자신을 포함합니다.
         /// 시작이 통행 불가면 0입니다.
         /// </summary>
+        /// <param name="start">탐색을 시작할 칸입니다.</param>
+        /// <returns>걸어 닿을 수 있는 칸의 수입니다. 시작 칸 자신을 포함합니다.</returns>
         public int CountReachable(Tile start)
         {
             return Flood(start, null);
@@ -67,6 +69,7 @@ namespace SRPG.Systems.Grid
         /// <summary>
         /// 시작 칸에서 걸어 닿을 수 있는 칸들을 모읍니다.
         /// </summary>
+        /// <param name="start">탐색을 시작할 칸입니다. 통행 불가면 아무것도 모으지 않습니다.</param>
         /// <param name="result">결과가 채워집니다. 호출 시 비워집니다.</param>
         /// <returns>모인 칸의 수입니다.</returns>
         public int CollectRegion(Tile start, List<Tile> result)

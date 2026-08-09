@@ -65,6 +65,8 @@ namespace SRPG.Systems.Grid
             }
         }
 
+        /// <summary>디버그 표시용 문자열입니다.</summary>
+        /// <returns>좌표·지형 종류·고도를 한 줄로 적은 문자열입니다.</returns>
         public override string ToString() => $"Tile{Coord} {Type} h={Height}";
     }
 }

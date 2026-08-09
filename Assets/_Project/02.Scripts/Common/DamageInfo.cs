@@ -105,6 +105,7 @@ namespace SRPG.Common
         /// <param name="knockbackForce">넉백 세기입니다.</param>
         /// <param name="staggerSeconds">경직 시간입니다.</param>
         /// <param name="source">공격자입니다.</param>
+        /// <returns>근접 종류로 표시된 타격 정보입니다.</returns>
         public static DamageInfo Melee(
             float amount,
             Vector3 direction,
@@ -131,6 +132,7 @@ namespace SRPG.Common
         /// <param name="staggerSeconds">경직 시간입니다.</param>
         /// <param name="arcAngleDegrees">평지 기준 하강각(도)입니다. 곡사의 발사각과 같습니다.</param>
         /// <param name="source">공격자입니다.</param>
+        /// <returns>투사체 종류로 표시된 타격 정보입니다. 방패 판정이 여기에만 걸립니다.</returns>
         public static DamageInfo Projectile(
             float amount,
             Vector3 direction,

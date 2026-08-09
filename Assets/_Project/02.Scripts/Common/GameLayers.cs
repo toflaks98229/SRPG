@@ -118,6 +118,8 @@ namespace SRPG.Common
         /// <summary>
         /// 오브젝트와 모든 자식의 레이어를 설정합니다. 레이어가 등록되지 않았으면 아무것도 하지 않습니다.
         /// </summary>
+        /// <param name="target">레이어를 바꿀 오브젝트입니다. null이면 아무것도 하지 않습니다.</param>
+        /// <param name="layer">설정할 레이어 인덱스입니다. 음수면 등록되지 않은 것으로 보고 넘어갑니다.</param>
         public static void ApplyRecursively(GameObject target, int layer)
         {
             if (target == null || layer < 0)

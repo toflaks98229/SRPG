@@ -51,6 +51,7 @@ namespace SRPG.Systems.Time
         // ====================================================================================================
 
         /// <summary>슬로우모션을 요청하거나 해제합니다.</summary>
+        /// <param name="enabled">true면 느려지고, false면 정상 속도로 되돌아갑니다.</param>
         public void SetSlowMotion(bool enabled)
         {
             _slowMotionRequested = enabled;
@@ -61,6 +62,7 @@ namespace SRPG.Systems.Time
         /// 반드시 스케일되지 않은 시간(<c>Time.unscaledDeltaTime</c>)으로 호출해야 합니다.
         /// 스케일된 시간을 쓰면 느려질수록 보간도 느려져 전환이 끝나지 않습니다.
         /// </summary>
+        /// <param name="unscaledDeltaTime">스케일되지 않은 지난 시간입니다.</param>
         public void Tick(float unscaledDeltaTime)
         {
             float target = _slowMotionRequested ? _slowMotionScale : 1f;

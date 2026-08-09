@@ -64,6 +64,11 @@ namespace SRPG.Gameplay.Units
         ///
         /// 위협을 찾는 공간 질의와, 얼마나 넓게 살필지를 정하는 튜닝뿐입니다.
         /// </summary>
+        /// <param name="owner">이 시선을 소유한 병사입니다.</param>
+        /// <param name="ownerTransform">회전을 적용할 트랜스폼입니다. 매 프레임 접근하므로 미리 받습니다.</param>
+        /// <param name="spatial">위협을 찾는 공간 질의입니다.</param>
+        /// <param name="tuning">위협 탐지 반경이 담긴 튜닝입니다.</param>
+        /// <param name="definition">병과 정의입니다. 교전 반경과 회전 속도를 읽습니다.</param>
         public void Configure(
             Unit owner,
             Transform ownerTransform,
@@ -92,6 +97,7 @@ namespace SRPG.Gameplay.Units
         /// 이게 없으면 대기 중인 병사는 <b>마지막으로 걷던 방향</b>을 그대로 보고 서 있습니다.
         /// 분대가 해안을 등지고 도착하면 전원이 섬 안쪽을 보고 선 채로 상륙을 맞이합니다.
         /// </summary>
+        /// <param name="direction">바라볼 방향입니다. 정규화되지 않아도 됩니다.</param>
         public void SetIdleFacing(Vector3 direction)
         {
             direction.y = 0f;
@@ -108,6 +114,7 @@ namespace SRPG.Gameplay.Units
         // ====================================================================================================
 
         /// <summary>시간을 흘려보냅니다.</summary>
+        /// <param name="deltaTime">지난 시간입니다.</param>
         public void Tick(float deltaTime)
         {
             _threatScanTimer -= deltaTime;

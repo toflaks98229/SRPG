@@ -101,7 +101,8 @@ namespace SRPG.Data
         /// 분대가 없거나 병과가 비어 있으면 전투가 조용히 텅 빈 채로 시작됩니다.
         /// 캠페인이 잘못 채운 것을 전투 도중에 알아차리면 원인을 찾기 어렵습니다.
         /// </summary>
-        /// <param name="reason">문제가 있으면 그 이유입니다.</param>
+        /// <param name="reason">문제가 있으면 그 이유입니다. 온전하면 null입니다.</param>
+        /// <returns>전투를 시작할 수 있으면 true입니다.</returns>
         public bool IsValid(out string reason)
         {
             if (PlayerSquads == null || PlayerSquads.Count == 0)
@@ -160,6 +161,7 @@ namespace SRPG.Data
         /// <param name="squadsPerSide">진영당 분대 수입니다.</param>
         /// <param name="soldiersPerSquad">분대당 병사 수입니다. 지휘관은 별도로 한 명 더 붙습니다.</param>
         /// <param name="seed">전장을 재현하는 시드입니다.</param>
+        /// <returns>양측에 같은 수의 분대가 채워진 주문서입니다. 식별자는 아군 1번대, 적 101번대입니다.</returns>
         public static BattleRequest CreateSimple(
             IReadOnlyList<UnitDefinition> playerRoster,
             IReadOnlyList<UnitDefinition> enemyRoster,
@@ -239,6 +241,7 @@ namespace SRPG.Data
         public string DisplayName;
 
         /// <summary>표시할 이름을 정합니다.</summary>
+        /// <returns>지정된 이름입니다. 비어 있으면 병과 이름이고, 그것도 없으면 "분대"입니다.</returns>
         public string ResolveName()
         {
             if (!string.IsNullOrEmpty(DisplayName))
@@ -250,6 +253,7 @@ namespace SRPG.Data
         }
 
         /// <summary>숙련도를 허용 범위로 묶습니다.</summary>
+        /// <returns>허용 범위 안으로 잘린 숙련도입니다.</returns>
         public int ClampedRank()
         {
             return Mathf.Clamp(Rank, CombatConstants.MinRank, CombatConstants.MaxRank);

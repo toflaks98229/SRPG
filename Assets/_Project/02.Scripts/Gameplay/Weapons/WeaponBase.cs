@@ -141,6 +141,8 @@ namespace SRPG.Gameplay.Weapons
         /// 사거리·재사용 대기 같은 공통 조건은 소유자가 이미 확인했습니다.
         /// 여기서는 <b>무기 고유의 사정</b>만 봅니다. 창병이 품 안을 내주어 무너진 상태가 그렇습니다.
         /// </summary>
+        /// <param name="target">치려는 대상입니다.</param>
+        /// <returns>무기 쪽 사정으로 막히는 것이 없으면 true입니다. 기본 구현은 언제나 true입니다.</returns>
         public virtual bool CanBeginAttack(Unit target) => true;
 
         /// <summary>
@@ -149,6 +151,8 @@ namespace SRPG.Gameplay.Weapons
         /// 긴 무기가 품 안을 내주면 싸울 방법이 없습니다. 그 자리에 서 있는 것은 선택지가 아니고,
         /// 창을 세워 들고 물러나는 것이 유일한 반응입니다.
         /// </summary>
+        /// <param name="threatPosition">물러날 기준이 되는 위협의 위치입니다.</param>
+        /// <returns>물러나야 하면 true입니다. 기본 구현은 언제나 false입니다.</returns>
         public virtual bool TryGetRetreatFrom(out Vector3 threatPosition)
         {
             threatPosition = Vector3.zero;
@@ -188,6 +192,7 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>
         /// 공격 동작을 시작합니다.
         /// </summary>
+        /// <param name="target">칠 대상입니다. null이거나 이미 쓰러졌으면 시작하지 않습니다.</param>
         /// <returns>실제로 시작했으면 true입니다. 이미 동작 중이면 false입니다.</returns>
         public bool TryBeginAttack(Unit target)
         {
@@ -209,6 +214,7 @@ namespace SRPG.Gameplay.Weapons
         /// <summary>
         /// 매 프레임 호출됩니다. 동작 진행과 판정을 처리합니다.
         /// </summary>
+        /// <param name="deltaTime">지난 시간입니다.</param>
         public void Tick(float deltaTime)
         {
             if (_actionTimer <= 0f)

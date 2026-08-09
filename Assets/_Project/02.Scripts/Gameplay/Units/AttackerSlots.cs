@@ -53,6 +53,7 @@ namespace SRPG.Gameplay.Units
         /// <param name="remainingHealth">대상의 남은 체력입니다.</param>
         /// <param name="damagePerHit">공격 한 번의 피해량입니다. 0에 가까우면 상한을 그대로 씁니다.</param>
         /// <param name="maxAttackers">정원의 상한입니다. 계산 결과가 아무리 커도 이를 넘지 않습니다.</param>
+        /// <returns>동시에 붙을 수 있는 인원입니다. 최소 1명입니다.</returns>
         public static int ComputeCapacity(float remainingHealth, float damagePerHit, int maxAttackers)
         {
             if (damagePerHit <= 0.01f)
@@ -72,6 +73,10 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 자리를 하나 예약합니다. 이미 자리가 찼으면 거절합니다.
         /// </summary>
+        /// <param name="attacker">예약하려는 쪽입니다. 이미 잡아 둔 자리는 그대로 유지됩니다.</param>
+        /// <param name="remainingHealth">대상의 남은 체력입니다. 정원 계산의 분자입니다.</param>
+        /// <param name="damagePerHit">공격 한 번의 피해량입니다. 정원 계산의 분모입니다.</param>
+        /// <param name="maxAttackers">정원의 상한입니다.</param>
         /// <returns>자리를 잡았으면 true입니다.</returns>
         public bool TryCommit(Unit attacker, float remainingHealth, float damagePerHit, int maxAttackers)
         {
@@ -100,6 +105,11 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 예약을 <b>잡지 않고</b> 자리가 남았는지만 봅니다. 표적을 고를 때 씁니다.
         /// </summary>
+        /// <param name="attacker">자리를 알아보는 쪽입니다. 이미 예약했으면 언제나 true입니다.</param>
+        /// <param name="remainingHealth">대상의 남은 체력입니다.</param>
+        /// <param name="damagePerHit">공격 한 번의 피해량입니다.</param>
+        /// <param name="maxAttackers">정원의 상한입니다.</param>
+        /// <returns>자리가 남아 있으면 true입니다.</returns>
         public bool HasRoom(Unit attacker, float remainingHealth, float damagePerHit, int maxAttackers)
         {
             if (attacker != null && _committed.Contains(attacker))
@@ -113,6 +123,7 @@ namespace SRPG.Gameplay.Units
         }
 
         /// <summary>예약을 놓습니다. 표적을 바꾸거나 죽을 때 호출합니다.</summary>
+        /// <param name="attacker">예약을 놓을 쪽입니다. 예약이 없어도 안전합니다.</param>
         public void Release(Unit attacker)
         {
             if (attacker != null)
