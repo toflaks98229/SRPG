@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
+using SRPG.Gameplay.Squads;
 using SRPG.Gameplay.Units;
 using SRPG.Systems.AI;
 using SRPG.Systems.Formation;
@@ -37,29 +38,29 @@ namespace SRPG.Gameplay.Enemies
         // 1. Constants
         // ====================================================================================================
 
-        /// <summary>목표 재판단 시점을 분대마다 흩뜨리는 폭(초)입니다. 같은 프레임에 몰리지 않게 합니다.</summary>
+        /// <summary>
+        /// 목표 재판단 시점을 분대마다 흩뜨리는 폭(초)입니다. 같은 프레임에 몰리지 않게 합니다.
+        ///
+        /// <b>튜닝 에셋으로 올리지 않습니다.</b> 이건 감각을 조정하는 값이 아니라
+        /// 부하를 흩뜨리는 장치라, 기획자가 만질 이유가 없습니다.
+        /// 재판단 주기 자체(<c>EnemyReplanInterval</c>)만큼 넓게 흩뜨리지 않는 이유는,
+        /// 그러면 전투가 열린 뒤 몇 초 동안 가만히 서 있는 분대가 생기기 때문입니다.
+        /// </summary>
         private const float ReplanJitter = 0.6f;
-
-        /// <summary>슬롯 배정을 다시 짜는 주기(초)입니다.</summary>
-        private const float AssignmentInterval = 0.35f;
 
         // ====================================================================================================
         // 2. Fields
         // ====================================================================================================
 
-        private readonly List<Unit> _units = new List<Unit>(8);
+        /// <summary>병사 명부와 슬롯 배정입니다. 아군 분대와 <b>같은 장부</b>를 씁니다.</summary>
+        private readonly SquadMembers _members = new SquadMembers(8);
+
         private readonly List<Vector3> _slots = new List<Vector3>(8);
         private readonly List<GridCoord> _path = new List<GridCoord>(64);
         private readonly List<GoalCandidate> _candidates = new List<GoalCandidate>(16);
-        private readonly List<Vector3> _positionBuffer = new List<Vector3>(8);
 
         /// <summary>목표 후보를 모을 때 쓰는 적 부대 중심 버퍼입니다. 매 판단마다 다시 채웁니다.</summary>
         private readonly List<Vector3> _anchorBuffer = new List<Vector3>(8);
-
-        /// <summary>병사별로 맡은 슬롯 인덱스입니다. <c>_units</c>와 같은 순서입니다.</summary>
-        private readonly List<int> _slotOf = new List<int>(8);
-
-        private float _assignmentTimer;
 
         private readonly FormationMotor _motor = new FormationMotor();
         private readonly EnemyGoalPlanner _planner = new EnemyGoalPlanner();
@@ -74,10 +75,10 @@ namespace SRPG.Gameplay.Enemies
         // ====================================================================================================
 
         /// <summary>소속 병사 목록입니다.</summary>
-        public IReadOnlyList<Unit> Units => _units;
+        public IReadOnlyList<Unit> Units => _members.Units;
 
         /// <summary>생존 병사 수입니다.</summary>
-        public int AliveCount => _units.Count;
+        public int AliveCount => _members.Count;
 
         /// <summary>분대 진형의 중심 월드 좌표입니다.</summary>
         public Vector3 AnchorPosition => _motor.Anchor;
@@ -102,9 +103,9 @@ namespace SRPG.Gameplay.Enemies
                 return;
             }
 
-            PruneDeadUnits();
+            _members.PruneDead();
 
-            if (_units.Count == 0)
+            if (_members.Count == 0)
             {
                 Disband();
                 return;
@@ -184,7 +185,7 @@ namespace SRPG.Gameplay.Enemies
                 unit.transform.SetParent(transform, worldPositionStays: true);
                 unit.SetRank(rank);
 
-                _units.Add(unit);
+                _members.Add(unit);
             }
 
             // 분대마다 재판단 시점을 흩뜨립니다. 안 그러면 모든 분대가 같은 프레임에 A*를 돌립니다.
@@ -340,7 +341,7 @@ namespace SRPG.Gameplay.Enemies
         /// </summary>
         private void AssignUnitTargets()
         {
-            int count = _units.Count;
+            int count = _members.Count;
             if (count == 0)
             {
                 return;
@@ -353,7 +354,7 @@ namespace SRPG.Gameplay.Enemies
             {
                 for (int i = 0; i < count; i++)
                 {
-                    var unit = _units[i];
+                    var unit = _members[i];
                     if (unit == null)
                     {
                         continue;
@@ -374,18 +375,17 @@ namespace SRPG.Gameplay.Enemies
             FormationSolver.ClampToWalkable(_context.Grid, _motor.Anchor, _slots);
 
             // 가까운 병사에게 자리를 줍니다. 순서대로 나눠 주면 대열을 가로질러 걸어갑니다.
-            RefreshAssignment(count);
+            _members.ReassignSlots(
+                _slots, tuning.SquadAssignmentInterval, UnityEngine.Time.deltaTime, _motor.Anchor);
 
             for (int i = 0; i < count; i++)
             {
-                var unit = _units[i];
-                if (unit == null || i >= _slotOf.Count)
-                {
-                    continue;
-                }
+                var unit = _members[i];
 
-                int slotIndex = Mathf.Clamp(_slotOf[i], 0, _slots.Count - 1);
-                unit.SetSlotTarget(_slots[slotIndex] + ScatterFor(unit, tuning.EnemyFormationJitter));
+                if (unit != null && _members.TryGetSlot(i, _slots, out Vector3 slot))
+                {
+                    unit.SetSlotTarget(slot + ScatterFor(unit, tuning.EnemyFormationJitter));
+                }
             }
         }
 
@@ -398,41 +398,6 @@ namespace SRPG.Gameplay.Enemies
         private static Vector3 ScatterFor(Unit unit, float radius)
         {
             return FormationScatter.Offset(unit.VisualSeed, radius);
-        }
-
-        /// <summary>
-        /// 병사와 슬롯의 짝을 다시 짭니다. 매 프레임 짜면 병사들이 자리를 두고 떱니다.
-        /// </summary>
-        private void RefreshAssignment(int count)
-        {
-            _assignmentTimer -= UnityEngine.Time.deltaTime;
-
-            if (_slotOf.Count == count && _assignmentTimer > 0f)
-            {
-                return;
-            }
-
-            _assignmentTimer = AssignmentInterval;
-
-            _positionBuffer.Clear();
-            for (int i = 0; i < count; i++)
-            {
-                _positionBuffer.Add(_units[i] != null ? _units[i].Position : _motor.Anchor);
-            }
-
-            SlotAssigner.AssignNearest(_positionBuffer, _slots, _slotOf);
-        }
-
-        private void PruneDeadUnits()
-        {
-            for (int i = _units.Count - 1; i >= 0; i--)
-            {
-                var unit = _units[i];
-                if (unit == null || !unit.IsAlive)
-                {
-                    _units.RemoveAt(i);
-                }
-            }
         }
 
         /// <summary>

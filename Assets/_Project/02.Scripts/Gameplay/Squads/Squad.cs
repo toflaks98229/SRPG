@@ -30,28 +30,15 @@ namespace SRPG.Gameplay.Squads
     public sealed class Squad : MonoBehaviour, ISquadStatus
     {
         // ====================================================================================================
-        // 1. Constants
+        // 1. Fields
         // ====================================================================================================
 
-        /// <summary>적이 분대에 닿았다고 보는 거리(칸)입니다. 접근 예측의 목표 지점이 됩니다.</summary>
-        private const float ContactRangeTiles = 1.5f;
+        /// <summary>병사 명부와 슬롯 배정입니다. 적 분대와 <b>같은 장부</b>를 씁니다.</summary>
+        private readonly SquadMembers _members = new SquadMembers(12);
 
-        /// <summary>방향 예측의 상한(초)입니다. 너무 길면 먼 적의 진로에 전열이 끌려다닙니다.</summary>
-        private const float FacingLeadSeconds = 1.5f;
-
-        // ====================================================================================================
-        // 2. Fields
-        // ====================================================================================================
-
-        private readonly List<Unit> _units = new List<Unit>(12);
         private readonly List<GridCoord> _path = new List<GridCoord>(64);
         private readonly List<Vector3> _slots = new List<Vector3>(12);
-        private readonly List<Vector3> _positionBuffer = new List<Vector3>(12);
 
-        /// <summary>병사별로 맡은 슬롯 인덱스입니다. <c>_units</c>와 같은 순서입니다.</summary>
-        private readonly List<int> _slotOf = new List<int>(12);
-
-        private float _assignmentTimer;
         private float _facingScanTimer;
         /// <summary>
         /// 병사들이 <b>고개를 돌릴</b> 방향입니다. 계속 갱신되며 슬롯에는 영향을 주지 않습니다.
@@ -82,7 +69,7 @@ namespace SRPG.Gameplay.Squads
         // ====================================================================================================
 
         /// <summary>분대 소속 병사 목록입니다. 지휘관도 포함됩니다.</summary>
-        public IReadOnlyList<Unit> Units => _units;
+        public IReadOnlyList<Unit> Units => _members.Units;
 
         /// <summary>지휘관(깃발병)입니다. 사망 시 분대가 소멸합니다.</summary>
         public Unit Commander => _commander;
@@ -106,7 +93,7 @@ namespace SRPG.Gameplay.Squads
         public int Rank { get; private set; } = CombatConstants.MinRank;
 
         /// <summary>생존한 병사 수입니다.</summary>
-        public int AliveCount => _units.Count;
+        public int AliveCount => _members.Count;
 
         /// <summary>분대가 소멸했는지 여부입니다.</summary>
         public bool IsDestroyed => State == SquadState.Destroyed;
@@ -137,9 +124,9 @@ namespace SRPG.Gameplay.Squads
 
             float deltaTime = UnityEngine.Time.deltaTime;
 
-            PruneDeadUnits();
+            _members.PruneDead();
 
-            if (_commander == null || !_commander.IsAlive || _units.Count == 0)
+            if (_commander == null || !_commander.IsAlive || _members.Count == 0)
             {
                 DestroySquad();
                 return;
@@ -213,7 +200,7 @@ namespace SRPG.Gameplay.Squads
                 unit.transform.SetParent(transform, true);
                 unit.SetRank(Rank);
                 unit.Died += OnUnitDied;
-                _units.Add(unit);
+                _members.Add(unit);
 
                 if (isCommander)
                 {
@@ -304,30 +291,15 @@ namespace SRPG.Gameplay.Squads
         {
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);
 
-            for (int i = 0; i < _units.Count; i++)
+            for (int i = 0; i < _members.Count; i++)
             {
-                _units[i]?.SetRank(Rank);
+                _members[i]?.SetRank(Rank);
             }
         }
 
         // ====================================================================================================
         // 7. Private Methods - Lifecycle
         // ====================================================================================================
-
-        /// <summary>
-        /// 사망한 병사를 목록에서 제거합니다.
-        /// </summary>
-        private void PruneDeadUnits()
-        {
-            for (int i = _units.Count - 1; i >= 0; i--)
-            {
-                var unit = _units[i];
-                if (unit == null || !unit.IsAlive)
-                {
-                    _units.RemoveAt(i);
-                }
-            }
-        }
 
         private void OnUnitDied(Unit unit)
         {
@@ -353,9 +325,9 @@ namespace SRPG.Gameplay.Squads
             _context?.Occupancy.Release(this);
             _context?.UnregisterSquad(this);
 
-            for (int i = _units.Count - 1; i >= 0; i--)
+            for (int i = _members.Count - 1; i >= 0; i--)
             {
-                var unit = _units[i];
+                var unit = _members[i];
                 if (unit != null && unit.IsAlive)
                 {
                     unit.Died -= OnUnitDied;
@@ -363,7 +335,7 @@ namespace SRPG.Gameplay.Squads
                 }
             }
 
-            _units.Clear();
+            _members.Clear();
             _commander = null;
 
             SquadDestroyed?.Invoke(this);
@@ -401,7 +373,7 @@ namespace SRPG.Gameplay.Squads
         /// </summary>
         private void AssignUnitTargets()
         {
-            int count = _units.Count;
+            int count = _members.Count;
             if (count == 0)
             {
                 return;
@@ -415,14 +387,14 @@ namespace SRPG.Gameplay.Squads
 
             for (int i = 0; i < count; i++)
             {
-                _units[i]?.SetIdleFacing(lookDirection);
+                _members[i]?.SetIdleFacing(lookDirection);
             }
 
             if (!HasArrived)
             {
                 for (int i = 0; i < count; i++)
                 {
-                    _units[i]?.SetSlotTarget(_motor.Anchor);
+                    _members[i]?.SetSlotTarget(_motor.Anchor);
                 }
 
                 _hasFormedUp = false;
@@ -441,18 +413,21 @@ namespace SRPG.Gameplay.Squads
             }
 
             SolveSlots(count, _formationFacing);
-            RefreshAssignment(count);
+
+            _members.ReassignSlots(
+                _slots,
+                _context.Tuning.SquadAssignmentInterval,
+                UnityEngine.Time.deltaTime,
+                _motor.Anchor);
 
             for (int i = 0; i < count; i++)
             {
-                var unit = _units[i];
-                if (unit == null || i >= _slotOf.Count)
-                {
-                    continue;
-                }
+                var unit = _members[i];
 
-                int slotIndex = Mathf.Clamp(_slotOf[i], 0, _slots.Count - 1);
-                unit.SetSlotTarget(_slots[slotIndex]);
+                if (unit != null && _members.TryGetSlot(i, _slots, out Vector3 slot))
+                {
+                    unit.SetSlotTarget(slot);
+                }
             }
         }
 
@@ -483,11 +458,11 @@ namespace SRPG.Gameplay.Squads
         /// <summary>이 분대가 횡대를 선호하는지 무기에게 묻습니다.</summary>
         private bool PrefersLineFormation()
         {
-            for (int i = 0; i < _units.Count; i++)
+            for (int i = 0; i < _members.Count; i++)
             {
-                if (_units[i] != null)
+                if (_members[i] != null)
                 {
-                    return _units[i].PrefersLineFormation;
+                    return _members[i].PrefersLineFormation;
                 }
             }
 
@@ -553,7 +528,7 @@ namespace SRPG.Gameplay.Squads
         /// </summary>
         private bool TryResolveApproachFacing(Vector3 anchor, Unit enemy, out Vector3 facing)
         {
-            float contactRange = _context.Grid.CellSize * ContactRangeTiles;
+            float contactRange = _context.Grid.CellSize * _context.Tuning.SquadContactRangeTiles;
 
             Vector3 arrival = AimPredictor.PredictApproachPoint(
                 anchor,
@@ -561,7 +536,7 @@ namespace SRPG.Gameplay.Squads
                 enemy.Velocity,
                 contactRange,
                 extraLeadSeconds: 0f,
-                maxLeadSeconds: FacingLeadSeconds);
+                maxLeadSeconds: _context.Tuning.SquadFacingLeadSeconds);
 
             facing = arrival - anchor;
             facing.y = 0f;
@@ -586,50 +561,14 @@ namespace SRPG.Gameplay.Squads
         }
 
         /// <summary>
-        /// 병사와 슬롯의 짝을 다시 짭니다.
-        ///
-        /// 매 프레임 다시 짜면 미세한 위치 변화로 슬롯이 서로 뒤바뀌며 병사들이 떱니다.
-        /// 인원이 바뀌었을 때와 일정 시간마다만 다시 짭니다.
-        /// </summary>
-        private void RefreshAssignment(int count)
-        {
-            _assignmentTimer -= UnityEngine.Time.deltaTime;
-
-            bool countChanged = _slotOf.Count != count;
-
-            if (!countChanged && _assignmentTimer > 0f)
-            {
-                return;
-            }
-
-            _assignmentTimer = _context.Tuning.SquadAssignmentInterval;
-
-            _positionBuffer.Clear();
-            int commanderIndex = -1;
-
-            for (int i = 0; i < count; i++)
-            {
-                var unit = _units[i];
-                _positionBuffer.Add(unit != null ? unit.Position : _motor.Anchor);
-
-                if (unit != null && unit.IsCommander)
-                {
-                    commanderIndex = i;
-                }
-            }
-
-            SlotAssigner.AssignNearest(_positionBuffer, _slots, _slotOf, commanderIndex);
-        }
-
-        /// <summary>
         /// 분대 상태를 갱신합니다. HUD 표시와 이후 AI 판단의 입력이 됩니다.
         /// </summary>
         private void UpdateState()
         {
             bool anyEngaged = false;
-            for (int i = 0; i < _units.Count; i++)
+            for (int i = 0; i < _members.Count; i++)
             {
-                if (_units[i] != null && _units[i].IsEngaged)
+                if (_members[i] != null && _members[i].IsEngaged)
                 {
                     anyEngaged = true;
                     break;

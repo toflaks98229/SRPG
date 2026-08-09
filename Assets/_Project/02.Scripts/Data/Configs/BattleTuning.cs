@@ -68,6 +68,12 @@ namespace SRPG.Data
         /// <summary>분대를 고르는 기본 클릭 반경입니다.</summary>
         public const float DefaultSquadPickRadius = 2.2f;
 
+        /// <summary>적이 전열에 닿았다고 보는 기본 거리(칸)입니다.</summary>
+        public const float DefaultSquadContactRangeTiles = 1.5f;
+
+        /// <summary>전열이 적의 진로를 내다보는 기본 상한(초)입니다.</summary>
+        public const float DefaultSquadFacingLeadSeconds = 1.5f;
+
         // ====================================================================================================
         // 2. Time
         // ====================================================================================================
@@ -100,7 +106,9 @@ namespace SRPG.Data
         [Min(0.05f)]
         [Tooltip("병사와 진형 슬롯의 짝을 다시 짜는 주기(초)입니다.\n" +
                  "짧으면 미세한 위치 변화로 슬롯이 서로 뒤바뀌며 병사들이 자리를 두고 떱니다.\n" +
-                 "길면 인원이 줄어든 뒤 대열이 한동안 비뚤어진 채로 남습니다.")]
+                 "길면 인원이 줄어든 뒤 대열이 한동안 비뚤어진 채로 남습니다.\n" +
+                 "<b>양측 분대가 같은 값을 씁니다.</b> 예전에는 적만 코드 상수를 보고 있어서\n" +
+                 "이 값을 바꿔도 절반만 바뀌었습니다.")]
         public float SquadAssignmentInterval = 0.35f;
 
         [Min(0.05f)]
@@ -113,6 +121,18 @@ namespace SRPG.Data
                  "<b>조작감에 직결됩니다.</b> 좁으면 정확히 찍어야 하고,\n" +
                  "넓으면 분대 옆 지형으로 보내려던 명령이 선택으로 먹힙니다.")]
         public float SquadPickRadius = DefaultSquadPickRadius;
+
+        [Min(0.2f)]
+        [Tooltip("적이 전열에 <b>닿았다</b>고 보는 거리(칸)입니다.\n" +
+                 "전열은 적이 지금 선 자리가 아니라 이 거리에 <b>도착할 자리</b>를 미리 봅니다.\n" +
+                 "짧으면 코앞에 와서야 몸을 틀고, 길면 아직 먼 적을 향해 미리 돌아섭니다.")]
+        public float SquadContactRangeTiles = DefaultSquadContactRangeTiles;
+
+        [Min(0f)]
+        [Tooltip("전열이 적의 진로를 내다보는 시간의 상한(초)입니다.\n" +
+                 "길면 옆으로 흘러가는 먼 적의 진로에 전열이 통째로 끌려다닙니다.\n" +
+                 "창병의 조준 상한(PikeMaxAimLeadSeconds)과 같은 성격의 값입니다.")]
+        public float SquadFacingLeadSeconds = DefaultSquadFacingLeadSeconds;
 
         // ====================================================================================================
         // 4. Unit
