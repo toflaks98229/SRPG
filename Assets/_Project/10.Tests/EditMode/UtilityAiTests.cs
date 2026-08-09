@@ -356,6 +356,89 @@ namespace SRPG.Tests
         }
 
         // ====================================================================================================
+        // 3-1. 후보 수집
+        // ====================================================================================================
+
+        /// <summary>
+        /// 부대 하나가 후보 하나입니다.
+        ///
+        /// 예전에는 병사가 선 칸을 전부 올려, 여섯 명짜리 분대 셋이면 후보가 열여덟 개였습니다.
+        /// 그중 열다섯은 같은 분대를 가리키는 사실상 같은 자리라 점수를 헛되이 다시 냈습니다.
+        /// </summary>
+        [Test]
+        public void 후보는_부대마다_하나씩만_나온다()
+        {
+            var grid = TestIsland.Create(20260809);
+            var result = new List<GoalCandidate>();
+
+            // 같은 분대의 병사들처럼 서로 아주 가까운 세 지점이라도, 넘긴 앵커 수만큼만 나옵니다.
+            var anchors = new List<Vector3>
+            {
+                grid.CoordToWorld(grid.WalkableTiles[0].Coord),
+                grid.CoordToWorld(grid.WalkableTiles[1].Coord),
+                grid.CoordToWorld(grid.WalkableTiles[2].Coord),
+            };
+
+            int count = EnemyGoalPlanner.CollectCandidates(anchors, grid, result);
+
+            Assert.AreEqual(3, count, "부대 수와 후보 수가 다릅니다.");
+            Assert.AreEqual(3, result.Count);
+        }
+
+        /// <summary>
+        /// 통행할 수 없는 자리는 아예 후보에 올리지 않습니다.
+        ///
+        /// 점수 단계에서도 결격으로 걸리지만, 그때는 이미 값을 계산한 뒤입니다.
+        /// </summary>
+        [Test]
+        public void 통행할_수_없는_자리는_후보에서_빠진다()
+        {
+            var grid = TestIsland.Create(20260809);
+            var result = new List<GoalCandidate>();
+
+            var walkable = grid.WalkableTiles[0];
+
+            // 격자 바깥은 타일 자체가 없습니다. 물 위에 선 부대와 같은 취급입니다.
+            var outside = new Vector3(
+                grid.Origin.x - grid.CellSize * 10f, 0f, grid.Origin.z - grid.CellSize * 10f);
+
+            var anchors = new List<Vector3> { grid.CoordToWorld(walkable.Coord), outside };
+
+            int count = EnemyGoalPlanner.CollectCandidates(anchors, grid, result);
+
+            Assert.AreEqual(1, count, "통행 불가 지점이 후보에 올랐습니다.");
+            Assert.AreEqual(walkable.Coord, result[0].Coord);
+        }
+
+        /// <summary>호출부가 버퍼를 돌려 쓰므로, 매번 비우고 채워야 합니다.</summary>
+        [Test]
+        public void 후보_수집은_호출할_때마다_버퍼를_비운다()
+        {
+            var grid = TestIsland.Create(20260809);
+            var result = new List<GoalCandidate>();
+
+            var anchors = new List<Vector3> { grid.CoordToWorld(grid.WalkableTiles[0].Coord) };
+
+            EnemyGoalPlanner.CollectCandidates(anchors, grid, result);
+            EnemyGoalPlanner.CollectCandidates(anchors, grid, result);
+
+            Assert.AreEqual(1, result.Count, "지난 호출의 후보가 남았습니다.");
+        }
+
+        /// <summary>칠 부대가 하나도 없으면 후보도 없습니다. 그 자리에 머뭅니다.</summary>
+        [Test]
+        public void 부대가_없으면_후보도_없다()
+        {
+            var grid = TestIsland.Create(20260809);
+            var result = new List<GoalCandidate> { new GoalCandidate(new GridCoord(1, 1)) };
+
+            int count = EnemyGoalPlanner.CollectCandidates(new List<Vector3>(), grid, result);
+
+            Assert.AreEqual(0, count);
+            Assert.AreEqual(0, result.Count, "지난 후보가 남아 없는 목표로 갑니다.");
+        }
+
+        // ====================================================================================================
         // 4. Helpers
         // ====================================================================================================
 

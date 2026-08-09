@@ -53,6 +53,9 @@ namespace SRPG.Gameplay.Enemies
         private readonly List<GoalCandidate> _candidates = new List<GoalCandidate>(16);
         private readonly List<Vector3> _positionBuffer = new List<Vector3>(8);
 
+        /// <summary>목표 후보를 모을 때 쓰는 적 부대 중심 버퍼입니다. 매 판단마다 다시 채웁니다.</summary>
+        private readonly List<Vector3> _anchorBuffer = new List<Vector3>(8);
+
         /// <summary>병사별로 맡은 슬롯 인덱스입니다. <c>_units</c>와 같은 순서입니다.</summary>
         private readonly List<int> _slotOf = new List<int>(8);
 
@@ -233,29 +236,34 @@ namespace SRPG.Gameplay.Enemies
         }
 
         /// <summary>
-        /// 목표 후보를 모읍니다. 플레이어 유닛이 서 있는 칸입니다.
+        /// 목표 후보를 모읍니다. <b>서 있는 적 부대의 중심</b>입니다.
+        ///
+        /// 예전에는 살아 있는 적 병사가 선 칸을 전부 올렸습니다. 그러면 분대 하나가
+        /// 인원수만큼 후보를 만들어, 같은 답을 여러 번 내느라 판단 비용이 인원에 비례했습니다.
+        /// 부대가 판단의 단위이므로 후보도 부대여야 합니다.
+        ///
+        /// 모으는 규칙 자체는 <see cref="EnemyGoalPlanner.CollectCandidates"/>에 있습니다.
+        /// MonoBehaviour 밖에 두어야 EditMode에서 직접 검증됩니다.
         /// </summary>
         private void BuildCandidates()
         {
-            _candidates.Clear();
+            _anchorBuffer.Clear();
 
-            var players = _context.PlayerUnits;
-            for (int i = 0; i < players.Count; i++)
+            var squads = _context.PlayerSquads;
+            for (int i = 0; i < squads.Count; i++)
             {
-                var unit = players[i];
-                if (unit == null || !unit.IsAlive)
+                var squad = squads[i];
+
+                // 무너진 분대는 오브젝트가 사라지기 전 한 프레임 동안 명부에 남아 있습니다.
+                if (squad == null || squad.IsDestroyed)
                 {
                     continue;
                 }
 
-                var coord = _context.Grid.WorldToCoord(unit.Position);
-                var tile = _context.Grid.GetTile(coord);
-
-                if (tile != null && tile.IsWalkable)
-                {
-                    _candidates.Add(new GoalCandidate(coord));
-                }
+                _anchorBuffer.Add(squad.AnchorPosition);
             }
+
+            EnemyGoalPlanner.CollectCandidates(_anchorBuffer, _context.Grid, _candidates);
 
             // 칠 부대가 없으면 갈 곳이 없습니다. 그 자리에 머뭅니다.
         }

@@ -11,6 +11,9 @@ namespace SRPG.Systems.AI
     /// 지금은 좌표뿐입니다. 예전에는 종류(가옥/분대)를 함께 들고 가치를 매겼지만,
     /// 야전에는 지킬 가옥이 없고 <b>칠 부대만</b> 있습니다.
     /// 고지 점령 같은 것이 붙으면 그때 다시 갈래가 생깁니다.
+    ///
+    /// <b>후보 하나는 부대 하나입니다.</b> 병사 하나가 아닙니다 —
+    /// 이유는 <see cref="EnemyGoalPlanner.CollectCandidates"/>에 적어 두었습니다.
     /// </summary>
     public readonly struct GoalCandidate
     {
@@ -104,7 +107,59 @@ namespace SRPG.Systems.AI
         private static readonly ResponseCurve OpenGroundCurve = ResponseCurve.Decreasing;
 
         // ====================================================================================================
-        // 4. Public Methods
+        // 4. Public Methods - Candidates
+        // ====================================================================================================
+
+        /// <summary>
+        /// 부대의 중심에서 목표 후보를 모읍니다. <b>부대 하나가 후보 하나입니다.</b>
+        ///
+        /// <b>왜 병사가 아니라 부대인가</b>
+        ///
+        /// 예전에는 살아 있는 적 병사가 선 칸을 전부 후보로 올렸습니다.
+        /// 여섯 명짜리 분대 셋이면 후보가 열여덟 개인데, 그중 열다섯은
+        /// <b>같은 분대를 가리키는 사실상 같은 자리</b>입니다. 점수를 열여덟 번 내고
+        /// 열다섯 번은 이미 아는 답을 다시 냅니다.
+        ///
+        /// 결과도 이쪽이 낫습니다. 이 판단이 답하려는 질문은
+        /// "어느 <b>부대</b>를 칠 것인가"이지 "어느 병사가 선 칸으로 갈 것인가"가 아닙니다.
+        /// 병사의 칸을 노리면 행군 중 뒤처진 한 명을 향해 분대 전체가 방향을 잡는 일이 생기는데,
+        /// 앵커는 그 부대가 <b>자리 잡으려는 곳</b>이라 겨눌 자리로 더 옳습니다.
+        ///
+        /// 통행할 수 없는 자리는 결격이라 아예 후보에 올리지 않습니다.
+        /// 점수 단계에서도 걸러지지만, 그때는 이미 값을 계산한 뒤입니다.
+        /// </summary>
+        /// <param name="anchors">부대들의 중심 월드 좌표입니다.</param>
+        /// <param name="grid">지형입니다. 좌표 변환과 통행 판정에 씁니다.</param>
+        /// <param name="result">후보가 채워집니다. 호출 시 비워집니다.</param>
+        /// <returns>모인 후보 수입니다.</returns>
+        public static int CollectCandidates(
+            IReadOnlyList<Vector3> anchors, IslandGrid grid, List<GoalCandidate> result)
+        {
+            result.Clear();
+
+            if (anchors == null || grid == null)
+            {
+                return 0;
+            }
+
+            for (int i = 0; i < anchors.Count; i++)
+            {
+                var coord = grid.WorldToCoord(anchors[i]);
+                var tile = grid.GetTile(coord);
+
+                if (tile == null || !tile.IsWalkable)
+                {
+                    continue;
+                }
+
+                result.Add(new GoalCandidate(coord));
+            }
+
+            return result.Count;
+        }
+
+        // ====================================================================================================
+        // 5. Public Methods - Selection
         // ====================================================================================================
 
         /// <summary>
