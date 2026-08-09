@@ -44,8 +44,13 @@ namespace SRPG.Systems.Spatial
         private readonly Dictionary<TOwner, GridCoord> _claimedBy = new Dictionary<TOwner, GridCoord>();
 
         // 탐색용 재사용 버퍼입니다. 명령을 내릴 때마다 할당하지 않기 위해 필드로 둡니다.
+        /// <summary>빈 칸을 찾는 너비 우선 탐색의 대기열입니다.</summary>
         private readonly Queue<GridCoord> _searchQueue = new Queue<GridCoord>();
+
+        /// <summary>같은 칸을 두 번 보지 않도록 표시해 두는 집합입니다.</summary>
         private readonly HashSet<GridCoord> _searchVisited = new HashSet<GridCoord>();
+
+        /// <summary>사라진 주체가 붙잡고 있던 칸을 모아 두는 버퍼입니다. 순회 도중 삭제하지 않기 위한 것입니다.</summary>
         private readonly List<GridCoord> _staleBuffer = new List<GridCoord>(8);
 
         /// <summary>
@@ -77,16 +82,21 @@ namespace SRPG.Systems.Spatial
         // ====================================================================================================
 
         /// <summary>
-        /// 해당 칸을 점유한 주체를 반환합니다. 비어 있거나 주인이 사라졌으면 null입니다.
+        /// 해당 칸을 점유한 주체를 반환합니다.
         /// </summary>
+        /// <param name="coord">확인할 격자 좌표입니다.</param>
+        /// <returns>그 칸을 점유한 주체입니다. 비어 있거나 주체가 사라졌으면 null입니다.</returns>
         public TOwner GetOccupant(GridCoord coord)
         {
             return _claims.TryGetValue(coord, out var owner) && !_isStale(owner) ? owner : null;
         }
 
         /// <summary>
-        /// <paramref name="asker"/> 이외의 주체가 이 칸을 점유하고 있는지 확인합니다.
+        /// <paramref name="asker"/> 이외의 주체가 그 칸을 점유하고 있는지 확인합니다.
         /// </summary>
+        /// <param name="coord">확인할 격자 좌표입니다.</param>
+        /// <param name="asker">묻는 주체입니다. 자기가 점유한 칸은 막힌 것으로 보지 않습니다.</param>
+        /// <returns>다른 주체가 점유하고 있으면 true입니다.</returns>
         public bool IsBlockedFor(GridCoord coord, TOwner asker)
         {
             var occupant = GetOccupant(coord);
@@ -94,8 +104,11 @@ namespace SRPG.Systems.Spatial
         }
 
         /// <summary>
-        /// 주체가 현재 점유 중인 칸을 반환합니다.
+        /// 주체가 현재 붙잡고 있는 칸을 반환합니다.
         /// </summary>
+        /// <param name="owner">조회할 주체입니다.</param>
+        /// <param name="coord">붙잡고 있는 칸입니다. 없으면 <see cref="GridCoord.Invalid"/>입니다.</param>
+        /// <returns>점유한 칸이 있으면 true입니다.</returns>
         public bool TryGetClaim(TOwner owner, out GridCoord coord)
         {
             return _claimedBy.TryGetValue(owner, out coord);
@@ -108,6 +121,8 @@ namespace SRPG.Systems.Spatial
         /// <summary>
         /// 칸을 점유합니다. 이 주체가 이전에 점유하던 칸은 자동으로 해제됩니다.
         /// </summary>
+        /// <param name="coord">점유할 격자 좌표입니다.</param>
+        /// <param name="owner">점유하는 주체입니다.</param>
         public void Claim(GridCoord coord, TOwner owner)
         {
             if (owner == null)
@@ -124,6 +139,7 @@ namespace SRPG.Systems.Spatial
         /// <summary>
         /// 주체의 점유를 해제합니다. 주체가 소멸할 때 반드시 호출해야 합니다.
         /// </summary>
+        /// <param name="owner">점유를 놓을 주체입니다.</param>
         public void Release(TOwner owner)
         {
             if (owner == null || !_claimedBy.TryGetValue(owner, out var previous))

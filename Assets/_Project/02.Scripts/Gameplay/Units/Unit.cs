@@ -64,20 +64,43 @@ namespace SRPG.Gameplay.Units
         // 3. Fields
         // ====================================================================================================
 
+        /// <summary>누구를 볼 것인가를 정하는 협력자입니다. 히스테리시스와 표적 고정을 들고 있습니다.</summary>
         private readonly UnitTargeting _targeting = new UnitTargeting();
+
+        /// <summary>어디로 어떻게 갈 것인가를 정하는 협력자입니다. 조향과 외력을 합칩니다.</summary>
         private readonly UnitLocomotion _locomotion = new UnitLocomotion();
+
+        /// <summary>어디를 향해 설 것인가를 정하는 협력자입니다.</summary>
         private readonly UnitFacing _facing = new UnitFacing();
+
+        /// <summary>나를 치기로 예약한 적들의 장부입니다. 오버킬을 막습니다.</summary>
         private readonly AttackerSlots _attackerSlots = new AttackerSlots();
 
+        /// <summary>병과 정의입니다. 체력·사거리·이동 속도 같은 수치의 출처입니다.</summary>
         private UnitDefinition _definition;
+
+        /// <summary>병사가 볼 수 있는 전부입니다. 경로 탐색기도 타일 점유도 여기 없습니다.</summary>
         private IUnitContext _context;
+
+        /// <summary>소속 진영입니다.</summary>
         private Team _team;
+
+        /// <summary>부착된 무기입니다. 실제 타격 판정은 이쪽이 합니다.</summary>
         private WeaponBase _weapon;
+
+        /// <summary>자기 트랜스폼 캐시입니다. 매 프레임 접근하므로 속성 조회를 피합니다.</summary>
         private Transform _transform;
 
+        /// <summary>현재 체력입니다. 0 이하가 되면 즉시 쓰러집니다.</summary>
         private float _health;
+
+        /// <summary>다음 공격까지 남은 시간입니다.</summary>
         private float _attackTimer;
+
+        /// <summary>남은 경직 시간입니다. 0보다 크면 스스로 움직이지 못합니다.</summary>
         private float _staggerTimer;
+
+        /// <summary>공격 동작에 붙잡혀 있는 남은 시간입니다.</summary>
         private float _rootTimer;
 
         /// <summary>분대(또는 적 AI)가 배정한 진형 슬롯입니다.</summary>
@@ -220,6 +243,10 @@ namespace SRPG.Gameplay.Units
         /// 경로 탐색기·타일 점유·전군 명부는 여기 들어오지 않습니다.
         /// 병사가 그것들을 만지는 코드는 아예 컴파일되지 않습니다.
         /// </summary>
+        /// <param name="definition">병과 정의입니다. 체력과 전투 수치의 출처입니다.</param>
+        /// <param name="team">소속 진영입니다.</param>
+        /// <param name="context">병사가 볼 수 있는 것만 담긴 컨텍스트입니다.</param>
+        /// <param name="isCommander">지휘관이면 true입니다. 깃발이 켜지고, 죽으면 분대가 소멸합니다.</param>
         public void Initialize(UnitDefinition definition, Team team, IUnitContext context, bool isCommander = false)
         {
             _transform = transform;
@@ -261,6 +288,7 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 숙련도 랭크를 설정합니다.
         /// </summary>
+        /// <param name="rank">설정할 랭크입니다. 허용 범위를 벗어나면 잘립니다.</param>
         public void SetRank(int rank)
         {
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);
@@ -269,6 +297,7 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 몸체 머티리얼을 덮어씁니다. 프리팹 없이 만든 임시 몸체에 색을 입힐 때 사용합니다.
         /// </summary>
+        /// <param name="material">입힐 머티리얼입니다. null이면 아무것도 하지 않습니다.</param>
         public void OverrideBodyMaterial(Material material)
         {
             if (material == null)
@@ -301,6 +330,7 @@ namespace SRPG.Gameplay.Units
         /// bool 인자로 "이미 깎았다"고 알렸습니다. 그래서 감쇠 규칙이 두 곳에 나뉘어 있었고,
         /// 넉백에 감쇠를 곱하는 것을 잊으면 <b>막아 낸 화살에 밀려나</b> 물에 빠지는 일이 생겼습니다.
         /// </summary>
+        /// <param name="hit">무엇을 어느 방향으로 때렸는지가 담긴 타격 정보입니다.</param>
         public void ReceiveHit(in DamageInfo hit)
         {
             if (!IsAlive)
@@ -412,6 +442,7 @@ namespace SRPG.Gameplay.Units
         /// 넉백과 달리 <b>물로 밀려나지 않습니다.</b>
         /// 밀려서 빠지는 것은 사고지만, 달려들다 빠지는 것은 자살입니다.
         /// </summary>
+        /// <param name="impulse">앞으로 몸을 던지는 속도입니다.</param>
         public void ApplyLunge(Vector3 impulse)
         {
             if (!IsAlive)
@@ -450,6 +481,7 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 이 유닛이 향할 진형 슬롯을 지정합니다. 분대 또는 적 AI가 매 프레임 갱신합니다.
         /// </summary>
+        /// <param name="worldPosition">향할 월드 좌표입니다. 행군 중에는 분대 앵커입니다.</param>
         public void SetSlotTarget(Vector3 worldPosition)
         {
             _slotTarget = worldPosition;
@@ -458,6 +490,7 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 교전 대상이 없을 때 바라볼 방향을 분대가 지정합니다.
         /// </summary>
+        /// <param name="direction">바라볼 방향입니다. 정규화되지 않아도 됩니다.</param>
         public void SetIdleFacing(Vector3 direction)
         {
             _facing.SetIdleFacing(direction);
@@ -489,6 +522,10 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 예약을 <b>잡지 않고</b> 자리가 남았는지만 봅니다. 표적을 고를 때 씁니다.
         /// </summary>
+        /// <param name="attacker">자리를 알아보는 쪽입니다. 이미 예약했으면 언제나 true입니다.</param>
+        /// <param name="damagePerHit">그 공격이 한 번에 주는 피해량입니다. 정원 계산의 분모입니다.</param>
+        /// <param name="maxAttackers">정원의 상한입니다.</param>
+        /// <returns>자리가 남아 있으면 true입니다. 이미 쓰러졌으면 false입니다.</returns>
         public bool HasRoomForAttacker(Unit attacker, float damagePerHit, int maxAttackers)
         {
             if (!IsAlive)
@@ -500,6 +537,7 @@ namespace SRPG.Gameplay.Units
         }
 
         /// <summary>예약을 놓습니다. 표적을 바꾸거나 죽을 때 호출합니다.</summary>
+        /// <param name="attacker">예약을 놓을 쪽입니다. 예약이 없어도 안전합니다.</param>
         public void ReleaseAttacker(Unit attacker)
         {
             _attackerSlots.Release(attacker);
@@ -508,6 +546,8 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 지정 반경 안에서 가장 가까운 적을 찾습니다. 무기가 근접 위협을 살필 때 씁니다.
         /// </summary>
+        /// <param name="radius">살펴볼 반경입니다.</param>
+        /// <returns>가장 가까운 적입니다. 반경 안에 없거나 컨텍스트가 없으면 null입니다.</returns>
         public Unit FindClosestEnemyWithin(float radius)
         {
             return _context != null ? _context.FindNearestEnemy(Position, _team, radius) : null;

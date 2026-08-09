@@ -38,10 +38,19 @@ namespace SRPG.Systems.Pathfinding
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>경로를 찾을 지형입니다. 통행 규칙과 고도를 여기서 읽습니다.</summary>
         private readonly IslandGrid _grid;
+
+        /// <summary>출발점에서 각 셀까지의 실제 비용입니다.</summary>
         private readonly float[] _gScore;
+
+        /// <summary>각 셀에 도달한 직전 셀의 인덱스입니다. 경로를 되짚을 때 씁니다.</summary>
         private readonly int[] _cameFrom;
+
+        /// <summary>열린 목록의 이진 힙입니다. 감소 키를 쓰지 않아 셀이 중복 적재될 수 있습니다.</summary>
         private readonly int[] _openHeap;
+
+        /// <summary>실제 비용에 휴리스틱을 더한 추정 총비용입니다. 힙의 정렬 기준입니다.</summary>
         private readonly float[] _fScore;
 
         /// <summary>
@@ -58,6 +67,7 @@ namespace SRPG.Systems.Pathfinding
         /// <summary>다듬기 전의 날것 경로를 담는 재사용 버퍼입니다.</summary>
         private readonly List<GridCoord> _rawPath = new List<GridCoord>(64);
 
+        /// <summary>힙에 들어 있는 항목 수입니다.</summary>
         private int _openCount;
 
         // ====================================================================================================
@@ -192,8 +202,13 @@ namespace SRPG.Systems.Pathfinding
 
         /// <summary>
         /// 목적지가 통행 불가일 때 가장 가까운 통행 가능 타일로 보정한 뒤 경로를 찾습니다.
-        /// 플레이어가 물이나 절벽을 클릭했을 때의 폴백 경로입니다.
+        /// 플레이어가 물이나 절벽을 클릭했을 때를 위한 경로입니다.
         /// </summary>
+        /// <param name="start">출발 좌표입니다.</param>
+        /// <param name="goal">목표 좌표입니다. 통행 불가면 가장 가까운 통행 가능 칸으로 보정합니다.</param>
+        /// <param name="result">찾은 경로가 출발지에서 목적지 순으로 채워집니다. 호출 시 비워집니다.</param>
+        /// <param name="resolvedGoal">보정까지 마친 최종 목표 좌표입니다.</param>
+        /// <returns>경로를 찾으면 true입니다.</returns>
         public bool TryFindPathSnapped(GridCoord start, GridCoord goal, List<GridCoord> result, out GridCoord resolvedGoal)
         {
             resolvedGoal = goal;
@@ -227,6 +242,10 @@ namespace SRPG.Systems.Pathfinding
         /// 결과는 더 이상 <b>인접한 칸의 나열이 아닙니다.</b> 경유점 사이가 여러 칸 떨어질 수 있습니다.
         /// 칸 단위로 무언가를 하려는 소비자는 <see cref="TryFindPath"/>의 날것을 써야 합니다.
         /// </summary>
+        /// <param name="start">출발 좌표입니다.</param>
+        /// <param name="goal">목표 좌표입니다.</param>
+        /// <param name="result">다듬은 경유점이 채워집니다. <b>인접한 칸의 나열이 아닙니다.</b></param>
+        /// <returns>경로를 찾으면 true입니다.</returns>
         public bool TryFindSmoothedPath(GridCoord start, GridCoord goal, List<GridCoord> result)
         {
             if (!TryFindPath(start, goal, _rawPath))
@@ -243,6 +262,11 @@ namespace SRPG.Systems.Pathfinding
         /// 목적지를 보정한 뒤 경로를 찾고 시야선 기준으로 다듬습니다.
         /// 플레이어가 물이나 절벽을 클릭했을 때의 경로입니다.
         /// </summary>
+        /// <param name="start">출발 좌표입니다.</param>
+        /// <param name="goal">목표 좌표입니다. 통행 불가면 가장 가까운 통행 가능 칸으로 보정합니다.</param>
+        /// <param name="result">다듬은 경유점이 채워집니다.</param>
+        /// <param name="resolvedGoal">보정까지 마친 최종 목표 좌표입니다.</param>
+        /// <returns>경로를 찾으면 true입니다.</returns>
         public bool TryFindSmoothedPathSnapped(
             GridCoord start,
             GridCoord goal,

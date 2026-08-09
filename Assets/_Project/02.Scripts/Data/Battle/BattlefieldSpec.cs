@@ -39,6 +39,9 @@ namespace SRPG.Data
         /// 32칸은 셀 크기 2 기준 64미터입니다. 부대 대여섯이 기동하기에 넉넉하고,
         /// 카메라 한 화면에 대체로 들어옵니다.
         /// </summary>
+        /// <param name="terrain">전장의 지형 종류입니다.</param>
+        /// <param name="seed">전장을 재현하는 시드입니다. 0이면 매번 달라집니다.</param>
+        /// <returns>32×32 크기로 채운 전장 지시입니다.</returns>
         public static BattlefieldSpec CreateDefault(TerrainKind terrain = TerrainKind.Plains, int seed = 0)
         {
             return new BattlefieldSpec
@@ -51,6 +54,7 @@ namespace SRPG.Data
         }
 
         /// <summary>크기가 지정되지 않았으면 기본값으로 채웁니다.</summary>
+        /// <returns>가로·세로가 모두 양수로 채워진 복사본입니다. 원본은 바뀌지 않습니다.</returns>
         public BattlefieldSpec WithDefaults()
         {
             var filled = this;

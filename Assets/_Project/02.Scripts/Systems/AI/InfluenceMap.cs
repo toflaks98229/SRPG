@@ -43,8 +43,13 @@ namespace SRPG.Systems.AI
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>값을 펼칠 지형입니다. 번지는 경로가 통행 가능 여부를 따릅니다.</summary>
         private readonly IslandGrid _grid;
+
+        /// <summary>칸별 영향력 값입니다. 격자와 같은 행 우선 순서입니다.</summary>
         private readonly float[] _values;
+
+        /// <summary>너비 우선 확산의 대기열입니다. 셀 인덱스를 담습니다.</summary>
         private readonly Queue<int> _frontier;
 
         /// <summary>값이 들어간 칸의 인덱스입니다. 비울 때 격자 전체를 훑지 않기 위한 것입니다.</summary>
@@ -67,6 +72,8 @@ namespace SRPG.Systems.AI
         // 4. Constructor
         // ====================================================================================================
 
+        /// <summary>지형 크기에 맞춰 지도를 만듭니다.</summary>
+        /// <param name="grid">값을 펼칠 지형입니다. 격자 크기가 그대로 지도 크기가 됩니다.</param>
         public InfluenceMap(IslandGrid grid)
         {
             _grid = grid;
@@ -118,6 +125,8 @@ namespace SRPG.Systems.AI
         /// <summary>
         /// 월드 좌표의 발생원을 더합니다.
         /// </summary>
+        /// <param name="world">발생 위치의 월드 좌표입니다. 격자 좌표로 변환해 더합니다.</param>
+        /// <param name="strength">세기입니다. 0 이하면 무시합니다.</param>
         public void AddSourceWorld(Vector3 world, float strength)
         {
             AddSource(_grid.WorldToCoord(world), strength);
@@ -191,7 +200,9 @@ namespace SRPG.Systems.AI
             get { return _grid.IsInside(coord) ? _values[ToIndex(coord)] : 0f; }
         }
 
-        /// <summary>월드 좌표의 값입니다.</summary>
+        /// <summary>월드 좌표의 영향력 값을 읽습니다.</summary>
+        /// <param name="world">읽을 위치의 월드 좌표입니다.</param>
+        /// <returns>그 자리의 영향력 값입니다. 격자 밖이면 0입니다.</returns>
         public float SampleWorld(Vector3 world)
         {
             return this[_grid.WorldToCoord(world)];
@@ -201,6 +212,8 @@ namespace SRPG.Systems.AI
         /// 지정 칸의 값을 0~1로 정규화해 반환합니다. 유틸리티 평가의 입력으로 바로 쓸 수 있습니다.
         /// 지도가 비어 있으면 0입니다.
         /// </summary>
+        /// <param name="coord">읽을 격자 좌표입니다.</param>
+        /// <returns><see cref="MaxValue"/>로 나눈 0~1 값입니다. 지도가 비었거나 격자 밖이면 0입니다.</returns>
         public float SampleNormalized(GridCoord coord)
         {
             return MaxValue > Epsilon ? Mathf.Clamp01(this[coord] / MaxValue) : 0f;

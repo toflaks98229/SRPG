@@ -14,6 +14,7 @@ namespace SRPG.Systems.Grid
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>격자 전체의 타일입니다. 행 우선(<c>y * Width + x</c>)으로 담습니다.</summary>
         private readonly Tile[] _tiles;
 
         // ====================================================================================================
@@ -122,25 +123,34 @@ namespace SRPG.Systems.Grid
         // 4. Public Methods - Access
         // ====================================================================================================
 
-        /// <summary>지정 진영의 전개 구역입니다.</summary>
+        /// <summary>지정 진영의 전개 구역을 반환합니다.</summary>
+        /// <param name="team">전개 구역을 알고 싶은 진영입니다.</param>
+        /// <returns>그 진영이 전장에 들어서는 타일 목록입니다. 생성기가 채우기 전이면 비어 있습니다.</returns>
         public List<Tile> GetDeployment(Team team)
         {
             return team == Team.Player ? PlayerDeployment : EnemyDeployment;
         }
 
         /// <summary>좌표가 격자 범위 안에 있는지 확인합니다.</summary>
+        /// <param name="coord">검사할 격자 좌표입니다.</param>
+        /// <returns>범위 안이면 true입니다.</returns>
         public bool IsInside(GridCoord coord)
         {
             return coord.X >= 0 && coord.X < Width && coord.Y >= 0 && coord.Y < Depth;
         }
 
-        /// <summary>좌표의 타일을 반환합니다. 범위를 벗어나면 null입니다.</summary>
+        /// <summary>좌표의 타일을 반환합니다.</summary>
+        /// <param name="coord">조회할 격자 좌표입니다.</param>
+        /// <returns>해당 타일입니다. 범위를 벗어나면 null입니다.</returns>
         public Tile GetTile(GridCoord coord)
         {
             return IsInside(coord) ? _tiles[Index(coord.X, coord.Y)] : null;
         }
 
         /// <summary>좌표의 타일을 안전하게 조회합니다.</summary>
+        /// <param name="coord">조회할 격자 좌표입니다.</param>
+        /// <param name="tile">찾은 타일입니다. 실패하면 null입니다.</param>
+        /// <returns>범위 안의 타일을 찾았으면 true입니다.</returns>
         public bool TryGetTile(GridCoord coord, out Tile tile)
         {
             tile = GetTile(coord);
@@ -157,6 +167,8 @@ namespace SRPG.Systems.Grid
         /// <summary>
         /// 격자 좌표를 타일 표면 중심의 월드 좌표로 변환합니다.
         /// </summary>
+        /// <param name="coord">변환할 격자 좌표입니다.</param>
+        /// <returns>타일 표면 중심의 월드 좌표입니다. 범위 밖이면 고도 0으로 계산한 값입니다.</returns>
         public Vector3 CoordToWorld(GridCoord coord)
         {
             var tile = GetTile(coord);
@@ -166,6 +178,8 @@ namespace SRPG.Systems.Grid
         /// <summary>
         /// 월드 좌표를 격자 좌표로 변환합니다. 범위를 벗어난 값도 그대로 반환하므로 <see cref="IsInside"/>로 확인해야 합니다.
         /// </summary>
+        /// <param name="world">변환할 월드 좌표입니다. 높이는 무시합니다.</param>
+        /// <returns>격자 좌표입니다. 범위를 벗어날 수 있습니다.</returns>
         public GridCoord WorldToCoord(Vector3 world)
         {
             int x = Mathf.FloorToInt((world.x - Origin.x) / CellSize);
@@ -177,6 +191,9 @@ namespace SRPG.Systems.Grid
         /// 월드 좌표에서 가장 가까운 통행 가능 타일을 찾습니다. 없으면 null입니다.
         /// 클릭 지점이 물이나 절벽일 때 가장 그럴듯한 목적지로 보정하는 용도입니다.
         /// </summary>
+        /// <param name="world">기준이 되는 월드 좌표입니다.</param>
+        /// <param name="maxDistance">이 거리 안에서만 찾습니다. 기본값은 제한 없음입니다.</param>
+        /// <returns>가장 가까운 통행 가능 타일입니다. 범위 안에 없으면 null입니다.</returns>
         public Tile FindNearestWalkable(Vector3 world, float maxDistance = float.MaxValue)
         {
             Tile best = null;
@@ -200,6 +217,11 @@ namespace SRPG.Systems.Grid
         /// 월드 좌표의 지면 높이를 반환합니다. 격자 밖이거나 통행 불가면 해수면(0)으로 봅니다.
         /// 유닛과 분대 앵커를 지면에 붙이는 데 사용합니다.
         /// </summary>
+        /// <param name="world">높이를 알고 싶은 월드 좌표입니다. Y 성분은 무시합니다.</param>
+        /// <returns>
+        /// 그 자리의 지면 높이입니다.
+        /// <see cref="SurfaceSampler"/>가 연결되어 있으면 실제 지형에서 읽고, 없으면 타일 고도로 계산합니다.
+        /// </returns>
         public float SampleGroundHeight(Vector3 world)
         {
             // 지형이 연결되어 있으면 그 자리의 실제 높이를 씁니다.
@@ -224,6 +246,9 @@ namespace SRPG.Systems.Grid
         /// 4방향 이웃 타일을 <paramref name="buffer"/>에 채웁니다. 반환값은 채워진 개수입니다.
         /// 매 프레임 호출되는 경로 탐색에서 할당을 피하기 위해 버퍼를 받습니다.
         /// </summary>
+        /// <param name="coord">기준 격자 좌표입니다.</param>
+        /// <param name="buffer">이웃 타일이 채워집니다. 길이가 4 이상이어야 합니다.</param>
+        /// <returns>실제로 채워진 이웃 수입니다. 격자 가장자리에서는 4보다 작습니다.</returns>
         public int GetNeighbors4(GridCoord coord, Tile[] buffer)
         {
             int count = 0;

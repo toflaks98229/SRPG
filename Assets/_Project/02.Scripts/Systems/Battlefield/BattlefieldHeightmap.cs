@@ -43,6 +43,7 @@ namespace SRPG.Systems.Battlefield
         // 2. Fields
         // ====================================================================================================
 
+        /// <summary>정규화된 높이 배열입니다. 유니티 터레인이 쓰는 것과 같은 형식이라 그대로 넘길 수 있습니다.</summary>
         private readonly float[,] _heights;
 
         // ====================================================================================================
@@ -81,6 +82,10 @@ namespace SRPG.Systems.Battlefield
         /// <summary>
         /// 지형을 만듭니다.
         /// </summary>
+        /// <param name="spec">이번 판의 크기와 시드입니다.</param>
+        /// <param name="profile">지형의 성격입니다. 기복과 등반 한계를 여기서 읽습니다.</param>
+        /// <param name="cellSize">타일 한 칸의 월드 크기입니다. 경사 계산의 기준이 됩니다.</param>
+        /// <returns>완성된 높이 지도입니다.</returns>
         public static BattlefieldHeightmap Create(BattlefieldSpec spec, BattlefieldProfile profile, float cellSize)
         {
             spec = spec.WithDefaults();
@@ -143,7 +148,8 @@ namespace SRPG.Systems.Battlefield
             return map;
         }
 
-        /// <summary>터레인에 그대로 넘길 높이 배열입니다.</summary>
+        /// <summary>터레인에 넘길 높이 배열을 반환합니다.</summary>
+        /// <returns>0~1로 정규화된 높이 배열입니다. 내부 배열을 그대로 돌려주므로 수정하면 안 됩니다.</returns>
         public float[,] ToTerrainHeights()
         {
             return _heights;
@@ -155,6 +161,10 @@ namespace SRPG.Systems.Battlefield
         /// 터레인 없이도 답이 나와야 합니다 — 헤드리스 테스트와 격자 파생이 이것을 씁니다.
         /// 유니티 터레인도 같은 배열을 겹선형으로 읽으므로 결과가 일치합니다.
         /// </summary>
+        /// <param name="worldX">월드 X 좌표입니다.</param>
+        /// <param name="worldZ">월드 Z 좌표입니다.</param>
+        /// <param name="origin">지형의 원점입니다. 월드 좌표를 배열 좌표로 옮기는 기준입니다.</param>
+        /// <returns>그 자리의 지면 높이입니다. 월드 단위입니다.</returns>
         public float SampleHeight(float worldX, float worldZ, Vector3 origin)
         {
             float u = Mathf.Clamp01((worldX - origin.x) / WorldSize) * (Resolution - 1);
@@ -181,6 +191,10 @@ namespace SRPG.Systems.Battlefield
         /// 터레인은 연속면이라 어디든 걸을 수 있어 보이므로, 오를 수 있는지는
         /// 기울기가 답해야 합니다.
         /// </summary>
+        /// <param name="worldX">월드 X 좌표입니다.</param>
+        /// <param name="worldZ">월드 Z 좌표입니다.</param>
+        /// <param name="origin">지형의 원점입니다.</param>
+        /// <returns>그 자리의 경사입니다. 도 단위이며 0이면 평지입니다.</returns>
         public float SampleSlopeDegrees(float worldX, float worldZ, Vector3 origin)
         {
             float step = WorldSize / (Resolution - 1);

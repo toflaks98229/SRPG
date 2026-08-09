@@ -44,14 +44,21 @@ namespace SRPG.Gameplay.Battle
         // 1. Fields
         // ====================================================================================================
 
+        /// <summary>살아 있는 플레이어 유닛입니다. 유닛이 태어나고 죽을 때 스스로 넣고 뺍니다.</summary>
         private readonly List<Unit> _playerUnits = new List<Unit>(64);
+
+        /// <summary>살아 있는 적 유닛입니다. 플레이어보다 수가 많으므로 넉넉히 잡습니다.</summary>
         private readonly List<Unit> _enemyUnits = new List<Unit>(128);
 
         /// <summary>전장의 분대입니다. 분대가 태어나고 사라질 때 스스로 넣고 뺍니다.</summary>
         private readonly List<Squad> _playerSquads = new List<Squad>(8);
+        /// <summary>전장의 적 분대입니다. 분대가 서고 해산할 때 스스로 넣고 뺍니다.</summary>
         private readonly List<EnemySquad> _enemySquads = new List<EnemySquad>(8);
 
+        /// <summary>플레이어 유닛의 공간 색인입니다. 프레임마다 다시 만듭니다.</summary>
         private readonly SpatialGrid<Unit> _playerIndex;
+
+        /// <summary>적 유닛의 공간 색인입니다. 진영별로 따로 두어야 질의가 한쪽만 훑습니다.</summary>
         private readonly SpatialGrid<Unit> _enemyIndex;
 
         /// <summary>공간 색인을 마지막으로 다시 만든 프레임입니다.</summary>
@@ -65,11 +72,17 @@ namespace SRPG.Gameplay.Battle
         /// </summary>
         private readonly List<Unit> _candidateBuffer = new List<Unit>(64);
 
+        /// <summary>플레이어가 뿜는 위협 지도입니다. 적 AI의 고립 판단이 이것을 읽습니다.</summary>
         private readonly InfluenceMap _playerThreat;
+
+        /// <summary>적이 뿜는 위협 지도입니다. 아직 소비자가 없지만 대칭을 위해 함께 둡니다.</summary>
         private readonly InfluenceMap _enemyThreat;
 
         /// <summary>영향력 맵을 마지막으로 다시 만든 시각입니다. 진영별로 따로 셉니다.</summary>
+        /// <summary>플레이어 위협 지도를 마지막으로 갱신한 시각입니다.</summary>
         private float _playerThreatTime = float.NegativeInfinity;
+
+        /// <summary>적 위협 지도를 마지막으로 갱신한 시각입니다.</summary>
         private float _enemyThreatTime = float.NegativeInfinity;
 
         // ====================================================================================================
@@ -175,7 +188,8 @@ namespace SRPG.Gameplay.Battle
         // 4. Public Methods - Registry
         // ====================================================================================================
 
-        /// <summary>유닛을 레지스트리에 등록합니다.</summary>
+        /// <summary>유닛을 레지스트리에 등록합니다. 같은 유닛을 두 번 넣지 않습니다.</summary>
+        /// <param name="unit">등록할 유닛입니다. null이면 아무것도 하지 않습니다.</param>
         public void Register(Unit unit)
         {
             if (unit == null)
@@ -191,6 +205,7 @@ namespace SRPG.Gameplay.Battle
         }
 
         /// <summary>유닛을 레지스트리에서 제거합니다.</summary>
+        /// <param name="unit">제거할 유닛입니다. null이면 아무것도 하지 않습니다.</param>
         public void Unregister(Unit unit)
         {
             if (unit == null)
@@ -203,6 +218,8 @@ namespace SRPG.Gameplay.Battle
         }
 
         /// <summary>지정 진영의 유닛 목록을 반환합니다.</summary>
+        /// <param name="team">목록을 얻을 진영입니다.</param>
+        /// <returns>그 진영의 살아 있는 유닛 목록입니다. 내부 목록이므로 수정하면 안 됩니다.</returns>
         public IReadOnlyList<Unit> GetUnits(Team team)
         {
             return team == Team.Player ? _playerUnits : _enemyUnits;
@@ -214,6 +231,8 @@ namespace SRPG.Gameplay.Battle
         /// 무너진 분대는 오브젝트가 사라지기 전 한 프레임 동안 명부에 남아 있으므로,
         /// 세는 쪽이 상태를 확인해야 합니다. 지원군이 이 수를 보고 올라옵니다.
         /// </summary>
+        /// <param name="team">셀 진영입니다.</param>
+        /// <returns>아직 싸우고 있는 분대 수입니다. 무너진 분대는 세지 않습니다.</returns>
         public int CountLivingSquads(Team team)
         {
             int alive = 0;
@@ -243,6 +262,7 @@ namespace SRPG.Gameplay.Battle
         }
 
         /// <summary>플레이어 분대를 명부에 넣습니다. 분대가 초기화될 때 스스로 부릅니다.</summary>
+        /// <param name="squad">전장에 선 분대입니다. null이면 아무것도 하지 않습니다.</param>
         public void RegisterPlayerSquad(Squad squad)
         {
             if (squad != null && !_playerSquads.Contains(squad))
@@ -252,6 +272,7 @@ namespace SRPG.Gameplay.Battle
         }
 
         /// <summary>플레이어 분대를 명부에서 뺍니다.</summary>
+        /// <param name="squad">뺄 분대입니다.</param>
         public void UnregisterPlayerSquad(Squad squad)
         {
             _playerSquads.Remove(squad);
@@ -260,6 +281,7 @@ namespace SRPG.Gameplay.Battle
         /// <summary>
         /// 적 분대를 명부에 넣습니다. 분대가 전장에 설 때 스스로 부릅니다.
         /// </summary>
+        /// <param name="squad">전장에 선 적 분대입니다. null이면 아무것도 하지 않습니다.</param>
         public void RegisterEnemySquad(EnemySquad squad)
         {
             if (squad != null && !_enemySquads.Contains(squad))
@@ -274,6 +296,7 @@ namespace SRPG.Gameplay.Battle
         /// 두 번 불려도 안전합니다. 해산과 파괴는 한 프레임 떨어져 일어나므로
         /// 양쪽에서 부르지 않으면 씬을 벗어날 때 빠진 항목이 남습니다.
         /// </summary>
+        /// <param name="squad">뺄 적 분대입니다. 이미 빠져 있어도 안전합니다.</param>
         public void UnregisterEnemySquad(EnemySquad squad)
         {
             _enemySquads.Remove(squad);
@@ -314,6 +337,7 @@ namespace SRPG.Gameplay.Battle
         /// 나중에 경로 탐색을 잡(Job)이나 별도 스레드로 옮길 때 각 실행 단위가 자기 것을 들고 가면 됩니다.
         /// 지금은 <see cref="Pathfinder"/> 하나를 공유하는 것으로 충분합니다.
         /// </summary>
+        /// <returns>자기 작업 배열을 가진 새 탐색기입니다. 다른 인스턴스와 간섭하지 않습니다.</returns>
         public GridPathfinder CreatePathfinder()
         {
             return new GridPathfinder(Grid);
@@ -329,6 +353,10 @@ namespace SRPG.Gameplay.Battle
         /// 공간 색인으로 후보를 좁힌 뒤, <b>실제 위치</b>로 거리를 다시 재어 가장 가까운 것을 고릅니다.
         /// 색인은 프레임 시작 시점의 스냅샷이라 좁히는 데만 쓰고, 순위는 최신 위치로 정합니다.
         /// </summary>
+        /// <param name="position">찾기 시작할 월드 좌표입니다.</param>
+        /// <param name="myTeam">묻는 쪽의 진영입니다. 이 진영이 <b>아닌</b> 유닛을 찾습니다.</param>
+        /// <param name="maxDistance">이 거리 안에서만 찾습니다.</param>
+        /// <returns>가장 가까운 적대 유닛입니다. 범위 안에 없으면 null입니다.</returns>
         public Unit FindNearestEnemy(Vector3 position, Team myTeam, float maxDistance)
         {
             EnsureSpatialIndex();
@@ -370,6 +398,7 @@ namespace SRPG.Gameplay.Battle
         /// <param name="team">찾을 진영입니다.</param>
         /// <param name="exclude">결과에서 제외할 유닛입니다. null이어도 됩니다.</param>
         /// <param name="buffer">결과가 채워집니다. 호출 시 비워집니다.</param>
+        /// <returns>버퍼에 채워진 유닛 수입니다.</returns>
         public int QueryTeam(Vector3 position, float radius, Team team, Unit exclude, List<Unit> buffer)
         {
             EnsureSpatialIndex();
@@ -444,6 +473,8 @@ namespace SRPG.Gameplay.Battle
         /// 공간 색인과 같은 방식으로, <b>첫 조회가 스스로</b> 갱신 여부를 판단합니다.
         /// 어딘가의 Update에 갱신을 두면 "AI보다 먼저 돌아야 한다"는 숨은 순서 조건이 생깁니다.
         /// </summary>
+        /// <param name="team">위협을 <b>뿜는</b> 진영입니다. 그 진영을 피하려는 쪽이 읽습니다.</param>
+        /// <returns>해당 진영의 위협 지도입니다. 갱신 주기가 지났으면 이 호출에서 다시 만듭니다.</returns>
         public InfluenceMap GetThreatMap(Team team)
         {
             float now = UnityEngine.Time.time;
