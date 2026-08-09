@@ -1,7 +1,8 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
+using UnityEngine;
 
 namespace SRPG.Gameplay.Units
 {
@@ -29,6 +30,28 @@ namespace SRPG.Gameplay.Units
         /// 잡는 거리와 놓는 거리가 같으면 경계에 선 적을 두고 매 프레임 잡았다 놓았다 합니다.
         /// </summary>
         private const float DropRangeFactor = 1.5f;
+
+        /// <summary>
+        /// 표적을 다시 고르는 최소 주기(초)입니다.
+        ///
+        /// <b>고정 시간이 0인 무기(검·활)도 이 주기로만 재평가합니다.</b>
+        /// 매 프레임 다시 고르면 두 가지가 나빠집니다 —
+        /// 살아 있는 표적을 든 병사마다 <b>프레임당 공간 질의가 하나씩 늘고</b>,
+        /// 거리가 엇비슷한 두 적 사이에서 표적이 프레임 단위로 뒤집힙니다.
+        ///
+        /// 재평가가 늦어서 손해 보는 것은 "옆에 더 가까운 적이 왔는데 0.35초 늦게 안다" 정도이고,
+        /// 그건 교전에서 눈에 띄지 않습니다.
+        /// </summary>
+        private const float RetargetInterval = 0.35f;
+
+        /// <summary>
+        /// 표적을 갈아탈 만하다고 보는 거리 비율입니다. 새 후보가 지금 표적보다 이만큼은 가까워야 옮깁니다.
+        ///
+        /// 마진이 없으면 나란히 선 두 적 사이에서 재평가 때마다 표적이 뒤집힙니다.
+        /// 적 분대가 목표를 바꿀 때 <c>EnemyGoalSwitchMargin</c>을 두는 것과 같은 이유입니다 —
+        /// 조금만 뒤집혀도 방향을 트는 판단은 갈팡질팡하는 것으로 보입니다.
+        /// </summary>
+        private const float RetargetDistanceMargin = 0.8f;
 
         // ====================================================================================================
         // 2. Fields
@@ -88,7 +111,18 @@ namespace SRPG.Gameplay.Units
         }
 
         /// <summary>
-        /// 표적을 갱신합니다. 기존 대상이 죽거나 너무 멀어지면 새로 탐색합니다.
+        /// 표적을 갱신합니다. 죽거나 멀어진 대상을 놓고, 고정이 풀렸으면 <b>다시 고릅니다.</b>
+        ///
+        /// <b>한 프레임의 판단 순서</b>
+        ///
+        ///   1. 쓸 수 없게 된 표적을 놓는다 (사망·이탈)
+        ///   2. 고정 시간이 남았으면 아무것도 다시 보지 않는다
+        ///   3. 표적이 있으면 <b>재평가</b>한다 — 갈아탈 만한 상대가 있는가
+        ///   4. 표적이 없으면 새로 잡는다
+        ///
+        /// 3번이 오래 비어 있었습니다. 표적이 있으면 무조건 유지하는 코드가 남아 있어서
+        /// 고정 타이머가 실제로 막는 것이 없었고, 대기열이 꽉 찼을 때
+        /// <see cref="BreakLock"/>으로 다음 적을 겨누는 경로도 함께 죽어 있었습니다.
         /// </summary>
         /// <param name="usesAttackQueue">공격 대기열을 쓰는 무기인지 여부입니다.</param>
         /// <param name="targetLockSeconds">새로 잡은 표적을 놓지 않는 시간입니다.</param>
@@ -100,23 +134,7 @@ namespace SRPG.Gameplay.Units
                 return;
             }
 
-            if (_target != null)
-            {
-                if (!_target.IsAlive)
-                {
-                    Clear();
-                }
-                else
-                {
-                    // 히스테리시스를 두어 대상이 매 프레임 바뀌며 떨리는 것을 막습니다.
-                    float dropRange = _definition.EngageRadius * DropRangeFactor;
-
-                    if ((_target.Position - _owner.Position).sqrMagnitude > dropRange * dropRange)
-                    {
-                        Clear();
-                    }
-                }
-            }
+            DropUnusableTarget();
 
             // 표적 고정: 한 번 잡으면 잠시 바꾸지 않습니다.
             // 더 가까운 적이 나타날 때마다 시선을 돌리면 창끝이 흩어지고 방어선에 구멍이 납니다.
@@ -125,21 +143,13 @@ namespace SRPG.Gameplay.Units
                 return;
             }
 
-            // 고정이 풀렸더라도 살아 있는 표적은 그대로 둡니다.
-            //
-            // ※ 위 조건과 합쳐 보면 결국 "표적이 있으면 언제나 유지"와 같습니다.
-            //   즉 지금 구조에서 고정 타이머는 표적 교체를 막는 일을 실제로 하지 않고,
-            //   대기열이 꽉 찼을 때 <see cref="BreakLock"/>으로 고정을 푸는 것도 효과가 없습니다.
-            //   분해 과정에서 드러난 사실이지만, 이번 작업은 동작을 바꾸지 않는 것이 목적이라
-            //   그대로 옮겨 둡니다. 표적 재평가를 실제로 켜는 것은 별도 변경입니다.
             if (_target != null)
             {
+                Reconsider(usesAttackQueue, targetLockSeconds, maxAttackers);
                 return;
             }
 
-            var found = usesAttackQueue
-                ? FindUnclaimedEnemy(maxAttackers)
-                : _spatial.FindNearestEnemy(_owner.Position, _owner.Team, _definition.EngageRadius);
+            var found = FindCandidate(usesAttackQueue, maxAttackers);
 
             if (found == null)
             {
@@ -147,7 +157,7 @@ namespace SRPG.Gameplay.Units
             }
 
             _target = found;
-            _lockTimer = targetLockSeconds;
+            ArmLock(targetLockSeconds);
         }
 
         // ====================================================================================================
@@ -164,6 +174,10 @@ namespace SRPG.Gameplay.Units
 
         /// <summary>
         /// 표적 고정을 즉시 풉니다. 대기열이 꽉 차 이번 표적을 칠 수 없을 때 부릅니다.
+        ///
+        /// 다음 <see cref="Refresh"/>가 곧바로 재평가에 들어가고, 그 자리에서
+        /// <b>자리가 없는 표적은 거리를 따지지 않고 놓습니다.</b>
+        /// 이 한 줄이 "앞의 한 명에게 전원이 달라붙어 뒤가 뚫리는" 것을 막는 실행부입니다.
         /// </summary>
         public void BreakLock()
         {
@@ -171,7 +185,108 @@ namespace SRPG.Gameplay.Units
         }
 
         // ====================================================================================================
-        // 7. Private Methods
+        // 7. Private Methods - Retarget
+        // ====================================================================================================
+
+        /// <summary>
+        /// 쓸 수 없게 된 표적을 놓습니다. 쓰러졌거나 교전 반경 밖으로 멀어진 경우입니다.
+        /// </summary>
+        private void DropUnusableTarget()
+        {
+            if (_target == null)
+            {
+                return;
+            }
+
+            if (!_target.IsAlive)
+            {
+                Clear();
+                return;
+            }
+
+            // 히스테리시스를 두어 대상이 매 프레임 바뀌며 떨리는 것을 막습니다.
+            float dropRange = _definition.EngageRadius * DropRangeFactor;
+
+            if ((_target.Position - _owner.Position).sqrMagnitude > dropRange * dropRange)
+            {
+                Clear();
+            }
+        }
+
+        /// <summary>
+        /// 지금 표적을 그대로 둘지, 더 나은 상대로 옮길지 정합니다.
+        ///
+        /// <b>옮기는 조건은 둘입니다.</b>
+        ///
+        ///   · 지금 표적에 <b>내 자리가 없다</b> — 거리를 따지지 않고 옮깁니다
+        ///   · 새 후보가 <b>눈에 띄게 가깝다</b> — 마진을 넘겨야 옮깁니다
+        ///
+        /// 첫째가 오버킬 방지의 본체입니다. 자리가 찬 적을 계속 겨누고 서 있으면
+        /// 그가 쓰러진 자리로 뒤따라오던 적들이 그대로 통과합니다.
+        /// 둘째가 없으면 나란히 선 두 적 사이에서 표적이 계속 뒤집힙니다.
+        /// </summary>
+        private void Reconsider(bool usesAttackQueue, float targetLockSeconds, int maxAttackers)
+        {
+            var current = _target;
+
+            bool currentHasRoom = !usesAttackQueue ||
+                                  current.HasRoomForAttacker(_owner, _definition.AttackDamage, maxAttackers);
+
+            var found = FindCandidate(usesAttackQueue, maxAttackers);
+
+            // 대안이 없거나 지금 표적이 그대로 최선이면 유지합니다.
+            // 다음 재평가까지의 시간을 다시 채워, 이 질의가 매 프레임 반복되지 않게 합니다.
+            if (found == null || found == current)
+            {
+                ArmLock(targetLockSeconds);
+                return;
+            }
+
+            if (currentHasRoom && !IsMeaningfullyCloser(found, current))
+            {
+                ArmLock(targetLockSeconds);
+                return;
+            }
+
+            // <b>옮기기 전에 예약을 반드시 놓습니다.</b>
+            // 빠뜨리면 떠나온 표적의 정원이 한 자리 줄어든 채로 영영 남고,
+            // 그 적에게는 실제 인원보다 적은 수만 달라붙게 됩니다.
+            current.ReleaseAttacker(_owner);
+
+            _target = found;
+            ArmLock(targetLockSeconds);
+        }
+
+        /// <summary>이번 재평가에서 고를 수 있는 최선의 상대입니다.</summary>
+        private Unit FindCandidate(bool usesAttackQueue, int maxAttackers)
+        {
+            return usesAttackQueue
+                ? FindUnclaimedEnemy(maxAttackers)
+                : _spatial.FindNearestEnemy(_owner.Position, _owner.Team, _definition.EngageRadius);
+        }
+
+        /// <summary>새 후보가 지금 표적보다 마진을 넘겨 가까운지 봅니다.</summary>
+        private bool IsMeaningfullyCloser(Unit candidate, Unit current)
+        {
+            float candidateSqr = (candidate.Position - _owner.Position).sqrMagnitude;
+            float currentSqr = (current.Position - _owner.Position).sqrMagnitude;
+
+            return candidateSqr < currentSqr * (RetargetDistanceMargin * RetargetDistanceMargin);
+        }
+
+        /// <summary>
+        /// 다음 재평가까지의 시간을 채웁니다.
+        ///
+        /// 무기가 요구하는 고정 시간과 최소 재평가 주기 중 <b>긴 쪽</b>을 씁니다.
+        /// 고정을 쓰지 않는 무기(0)도 최소 주기는 지켜야 질의가 프레임마다 늘지 않습니다.
+        /// </summary>
+        private void ArmLock(float targetLockSeconds)
+        {
+            _lockTimer = Mathf.Max(targetLockSeconds, RetargetInterval);
+        }
+
+        // ====================================================================================================
+        // 8. Private Methods - Search
         // ====================================================================================================
 
         /// <summary>
