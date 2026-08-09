@@ -41,6 +41,8 @@ namespace SRPG.Systems.Pathfinding
         ///     자연히 교전을 접고 따라붙습니다 — 별도의 "복귀" 규칙이 필요 없습니다
         ///   · 사거리 안이면 멈춰 싸웁니다
         /// </summary>
+        /// <param name="request">위치·슬롯·표적·리시가 담긴 입력입니다.</param>
+        /// <returns>향할 지점과 그렇게 정한 맥락(슬롯 도착 여부·교전 여부)입니다.</returns>
         public static ApproachPlan Resolve(in ApproachRequest request)
         {
             float slotDistance = FlatDistance(request.Position, request.SlotTarget);
@@ -88,6 +90,9 @@ namespace SRPG.Systems.Pathfinding
         /// 슬롯 도착 판정은 반드시 평면이어야 합니다. 비탈에 선 병사는 슬롯과 높이가 다르므로,
         /// 3차원 거리로 재면 제자리에 서 있는데도 영영 "도착하지 않은" 것이 됩니다.
         /// </summary>
+        /// <param name="a">기준 위치입니다.</param>
+        /// <param name="b">대상 위치입니다.</param>
+        /// <returns>Y를 무시한 XZ 평면 거리입니다.</returns>
         private static float FlatDistance(Vector3 a, Vector3 b)
         {
             float dx = a.x - b.x;
@@ -120,6 +125,13 @@ namespace SRPG.Systems.Pathfinding
         /// <summary>대열을 풀고 나갈 수 있는 월드 거리입니다. 0이면 자리를 지킵니다.</summary>
         public readonly float LeashDistance;
 
+        /// <summary>입력을 묶습니다.</summary>
+        /// <param name="position">병사의 현재 위치입니다.</param>
+        /// <param name="slotTarget">분대가 배정한 진형 슬롯입니다. 행군 중에는 앵커입니다.</param>
+        /// <param name="hasTarget">교전 대상이 있는지 여부입니다.</param>
+        /// <param name="targetPosition">교전 대상의 위치입니다. <paramref name="hasTarget"/>이 false면 무시됩니다.</param>
+        /// <param name="attackRange">공격 사거리입니다.</param>
+        /// <param name="leashDistance">대열을 풀고 나갈 수 있는 월드 거리입니다. 0이면 자리를 지킵니다.</param>
         public ApproachRequest(
             Vector3 position,
             Vector3 slotTarget,
@@ -151,6 +163,10 @@ namespace SRPG.Systems.Pathfinding
         /// <summary>슬롯이 아니라 적을 기준으로 목적지를 정했는지 여부입니다. 디버그와 검증에 씁니다.</summary>
         public readonly bool Engaging;
 
+        /// <summary>결과를 묶습니다.</summary>
+        /// <param name="destination">이번 프레임에 향할 월드 좌표입니다.</param>
+        /// <param name="atSlot">자기 슬롯에 도착해 있는지 여부입니다.</param>
+        /// <param name="engaging">적을 기준으로 목적지를 정했는지 여부입니다.</param>
         public ApproachPlan(Vector3 destination, bool atSlot, bool engaging)
         {
             Destination = destination;

@@ -32,6 +32,8 @@ namespace SRPG.Systems.Deployment
         /// 시드가 0이면 고정 방향을 씁니다 — 전장은 재현 가능해야 하는데
         /// <c>System.Random(0)</c>은 그것을 보장하지 않습니다.
         /// </summary>
+        /// <param name="seed">전장을 재현하는 시드입니다. 0이면 고정 방향을 씁니다.</param>
+        /// <returns>XZ 평면 위의 단위 벡터입니다. 높이 성분은 0입니다.</returns>
         public static Vector3 Resolve(int seed)
         {
             if (seed == 0)
@@ -50,6 +52,8 @@ namespace SRPG.Systems.Deployment
         ///
         /// 이 방향으로 흘러야 강이 두 진영 사이를 가릅니다.
         /// </summary>
+        /// <param name="seed">대치 축과 <b>같은 시드</b>여야 합니다. 다르면 강이 축을 가로지르지 않습니다.</param>
+        /// <returns>대치 축에 수직인 XZ 평면 단위 벡터입니다.</returns>
         public static Vector3 ResolveCross(int seed)
         {
             Vector3 axis = Resolve(seed);

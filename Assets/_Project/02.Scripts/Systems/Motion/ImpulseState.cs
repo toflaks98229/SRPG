@@ -50,6 +50,7 @@ namespace SRPG.Systems.Motion
         // ====================================================================================================
 
         /// <summary>넉백을 더합니다. 수평 성분만 씁니다.</summary>
+        /// <param name="impulse">밀어내는 속도입니다. 높이 성분은 버려집니다.</param>
         public void AddKnockback(Vector3 impulse)
         {
             impulse.y = 0f;
@@ -57,6 +58,7 @@ namespace SRPG.Systems.Motion
         }
 
         /// <summary>도약을 더합니다. 수평 성분만 씁니다.</summary>
+        /// <param name="impulse">앞으로 몸을 던지는 속도입니다. 높이 성분은 버려집니다.</param>
         public void AddLunge(Vector3 impulse)
         {
             impulse.y = 0f;
@@ -72,6 +74,9 @@ namespace SRPG.Systems.Motion
         ///
         /// 도약은 넉백보다 빨리 잦아듭니다. 한 걸음 파고드는 것이지 미끄러지는 것이 아닙니다.
         /// </summary>
+        /// <param name="deltaTime">지난 시간입니다.</param>
+        /// <param name="knockbackDecay">넉백이 초당 줄어드는 속도입니다.</param>
+        /// <param name="lungeDecay">도약이 초당 줄어드는 속도입니다. 넉백보다 커야 합니다.</param>
         public void Decay(float deltaTime, float knockbackDecay, float lungeDecay)
         {
             _knockback = Vector3.MoveTowards(_knockback, Vector3.zero, knockbackDecay * deltaTime);
@@ -85,6 +90,9 @@ namespace SRPG.Systems.Motion
         /// <paramref name="smoothing"/>이 작을수록 부드럽고, 너무 낮추면 반응이 늦어
         /// 병사들이 잠깐 겹쳤다 떨어집니다.
         /// </summary>
+        /// <param name="target">이번 프레임에 계산된 분리 속도입니다.</param>
+        /// <param name="smoothing">따라가는 속도입니다. 작을수록 부드럽습니다.</param>
+        /// <param name="deltaTime">지난 시간입니다.</param>
         public void FollowSeparation(Vector3 target, float smoothing, float deltaTime)
         {
             float rate = Mathf.Max(0.01f, smoothing);
@@ -102,12 +110,16 @@ namespace SRPG.Systems.Motion
         /// 문턱을 두는 이유는, 잔여 넉백이 거의 0에 가까울 때까지 익사 판정을 켜 두면
         /// 물가에 선 병사가 스치듯 맞기만 해도 빠져 죽기 때문입니다.
         /// </summary>
+        /// <param name="speed">비교할 속도 문턱입니다.</param>
+        /// <returns>넉백 속도가 문턱을 넘으면 true입니다. 도약은 세지 않습니다.</returns>
         public bool IsPushedFasterThan(float speed)
         {
             return _knockback.sqrMagnitude > speed * speed;
         }
 
-        /// <summary>스스로 내는 조향에 외력을 얹은 최종 속도입니다.</summary>
+        /// <summary>스스로 내는 조향에 외력을 얹습니다.</summary>
+        /// <param name="steering">스스로 내는 조향 속도입니다.</param>
+        /// <returns>조향에 넉백과 도약을 더한 최종 속도입니다. 분리는 조향에 이미 포함돼 있습니다.</returns>
         public Vector3 CombineWith(Vector3 steering)
         {
             return steering + _knockback + _lunge;

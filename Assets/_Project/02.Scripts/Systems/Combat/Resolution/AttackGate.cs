@@ -54,6 +54,10 @@ namespace SRPG.Systems.Combat
         /// <b>순서가 의미를 갖습니다.</b> 위쪽일수록 더 근본적인 사정이라, 여러 이유가 겹칠 때
         /// 표시되는 것은 "가장 먼저 해결해야 하는" 쪽입니다.
         /// </summary>
+        /// <param name="input">공격 개시 판정에 필요한 관측값입니다.</param>
+        /// <returns>
+        /// 공격을 막는 첫 번째 이유입니다. 막는 것이 없으면 <see cref="AttackBlock.None"/>입니다.
+        /// </returns>
         public static AttackBlock Evaluate(in AttackGateInput input)
         {
             if (input.WeaponBusy)
@@ -120,6 +124,15 @@ namespace SRPG.Systems.Combat
         /// <summary>공격 사거리입니다.</summary>
         public readonly float AttackRange;
 
+        /// <summary>관측값을 묶습니다.</summary>
+        /// <param name="weaponBusy">무기가 이전 동작을 진행 중인지 여부입니다.</param>
+        /// <param name="staggerTimer">남은 경직 시간입니다. 0보다 크면 막힙니다.</param>
+        /// <param name="cooldownTimer">남은 공격 재사용 대기 시간입니다. 0보다 크면 막힙니다.</param>
+        /// <param name="hasLivingTarget">살아 있는 교전 대상이 있는지 여부입니다.</param>
+        /// <param name="isMoving">스스로 이동 중인지 여부입니다. 넉백에 밀려나는 것은 포함하지 않습니다.</param>
+        /// <param name="canAttackWhileMoving">이 병과가 이동 중에도 공격할 수 있는지 여부입니다.</param>
+        /// <param name="distanceToTarget">대상까지의 거리입니다.</param>
+        /// <param name="attackRange">공격 사거리입니다.</param>
         public AttackGateInput(
             bool weaponBusy,
             float staggerTimer,

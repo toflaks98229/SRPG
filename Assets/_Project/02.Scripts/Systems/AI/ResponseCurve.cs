@@ -55,20 +55,7 @@ namespace SRPG.Systems.AI
         public readonly float YShift;
 
         // ====================================================================================================
-        // 2. Constructor
-        // ====================================================================================================
-
-        public ResponseCurve(ResponseCurveType type, float slope, float exponent, float xShift, float yShift)
-        {
-            Type = type;
-            Slope = slope;
-            Exponent = exponent;
-            XShift = xShift;
-            YShift = yShift;
-        }
-
-        // ====================================================================================================
-        // 3. Presets
+        // 2. Presets
         // ====================================================================================================
 
         /// <summary>입력이 클수록 선형으로 좋아집니다.</summary>
@@ -96,12 +83,38 @@ namespace SRPG.Systems.AI
             new ResponseCurve(ResponseCurveType.Logistic, 1f, 1.2f, 0f, 0f);
 
         // ====================================================================================================
+        // 3. Constructor
+        // ====================================================================================================
+
+        /// <summary>
+        /// 곡선을 만듭니다. 대개는 직접 부르지 않고 위의 프리셋을 씁니다.
+        /// </summary>
+        /// <param name="type">곡선의 모양입니다.</param>
+        /// <param name="slope">기울기(m)입니다. 음수면 감소 곡선이 됩니다.</param>
+        /// <param name="exponent">지수(k)입니다. 거듭제곱과 로지스틱의 급경사 정도를 정합니다.</param>
+        /// <param name="xShift">가로 이동(c)입니다. 곡선이 꺾이는 지점을 옮깁니다.</param>
+        /// <param name="yShift">세로 이동(b)입니다. 바닥값을 올립니다.</param>
+        public ResponseCurve(ResponseCurveType type, float slope, float exponent, float xShift, float yShift)
+        {
+            Type = type;
+            Slope = slope;
+            Exponent = exponent;
+            XShift = xShift;
+            YShift = yShift;
+        }
+
+        // ====================================================================================================
         // 4. Public Methods
         // ====================================================================================================
 
         /// <summary>
-        /// 입력을 유용도로 변환합니다. 입력과 출력 모두 0~1로 잘립니다.
+        /// 입력을 유용도로 변환합니다.
         /// </summary>
+        /// <param name="input">평가할 값입니다. 0~1 범위를 벗어나면 잘립니다.</param>
+        /// <returns>
+        /// 0~1로 잘린 유용도입니다. 유틸리티 점수를 곱해 합칠 때
+        /// 범위를 벗어나면 의미가 깨지므로 반드시 잘라서 돌려줍니다.
+        /// </returns>
         public float Evaluate(float input)
         {
             float x = Mathf.Clamp01(input);

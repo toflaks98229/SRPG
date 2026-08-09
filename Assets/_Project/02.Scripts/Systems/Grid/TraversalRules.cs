@@ -43,8 +43,11 @@ namespace SRPG.Systems.Grid
         // ====================================================================================================
 
         /// <summary>
-        /// 두 고도 사이를 오르내릴 수 있는지 여부입니다.
+        /// 두 고도 사이를 오르내릴 수 있는지 판정합니다.
         /// </summary>
+        /// <param name="fromHeight">출발 칸의 고도 단계입니다.</param>
+        /// <param name="toHeight">도착 칸의 고도 단계입니다.</param>
+        /// <returns>단차가 <see cref="MaxHeightDelta"/> 이하면 true입니다.</returns>
         public static bool IsClimbable(int fromHeight, int toHeight)
         {
             return Mathf.Abs(toHeight - fromHeight) <= MaxHeightDelta;
@@ -56,6 +59,9 @@ namespace SRPG.Systems.Grid
         /// 양쪽 모두 통행 가능해야 하고, 단차도 넘을 수 있어야 합니다.
         /// 인접 여부는 <b>보지 않습니다</b> — 호출부가 이미 이웃만 넘깁니다.
         /// </summary>
+        /// <param name="from">출발 칸입니다. null이면 건너갈 수 없는 것으로 봅니다.</param>
+        /// <param name="to">도착 칸입니다. null이면 건너갈 수 없는 것으로 봅니다.</param>
+        /// <returns>양쪽 모두 통행 가능하고 단차를 넘을 수 있으면 true입니다.</returns>
         public static bool CanStep(Tile from, Tile to)
         {
             if (from == null || to == null)

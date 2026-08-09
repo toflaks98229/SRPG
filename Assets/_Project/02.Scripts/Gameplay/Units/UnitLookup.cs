@@ -29,8 +29,10 @@ namespace SRPG.Gameplay.Units
     public static class UnitLookup
     {
         /// <summary>
-        /// 콜라이더가 속한 유닛을 반환합니다. 유닛이 아니면(지형 등) null입니다.
+        /// 콜라이더가 속한 유닛을 찾습니다.
         /// </summary>
+        /// <param name="collider">물리 질의에 걸린 콜라이더입니다. null이어도 됩니다.</param>
+        /// <returns>콜라이더가 속한 유닛입니다. 유닛이 아니면(지형 등) null입니다.</returns>
         public static Unit FromCollider(Collider collider)
         {
             if (collider == null)
