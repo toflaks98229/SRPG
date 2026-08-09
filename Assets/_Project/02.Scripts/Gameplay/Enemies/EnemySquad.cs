@@ -64,7 +64,7 @@ namespace SRPG.Gameplay.Enemies
         private readonly FormationMotor _motor = new FormationMotor();
         private readonly EnemyGoalPlanner _planner = new EnemyGoalPlanner();
 
-        private BattleContext _context;
+        private IEnemySquadContext _context;
         private float _replanTimer;
         private float _anchorSpeed = 3f;
         private float _currentGoalScore;
@@ -134,14 +134,17 @@ namespace SRPG.Gameplay.Enemies
         /// 야전에서는 부대가 이미 편성된 채로 전장에 들어서므로,
         /// 플레이어 분대(<see cref="Squad.Initialize"/>)와 똑같이 한 번에 세웁니다.
         /// </summary>
-        /// <param name="context">전투 컨텍스트입니다.</param>
+        /// <param name="context">
+        /// <b>적 분대가 볼 수 있는 것만</b> 담긴 컨텍스트입니다.
+        /// 아군 진영의 점유 장부는 여기 없고, 명부도 병사가 아니라 부대 단위입니다.
+        /// </param>
         /// <param name="definition">병사 정의입니다.</param>
         /// <param name="deployCoord">전개 타일입니다. 앵커의 시작 위치가 됩니다.</param>
         /// <param name="soldierCount">병사 수입니다.</param>
         /// <param name="unitFactory">유닛을 만드는 함수입니다.</param>
         /// <param name="rank">분대 숙련도입니다.</param>
         public void Initialize(
-            BattleContext context,
+            IEnemySquadContext context,
             UnitDefinition definition,
             GridCoord deployCoord,
             int soldierCount,
@@ -156,10 +159,10 @@ namespace SRPG.Gameplay.Enemies
             _anchorSpeed = definition.MoveSpeed * context.Tuning.AnchorSpeedFactor;
 
             // 명부에 스스로 올립니다. 이게 없으면 표시하는 쪽이 씬 전체를 훑어야 합니다.
-            context.RegisterEnemySquad(this);
+            context.RegisterSquad(this);
 
             // 전개 칸을 점유해 두어야 다른 적 분대가 그 위로 겹쳐 서지 않습니다.
-            context.EnemyOccupancy.Claim(deployCoord, this);
+            context.Occupancy.Claim(deployCoord, this);
 
             int total = Mathf.Max(1, soldierCount);
 
@@ -300,7 +303,7 @@ namespace SRPG.Gameplay.Enemies
                 startCoord = nearest.Coord;
             }
 
-            if (!_context.EnemyOccupancy.TryResolveDestination(goal.Coord, this, _context.Grid, out var destination))
+            if (!_context.Occupancy.TryResolveDestination(goal.Coord, this, _context.Grid, out var destination))
             {
                 return;
             }
@@ -310,7 +313,7 @@ namespace SRPG.Gameplay.Enemies
                 return;
             }
 
-            _context.EnemyOccupancy.Claim(resolved, this);
+            _context.Occupancy.Claim(resolved, this);
 
             _motor.SetPath(_path, resolved);
             _currentGoalScore = score;
@@ -443,8 +446,8 @@ namespace SRPG.Gameplay.Enemies
             }
 
             IsDisbanded = true;
-            _context?.EnemyOccupancy.Release(this);
-            _context?.UnregisterEnemySquad(this);
+            _context?.Occupancy.Release(this);
+            _context?.UnregisterSquad(this);
 
             Destroy(gameObject);
         }
@@ -454,7 +457,7 @@ namespace SRPG.Gameplay.Enemies
         /// </summary>
         private void OnDestroy()
         {
-            _context?.UnregisterEnemySquad(this);
+            _context?.UnregisterSquad(this);
         }
     }
 }

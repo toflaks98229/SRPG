@@ -31,7 +31,14 @@ namespace SRPG.Gameplay.Battle
     /// 그때 등록 단위가 되는 것이 위 인터페이스들이고, 소비자는 지금 받는 것을 그대로 받게 됩니다.
     /// 지금은 패키지가 없으므로 부트스트랩이 직접 생성해 주입합니다.
     /// </summary>
-    public sealed class BattleContext : IUnitContext, IUnitRoster, IThreatProvider, ISquadRoster
+    public sealed class BattleContext :
+        IUnitContext,
+        IUnitRoster,
+        IThreatProvider,
+        ISquadRoster,
+        ISquadContext<Squad>,
+        IEnemySquadContext,
+        IDeploymentContext
     {
         // ====================================================================================================
         // 1. Fields
@@ -271,6 +278,34 @@ namespace SRPG.Gameplay.Battle
         {
             _enemySquads.Remove(squad);
         }
+
+        // ====================================================================================================
+        // 4-1. Explicit Interface Implementations - Squad Contexts
+        // ====================================================================================================
+
+        /// <summary>
+        /// 진영별 장부를 <see cref="ISquadContext{TSquad}"/> 의 <c>Occupancy</c> 한 이름으로 잇습니다.
+        ///
+        /// <b>왜 명시적 구현인가</b>
+        ///
+        /// 두 인터페이스가 같은 이름의 멤버를 서로 다른 타입으로 요구하므로
+        /// 암시적 구현으로는 둘을 동시에 만족시킬 수 없습니다.
+        /// 그리고 그 편이 낫습니다 — 여기서 <c>Occupancy</c> 를 그냥 부르면
+        /// <b>어느 진영의 장부인지 이름만 보고는 알 수 없기</b> 때문입니다.
+        /// 컨텍스트를 통째로 든 쪽은 지금처럼 <c>Occupancy</c> / <c>EnemyOccupancy</c> 로
+        /// 진영을 밝혀 부르고, 분대는 자기 것만 <c>Occupancy</c> 로 받습니다.
+        /// </summary>
+        TileOccupancy<Squad> ISquadContext<Squad>.Occupancy => Occupancy;
+
+        TileOccupancy<EnemySquad> ISquadContext<EnemySquad>.Occupancy => EnemyOccupancy;
+
+        void ISquadContext<Squad>.RegisterSquad(Squad squad) => RegisterPlayerSquad(squad);
+
+        void ISquadContext<Squad>.UnregisterSquad(Squad squad) => UnregisterPlayerSquad(squad);
+
+        void ISquadContext<EnemySquad>.RegisterSquad(EnemySquad squad) => RegisterEnemySquad(squad);
+
+        void ISquadContext<EnemySquad>.UnregisterSquad(EnemySquad squad) => UnregisterEnemySquad(squad);
 
         /// <summary>
         /// 전용 경로 탐색기를 새로 만듭니다.

@@ -7,6 +7,8 @@ using SRPG.Gameplay.Units;
 using SRPG.Gameplay.Weapons;
 using SRPG.Systems.AI;
 using SRPG.Systems.Grid;
+using SRPG.Systems.Pathfinding;
+using SRPG.Systems.Spatial;
 using UnityEngine;
 
 namespace SRPG.Gameplay.Battle
@@ -125,5 +127,86 @@ namespace SRPG.Gameplay.Battle
 
         /// <summary>화살 재사용 풀입니다. 궁수의 무기가 여기서 화살을 꺼내 씁니다.</summary>
         ProjectilePool ProjectilePool { get; }
+    }
+
+    /// <summary>
+    /// <b>분대 하나가 볼 수 있는 전부</b>입니다. 양측이 같은 것을 봅니다.
+    ///
+    /// <b>왜 제네릭인가</b>
+    ///
+    /// 점유 장부와 명부는 진영마다 <b>별도 인스턴스</b>입니다.
+    /// 하나로 합치면 적이 플레이어가 선 칸을 목적지로 삼을 수 없게 되는데,
+    /// 그건 "공격하지 말라"는 뜻이 되어 버립니다(<see cref="TileOccupancy{TOwner}"/>).
+    ///
+    /// 그렇다고 양쪽 장부를 다 넘기면 <b>아군 분대가 적의 점유를 만질 수 있게</b> 됩니다.
+    /// 타입 인자로 가르면 자기 진영의 것만 손에 닿고, 반대편을 만지는 코드는
+    /// 아예 컴파일되지 않습니다. 규율이 아니라 컴파일러가 지킵니다.
+    ///
+    /// 그러면서 규칙이 대칭이라는 사실도 타입으로 남습니다 —
+    /// 한쪽만 특별하게 두면 "적은 왜 지원군이 빠른가" 같은 것이 규칙이 아니라 버그로 생깁니다.
+    ///
+    /// <b>여기 없는 것</b>
+    ///
+    ///   · <b>전군 명부가 없습니다.</b> 분대는 부대를 보지 병사 하나하나를 세지 않습니다
+    ///   · <b>투사체 풀이 없습니다.</b> 쏘는 것은 병사의 무기입니다
+    ///   · <b>반대 진영의 점유와 명부가 없습니다.</b> 위의 이유입니다
+    /// </summary>
+    /// <typeparam name="TSquad">이 컨텍스트를 받는 분대의 타입입니다.</typeparam>
+    public interface ISquadContext<TSquad> : ISpatialQuery
+        where TSquad : class
+    {
+        /// <summary>지형입니다. 좌표 변환·통행 판정·지면 높이를 여기서 얻습니다.</summary>
+        IslandGrid Grid { get; }
+
+        /// <summary>전투 튜닝 수치입니다. 절대 null이 아닙니다.</summary>
+        BattleTuning Tuning { get; }
+
+        /// <summary>
+        /// 공유 경로 탐색기입니다. <b>길을 잡는 것은 분대의 일입니다</b> —
+        /// 병사는 앵커나 슬롯이 가리키는 곳으로 조향할 뿐입니다.
+        /// </summary>
+        GridPathfinder Pathfinder { get; }
+
+        /// <summary>내 진영의 타일 점유 장부입니다. 한 칸에 분대 하나를 강제합니다.</summary>
+        TileOccupancy<TSquad> Occupancy { get; }
+
+        /// <summary>전장에 서면서 스스로 명부에 오릅니다.</summary>
+        void RegisterSquad(TSquad squad);
+
+        /// <summary>무너지거나 사라지면서 스스로 명부에서 빠집니다.</summary>
+        void UnregisterSquad(TSquad squad);
+    }
+
+    /// <summary>
+    /// 적 분대가 <b>추가로</b> 보는 것입니다. 판단의 재료입니다.
+    ///
+    /// 플레이어 분대는 사람이 명령을 내리므로 스스로 판단하지 않습니다.
+    /// 적 분대만 목표를 고르고, 그러려면 두 가지가 더 필요합니다 —
+    /// 어디가 위험한가(<see cref="IThreatProvider"/>)와 칠 부대가 어디 있는가(<see cref="ISquadRoster"/>).
+    ///
+    /// <b>부대 명부이지 병사 명부가 아닙니다.</b>
+    /// 판단의 단위가 부대이므로 후보도 부대여야 합니다.
+    /// </summary>
+    public interface IEnemySquadContext : ISquadContext<EnemySquad>, IThreatProvider, ISquadRoster
+    {
+    }
+
+    /// <summary>
+    /// <b>전개기가 볼 수 있는 전부</b>입니다.
+    ///
+    /// 자리를 고르고(<see cref="Grid"/>), 상한과 간격을 읽고(<see cref="Tuning"/>),
+    /// 지금 몇 부대가 서 있는지 셉니다(<see cref="ISquadRoster.CountLivingSquads"/>).
+    /// 그게 전부입니다 — 전개기는 분대를 <b>만들지 않습니다.</b>
+    /// 무엇을 어떻게 만들지는 밖에서 꽂아 준 함수가 압니다.
+    ///
+    /// 경로 탐색기도 점유 장부도 없습니다. 자리를 정하는 것과 그 자리로 가는 것은 다른 일입니다.
+    /// </summary>
+    public interface IDeploymentContext : ISquadRoster
+    {
+        /// <summary>지형입니다. 전개 구역을 여기서 얻습니다.</summary>
+        IslandGrid Grid { get; }
+
+        /// <summary>전투 튜닝 수치입니다. 동시 전개 상한과 지원군 간격이 여기 있습니다.</summary>
+        BattleTuning Tuning { get; }
     }
 }

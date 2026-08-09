@@ -40,7 +40,7 @@ namespace SRPG.Gameplay.Deployment
         private readonly List<Tile> _enemySlots = new List<Tile>(8);
         private readonly List<SquadOrder> _batch = new List<SquadOrder>(8);
 
-        private BattleContext _context;
+        private IDeploymentContext _context;
         private ReinforcementPool _playerPool;
         private ReinforcementPool _enemyPool;
 
@@ -98,12 +98,15 @@ namespace SRPG.Gameplay.Deployment
         ///
         /// 초기 전개는 간격을 두지 않습니다. 전투가 열리면 이미 대치한 상태여야 합니다.
         /// </summary>
-        /// <param name="context">전투 컨텍스트입니다.</param>
+        /// <param name="context">
+        /// <b>전개기가 볼 수 있는 것만</b> 담긴 컨텍스트입니다.
+        /// 자리를 고르고, 상한을 읽고, 몇 부대가 서 있는지 셉니다. 그게 전부입니다.
+        /// </param>
         /// <param name="request">양측의 전투 서열이 담긴 주문서입니다.</param>
         /// <param name="playerFactory">아군 분대를 만드는 함수입니다.</param>
         /// <param name="enemyFactory">적 분대를 만드는 함수입니다.</param>
         public void Initialize(
-            BattleContext context,
+            IDeploymentContext context,
             BattleRequest request,
             Action<SquadOrder, GridCoord> playerFactory,
             Action<SquadOrder, GridCoord> enemyFactory)

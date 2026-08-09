@@ -73,7 +73,7 @@ namespace SRPG.Gameplay.Squads
         /// <summary>앵커 전진은 적 분대와 공유하는 순수 로직입니다.</summary>
         private readonly FormationMotor _motor = new FormationMotor();
 
-        private BattleContext _context;
+        private ISquadContext<Squad> _context;
         private Unit _commander;
         private float _anchorSpeed = 3f;
 
@@ -159,7 +159,10 @@ namespace SRPG.Gameplay.Squads
         /// <summary>
         /// 분대를 생성하고 병사들을 배치합니다.
         /// </summary>
-        /// <param name="context">전투 컨텍스트입니다.</param>
+        /// <param name="context">
+        /// <b>분대가 볼 수 있는 것만</b> 담긴 컨텍스트입니다.
+        /// 전군 명부도 투사체 풀도 적 진영의 점유 장부도 여기 없습니다.
+        /// </param>
         /// <param name="definition">병사 정의입니다.</param>
         /// <param name="spawnCoord">초기 배치 타일입니다.</param>
         /// <param name="soldierCount">지휘관을 제외한 병사 수입니다.</param>
@@ -167,7 +170,7 @@ namespace SRPG.Gameplay.Squads
         /// <param name="unitFactory">유닛 GameObject를 만드는 함수입니다.</param>
         /// <param name="rank">분대 숙련도 랭크입니다.</param>
         public void Initialize(
-            BattleContext context,
+            ISquadContext<Squad> context,
             UnitDefinition definition,
             GridCoord spawnCoord,
             int soldierCount,
@@ -186,7 +189,7 @@ namespace SRPG.Gameplay.Squads
             context.Occupancy.Claim(spawnCoord, this);
 
             // 명부에 스스로 오릅니다. 지원군이 "지금 몇 분대가 서 있는가"를 여기서 셉니다.
-            context.RegisterPlayerSquad(this);
+            context.RegisterSquad(this);
 
             // 배치되자마자 해안을 봅니다. 첫 갱신을 기다리면 한순간 엉뚱한 쪽을 보고 서 있습니다.
             _lineFacing = ComputeFacing();
@@ -348,7 +351,7 @@ namespace SRPG.Gameplay.Squads
 
             // 점유하던 칸을 놓아 줍니다. 이걸 빠뜨리면 죽은 분대가 칸을 영원히 막습니다.
             _context?.Occupancy.Release(this);
-            _context?.UnregisterPlayerSquad(this);
+            _context?.UnregisterSquad(this);
 
             for (int i = _units.Count - 1; i >= 0; i--)
             {
@@ -372,7 +375,7 @@ namespace SRPG.Gameplay.Squads
         /// </summary>
         private void OnDestroy()
         {
-            _context?.UnregisterPlayerSquad(this);
+            _context?.UnregisterSquad(this);
         }
 
         // ====================================================================================================
