@@ -139,6 +139,7 @@ Shader "SRPG/Water"
 
             // 풀 셰이더와 <b>같은</b> 노이즈입니다. 갈라지면 물결과 풀밭의 결이 서로 다른 세계가 됩니다.
             #include "SRPG_Noise.hlsl"
+            #include "SRPG_Depth.hlsl"
 
             // 지형·풀·유닛과 <b>같은</b> 계단식 명암입니다.
             #include "SRPG_Toon.hlsl"
@@ -339,16 +340,22 @@ Shader "SRPG/Water"
                 // ---------------------------------------------------------------------------
                 float2 uv = input.screenPos.xy / max(input.screenPos.w, 1e-5);
 
-                float sceneDepth = LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
+                // 투영을 가려 읽습니다. 원근의 역수 공식을 직교에 그대로 쓰면
+                // 값이 통째로 어긋나면서 오류는 나지 않습니다.
+                float sceneDepth = SrpgLinearEyeDepth(SampleSceneDepth(uv));
 
-                // 반드시 screenPos.w 여야 합니다.
+                // <b>screenPos.w 를 쓰지 않습니다.</b>
                 //
-                // 프래그먼트 단계의 SV_POSITION.w 는 클립 w 가 아니라 <b>1/w</b> 입니다 —
-                // 래스터라이저가 원근 보간을 위해 덮어씁니다.
-                // 그것을 수심으로 쓰면 카메라 거리 25에서 0.04 가 들어와
-                // 수심이 곧 카메라 거리가 되고, 전 수면이 깊은 물 한 색으로 칠해집니다.
-                // ComputeScreenPos 가 넘겨준 w 만이 시점 공간 깊이를 그대로 들고 있습니다.
-                float surfaceDepth = input.screenPos.w;
+                // 원근에서는 그것이 시점 깊이와 같아서 오래 잘 돌았습니다.
+                // 그러나 <b>직교에서는 클립 w 가 언제나 1</b> 입니다 —
+                // 수면이 늘 카메라 1미터 앞에 있는 것이 되어 수심이 전부 같은 값으로 뭉갭니다.
+                // 그 결과 물가 거품이 부드럽게 옅어지지 않고 <b>있거나 없거나</b> 둘 중 하나가 됩니다.
+                //
+                // (앞서 SV_POSITION.w 를 썼다가 겪은 것도 같은 종류였습니다.
+                //  래스터라이저가 그것을 1/w 로 덮어써서 수심이 곧 카메라 거리가 되었습니다.)
+                //
+                // 월드 좌표를 시점 공간으로 직접 옮기면 두 투영에서 모두 맞습니다.
+                float surfaceDepth = SrpgEyeDepthFromWorld(input.positionWS);
 
                 // 물이 지형보다 앞에 있을 때만 의미가 있습니다.
                 float waterDepth = max(0.0, sceneDepth - surfaceDepth);

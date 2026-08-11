@@ -17,10 +17,19 @@ namespace SRPG.Editor.Tools
     ///
     /// <b>여기 없는 것</b>
     ///
-    /// 픽셀화는 후처리가 아닙니다. URP 가 <b>애초에 저해상도로 그리고</b>
-    /// 점 필터로 확대합니다(파이프라인 에셋의 Render Scale · Upscaling Filter).
-    /// 화면을 다 그린 뒤 뭉개는 것이 아니라 처음부터 적게 그리는 것이라,
-    /// 그림이 더 정직하고 성능도 함께 좋아집니다.
+    /// 픽셀화와 외곽선은 여기 없습니다. <c>PixelArtFeature</c> 가 렌더러 피처로 따로 붙습니다.
+    /// 볼륨으로는 저해상도 렌더 타깃을 잡을 수 없고, 외곽선은 깊이·노멀을 읽어야 하기 때문입니다.
+    ///
+    /// <b>순서에 뜻이 있습니다.</b>
+    /// 피처가 <c>AfterRenderingPostProcessing</c> 에 붙으므로 <b>여기 값들이 먼저</b> 전체 해상도에서 걸리고,
+    /// 그다음 화면이 저해상도로 줄면서 외곽선이 얹힙니다.
+    /// 그래서 외곽선 색만은 톤매핑을 타지 않습니다 — 적어 둔 색이 그대로 나옵니다.
+    ///
+    /// <b>블룸을 켤 때 주의</b>
+    ///
+    /// 번짐은 전체 해상도에서 일어난 뒤 축소되므로 애써 만든 1픽셀 선을 직접 뭉개지는 않습니다.
+    /// 다만 문턱을 낮추면 들판 전체가 뿌옇게 번져 <b>픽셀 경계의 또렷함</b>이 사라집니다.
+    /// 픽셀아트에서 가장 먼저 의심할 항목이라 문턱을 높게 잡아 두었습니다.
     /// </summary>
     public static class PostProcessBuilder
     {
@@ -41,7 +50,7 @@ namespace SRPG.Editor.Tools
         /// <summary>
         /// 전투 후처리 프로필을 만들어 저장합니다. 이미 있으면 값만 다시 맞춥니다.
         /// </summary>
-        [MenuItem("SRPG/배선/⑦ 후처리 프로필 생성", priority = 36)]
+        [MenuItem("SRPG/배선/⑨ 후처리 프로필 생성", priority = 38)]
         public static void BuildBattleProfile()
         {
             Directory.CreateDirectory(ProfileDirectory);
@@ -54,6 +63,13 @@ namespace SRPG.Editor.Tools
                 AssetDatabase.CreateAsset(profile, BattleProfilePath);
             }
 
+            // 끊긴 참조를 먼저 걷어냅니다.
+            //
+            // 예전 판이 컴포넌트를 만들어 목록에 넣고도 <b>하위 에셋으로 붙이지 않아서</b>,
+            // 저장될 때 넷이 전부 null 로 기록되어 있었습니다.
+            // 그 상태로 두면 목록에 빈 칸이 남아 TryGet 이 엉뚱하게 대답합니다.
+            int broken = profile.components.RemoveAll(component => component == null);
+
             ConfigureTonemapping(profile);
             ConfigureColor(profile);
             ConfigureVignette(profile);
@@ -62,7 +78,14 @@ namespace SRPG.Editor.Tools
             EditorUtility.SetDirty(profile);
             AssetDatabase.SaveAssets();
 
-            Debug.Log($"[PostProcessBuilder] 후처리 프로필을 만들었습니다: {BattleProfilePath}", profile);
+            // 하위 에셋을 더한 뒤에는 다시 읽어야 인스펙터가 새 목록을 봅니다.
+            AssetDatabase.ImportAsset(BattleProfilePath, ImportAssetOptions.ForceUpdate);
+
+            Debug.Log(
+                $"[PostProcessBuilder] 후처리 프로필을 구웠습니다 — 항목 {profile.components.Count}개" +
+                (broken > 0 ? $", 끊긴 참조 {broken}개를 걷어냄" : string.Empty) +
+                $": {BattleProfilePath}",
+                profile);
         }
 
         // ====================================================================================================
@@ -153,7 +176,52 @@ namespace SRPG.Editor.Tools
         /// <returns>프로필에 들어 있는 컴포넌트입니다.</returns>
         private static T GetOrAdd<T>(VolumeProfile profile) where T : VolumeComponent
         {
-            return profile.TryGet<T>(out var existing) ? existing : profile.Add<T>();
+            if (profile.TryGet<T>(out var existing) && existing != null)
+            {
+                Persist(existing, profile);
+
+                return existing;
+            }
+
+            var created = profile.Add<T>();
+
+            // 이름을 붙여 둡니다. 하위 에셋은 이름으로 구분되고,
+            // 비어 있으면 프로젝트 창에서 무엇이 무엇인지 알 수 없습니다.
+            created.name = typeof(T).Name;
+
+            Persist(created, profile);
+
+            return created;
+        }
+
+        /// <summary>
+        /// 컴포넌트를 프로필 <b>안에</b> 저장합니다.
+        ///
+        /// <b>이 한 단계가 빠져 있었습니다.</b>
+        ///
+        /// <c>VolumeProfile.Add&lt;T&gt;</c> 는 컴포넌트를 메모리에 만들어 목록에 넣을 뿐입니다.
+        /// 그것은 어느 에셋에도 속하지 않은 객체라, 프로필을 저장하면 <b>참조가 null 로 기록</b>됩니다.
+        /// 오류는 나지 않습니다 — 다음에 열어 보면 목록에 빈 칸만 남아 있고,
+        /// 화면에서는 "후처리가 왜 안 걸리지"로만 보입니다.
+        ///
+        /// 인스펙터에서 프로필을 편집할 때는 유니티의 볼륨 편집기가 이 일을 대신 해 줍니다.
+        /// 코드로 구울 때는 우리가 해야 합니다.
+        ///
+        /// <b>감춥니다.</b> 프로젝트 창에서 프로필을 펼치면 컴포넌트가 낱개로 늘어서는데,
+        /// 그것은 따로 만질 것이 아니라 프로필의 일부입니다. 유니티도 같은 플래그를 씁니다.
+        /// </summary>
+        /// <param name="component">저장할 컴포넌트입니다.</param>
+        /// <param name="profile">그것이 속할 프로필입니다.</param>
+        private static void Persist(VolumeComponent component, VolumeProfile profile)
+        {
+            if (component == null || AssetDatabase.Contains(component))
+            {
+                return;
+            }
+
+            component.hideFlags = HideFlags.HideInHierarchy | HideFlags.HideInInspector;
+
+            AssetDatabase.AddObjectToAsset(component, profile);
         }
     }
 }

@@ -34,14 +34,26 @@ namespace SRPG.Gameplay.CameraControl
         // 1. Constants
         // ====================================================================================================
 
-        /// <summary>카메라가 피벗에 다가갈 수 있는 최소 거리입니다.</summary>
-        private const float MinDistance = 14f;
-        /// <summary>카메라가 피벗에서 물러날 수 있는 최대 거리입니다.</summary>
-        private const float MaxDistance = 52f;
+        /// <summary>
+        /// 카메라가 피벗에서 물러나 서는 <b>고정</b> 거리입니다.
+        ///
+        /// <b>직교에서 거리는 줌이 아닙니다.</b> 뒤로 물려도 화면에 담기는 것은 그대로이고,
+        /// 달라지는 것은 무엇이 근평면에 잘리는가뿐입니다.
+        /// 그래서 지형과 화살이 잘리지 않을 만큼만 넉넉히 물려 두고 고정합니다.
+        /// </summary>
+        private const float CameraStandoff = 60f;
+
+        /// <summary>가장 가까이 당겼을 때 화면에 담기는 월드 높이의 절반입니다.</summary>
+        private const float MinZoom = 8f;
+
+        /// <summary>가장 멀리 밀었을 때 화면에 담기는 월드 높이의 절반입니다.</summary>
+        private const float MaxZoom = 30f;
+
         /// <summary>궤도 회전 속도입니다. 초당 각도입니다.</summary>
         private const float RotationSpeed = 90f;
-        /// <summary>휠 한 칸이 바꾸는 거리입니다.</summary>
-        private const float ZoomSpeed = 6f;
+
+        /// <summary>휠 한 칸이 바꾸는 줌입니다.</summary>
+        private const float ZoomSpeed = 3.5f;
         /// <summary>회전·확대가 목표값을 따라가는 속도입니다.</summary>
         private const float SmoothSpeed = 10f;
 
@@ -70,8 +82,11 @@ namespace SRPG.Gameplay.CameraControl
         private float _yaw = 35f;
 
         [SerializeField]
-        [Tooltip("피벗으로부터의 거리입니다.")]
-        private float _distance = 34f;
+        [Range(MinZoom, MaxZoom)]
+        [Tooltip("화면에 담기는 월드 높이의 절반입니다. 직교 카메라의 Orthographic Size 와 같습니다.\n\n" +
+                 "<b>거리가 아닙니다.</b> 직교에서는 카메라를 뒤로 물려도 화면이 그대로이므로, " +
+                 "줌은 이 값 하나로 정해집니다.")]
+        private float _zoom = 19.5f;
 
         [SerializeField]
         [Range(0, 32)]
@@ -95,8 +110,11 @@ namespace SRPG.Gameplay.CameraControl
         /// <summary>이동 범위를 정할 때 기준이 되는 지형입니다.</summary>
         private IslandGrid _grid;
 
-        /// <summary>확대·축소가 수렴할 목표 거리입니다.</summary>
-        private float _targetDistance;
+        /// <summary>줌을 실제로 적용할 카메라입니다. 트랜스폼만으로는 직교 크기를 만질 수 없습니다.</summary>
+        private Camera _camera;
+
+        /// <summary>확대·축소가 수렴할 목표 줌입니다.</summary>
+        private float _targetZoom;
         /// <summary>궤도 회전이 수렴할 목표 각도입니다.</summary>
         private float _targetYaw;
 
@@ -125,7 +143,7 @@ namespace SRPG.Gameplay.CameraControl
 
         private void Awake()
         {
-            _targetDistance = _distance;
+            _targetZoom = _zoom;
             _targetYaw = _yaw;
 
             if (_cameraTransform == null)
@@ -136,6 +154,8 @@ namespace SRPG.Gameplay.CameraControl
                     _cameraTransform = childCamera.transform;
                 }
             }
+
+            CacheCamera();
         }
 
         private void LateUpdate()
@@ -146,7 +166,7 @@ namespace SRPG.Gameplay.CameraControl
             ReadPanInput(deltaTime);
 
             _yaw = Mathf.LerpAngle(_yaw, ResolveTargetYaw(), SmoothSpeed * deltaTime);
-            _distance = Mathf.Lerp(_distance, _targetDistance, SmoothSpeed * deltaTime);
+            _zoom = Mathf.Lerp(_zoom, _targetZoom, SmoothSpeed * deltaTime);
 
             FollowGround(deltaTime);
             PlaceCamera();
@@ -174,6 +194,12 @@ namespace SRPG.Gameplay.CameraControl
 
             _cameraTransform = battleCamera.transform;
             _cameraTransform.SetParent(transform, worldPositionStays: false);
+
+            _camera = battleCamera;
+
+            // 직교가 아니면 픽셀 격자를 붙잡을 수 없습니다. 텍셀이 덮는 월드 길이가
+            // 깊이마다 달라져 한 평면에서만 맞기 때문입니다. 씬이 원근으로 구워져 있어도 여기서 되돌립니다.
+            _camera.orthographic = true;
 
             // 즉시 배치합니다. LateUpdate를 기다리면 첫 프레임 동안 카메라가
             // 피벗과 같은 자리, 즉 지형 속에 박힌 채로 한 장이 그려집니다.
@@ -214,13 +240,15 @@ namespace SRPG.Gameplay.CameraControl
         }
 
         /// <summary>
-        /// 섬 크기에 맞춰 초기 거리를 잡습니다.
+        /// 섬 크기에 맞춰 초기 줌을 잡습니다.
         /// </summary>
         /// <param name="areaSize">화면에 담고 싶은 영역의 한 변 길이입니다.</param>
         public void FrameArea(float areaSize)
         {
-            _targetDistance = Mathf.Clamp(areaSize * 0.85f, MinDistance, MaxDistance);
-            _distance = _targetDistance;
+            // 절반이 화면 높이의 절반에 대응합니다. 비스듬히 내려다보므로 지면은 그보다 넓게 잡히고,
+            // 그 여유를 계수로 조금 덜어 냅니다.
+            _targetZoom = Mathf.Clamp(areaSize * 0.5f, MinZoom, MaxZoom);
+            _zoom = _targetZoom;
 
             PlaceCamera();
         }
@@ -255,10 +283,10 @@ namespace SRPG.Gameplay.CameraControl
                 if (Mathf.Abs(scroll) > 0.01f)
                 {
                     // 휠 값의 크기는 플랫폼마다 다르므로 부호만 사용합니다.
-                    _targetDistance = Mathf.Clamp(
-                        _targetDistance - Mathf.Sign(scroll) * ZoomSpeed,
-                        MinDistance,
-                        MaxDistance);
+                    _targetZoom = Mathf.Clamp(
+                        _targetZoom - Mathf.Sign(scroll) * ZoomSpeed,
+                        MinZoom,
+                        MaxZoom);
                 }
             }
         }
@@ -369,9 +397,41 @@ namespace SRPG.Gameplay.CameraControl
 
             var rotation = Quaternion.Euler(_pitch, _yaw, 0f);
 
+            // 거리는 고정입니다. 직교에서 화면 크기를 정하는 것은 아래의 orthographicSize 뿐입니다.
             _cameraTransform.SetLocalPositionAndRotation(
-                -(rotation * Vector3.forward) * _distance,
+                -(rotation * Vector3.forward) * CameraStandoff,
                 rotation);
+
+            if (CacheCamera())
+            {
+                _camera.orthographicSize = _zoom;
+            }
+        }
+
+        /// <summary>
+        /// 자식 카메라를 찾아 들고 있습니다. 직교 크기를 만지려면 트랜스폼이 아니라 카메라가 필요합니다.
+        /// </summary>
+        /// <returns>쓸 수 있는 카메라를 들고 있으면 true입니다.</returns>
+        private bool CacheCamera()
+        {
+            if (_camera != null)
+            {
+                return true;
+            }
+
+            if (_cameraTransform != null)
+            {
+                _camera = _cameraTransform.GetComponent<Camera>();
+            }
+
+            if (_camera == null)
+            {
+                return false;
+            }
+
+            _camera.orthographic = true;
+
+            return true;
         }
 
         // ====================================================================================================

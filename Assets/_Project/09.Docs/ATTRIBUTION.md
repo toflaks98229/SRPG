@@ -79,3 +79,65 @@ SOFTWARE.
 ```
 Grass assets by Dylearn — https://github.com/DylearnDev/Dylearn-3D-Pixel-Art-Grass-Demo (CC BY 4.0)
 ```
+
+---
+
+## unity-isometric-pixel-pipeline
+
+- 출처: <https://github.com/bababuyyy/unity-isometric-pixel-pipeline>
+- 라이선스: MIT
+
+이 프로젝트의 픽셀아트 렌더 파이프라인이 이 저장소의 구조를 근거로 세워졌습니다.
+파일을 그대로 가져오지는 않았고, 기법과 그 이유를 읽고 이 프로젝트의 구조에 맞춰 다시 구현했습니다.
+
+### 가져온 기법
+
+| 기법 | 우리 쪽 자리 |
+| --- | --- |
+| 외곽선을 내부 해상도에서 검출해 선을 1픽셀로 고정 | `SRPG_PixelOutline.shader` · `PixelArtFeature` |
+| 실루엣(깊이)과 크리스(노멀)를 나누어 검출 | `SRPG_PixelOutline.shader` |
+| 카메라를 텍셀 격자에 붙이고 나머지를 UV 로 되돌리는 픽셀 정렬 패닝 | `PixelSnapCamera` · 확대 패스의 `_PixelPanOffset` |
+| GPU 인스턴싱 풀에 SSAO 를 끄는 요구 | `BattleWiring` ⑨ |
+
+전투 카메라를 원근에서 직교로 옮긴 것도 이 저장소의 판단을 따른 것입니다.
+텍셀이 덮는 월드 길이가 화면 전체에서 같아야 격자를 붙잡을 수 있고, 그것은 직교에서만 성립합니다.
+
+### 원저작자가 밝힌 계보
+
+저 저장소의 문서가 자신의 출처로 밝힌 사람들입니다. 기법의 계보가 여기서 이어집니다.
+
+- **t3ssel8r** — 원안과 외곽선 접근
+- **David Holland** — 픽셀 정렬 패닝
+- **KodyKing** — 크리스 검출
+- **Roystan** — Roberts Cross 외곽선
+- **keijiro** — 후처리
+
+### 라이선스 전문
+
+```
+MIT License
+
+Copyright (c) 2026 bababuyyy
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+> MIT 는 저작권 표시와 위 전문을 <b>함께 배포할 것</b>을 요구합니다.
+> 저작권 연도와 표기는 저장소의 `LICENSE` 파일을 확인해 실제 문구로 맞추십시오 —
+> 위 전문은 MIT 표준형이며, 연도·이름이 다르면 그쪽을 따릅니다.

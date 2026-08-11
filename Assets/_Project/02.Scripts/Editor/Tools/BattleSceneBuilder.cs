@@ -259,6 +259,13 @@ namespace SRPG.Editor.Tools
             camera.backgroundColor = new Color(0.11f, 0.15f, 0.21f);
             camera.farClipPlane = 400f;
 
+            // <b>직교입니다.</b> 픽셀 격자를 붙잡으려면 텍셀이 덮는 월드 길이가
+            // 화면 전체에서 같아야 하고, 그것은 직교에서만 성립합니다.
+            // 리그가 실행 중에도 되돌리지만, 씬에 저장된 것과 실제로 도는 것이 달라지면
+            // 편집 중 씬 뷰에서 보는 구도가 실행 결과와 어긋납니다.
+            camera.orthographic = true;
+            camera.orthographicSize = 19.5f;
+
             // URP 추가 데이터를 씬에 명시적으로 넣습니다.
             //
             // 없어도 URP가 실행 중에 붙여 주긴 합니다. 그래서 없어도 굴러갑니다.
@@ -268,8 +275,9 @@ namespace SRPG.Editor.Tools
 
             // 실제 위치와 각도는 BattleCameraRig가 런타임에 섬 크기에 맞춰 잡습니다.
             // 여기 값은 편집 중 씬 뷰에서 대략의 구도를 보기 위한 것입니다.
+            // 리그의 고정 거리(60)에 맞춘 자리입니다. 피치 47도에서 뒤로 물린 지점입니다.
             cameraObject.transform.SetLocalPositionAndRotation(
-                new Vector3(0f, 25f, -23f),
+                new Vector3(0f, 43.9f, -40.9f),
                 Quaternion.Euler(47f, 0f, 0f));
 
             cameraObject.AddComponent<AudioListener>();

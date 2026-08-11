@@ -12,8 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3269a812d6543874da966f0fcdc43397, type: 3}
   m_Name: PixelGrid_Default
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.PixelGridSettings
+  SchemaVersion: 2
   InternalHeight: 270
   ZoomAdaptive: 1
-  ReferenceDistance: 34
+  ReferenceExtent: 19.62991
   MinHeight: 140
   MaxHeight: 540

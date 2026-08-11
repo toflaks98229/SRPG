@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace SRPG.Data
 {
@@ -24,6 +25,44 @@ namespace SRPG.Data
     public sealed class PixelGridSettings : ScriptableObject
     {
         // ====================================================================================================
+        // 0. Schema
+        // ====================================================================================================
+
+        /// <summary>
+        /// 지금 코드가 기대하는 스키마 판입니다.
+        ///
+        /// <b>2판에서 무엇이 바뀌었는가</b>
+        ///
+        /// 전투 카메라를 원근에서 직교로 옮기면서 줌의 단위가 바뀌었습니다.
+        /// 예전에는 <c>ReferenceDistance</c>(카메라 거리, 34)였고 지금은
+        /// <see cref="ReferenceExtent"/>(화면 높이의 절반, 약 19.6)입니다.
+        ///
+        /// <b>이름만 바꿔서는 안 됩니다.</b> 같은 34가 새 단위에서는 전혀 다른 줌을 뜻합니다 —
+        /// 그대로 두면 기준 해상도가 적용되는 지점이 통째로 어긋나고, 오류는 나지 않습니다.
+        /// 그래서 <see cref="MigrateToCurrentSchema"/> 가 값을 실제로 환산합니다.
+        /// </summary>
+        public const int CurrentSchemaVersion = 2;
+
+        /// <summary>
+        /// 1판이 쓰던 시야각입니다. 값을 환산할 때만 씁니다.
+        ///
+        /// 유니티 카메라의 기본값이고 이 프로젝트도 손대지 않았습니다.
+        /// 환산식이 이 값에 기대므로 상수로 남겨 둡니다 — 나중에 이 줄만 보고도 왜 0.577이 나왔는지 알 수 있게.
+        /// </summary>
+        private const float LegacyFieldOfView = 60f;
+
+        /// <summary>
+        /// 이 에셋이 마지막으로 맞춰진 스키마 판입니다. 배선 도구가 관리합니다.
+        ///
+        /// <b>초기값이 0인 것이 핵심입니다.</b> 유니티는 YAML 에 없는 키를 만나면 필드 초기값을 그대로 둡니다.
+        /// 최신 판을 적어 두면 이 필드가 생기기 전에 구워진 에셋이 "이미 최신"이라 대답해
+        /// 이관이 영영 돌지 않습니다.
+        /// </summary>
+        [HideInInspector]
+        [Tooltip("이 에셋이 마지막으로 갱신된 스키마 버전입니다. 배선 도구가 관리합니다.")]
+        public int SchemaVersion;
+
+        // ====================================================================================================
         // 1. Inspector
         // ====================================================================================================
 
@@ -39,10 +78,12 @@ namespace SRPG.Data
                  "켜는 쪽이 병사 스프라이트의 픽셀 밀도와 화면 픽셀이 어긋나지 않습니다.")]
         public bool ZoomAdaptive = true;
 
-        [Range(4f, 120f)]
-        [Tooltip("위의 내부 해상도가 적용되는 기준 카메라 거리입니다.\n" +
-                 "전투 리그의 기본 거리(34)에 맞춰 두면 지금 보이는 굵기가 기준이 됩니다.")]
-        public float ReferenceDistance = 34f;
+        [Range(2f, 80f)]
+        [Tooltip("위의 내부 해상도가 적용되는 기준 줌입니다. 화면에 담기는 월드 높이의 <b>절반</b>이며, " +
+                 "직교 카메라의 Orthographic Size 와 같은 단위입니다.\n" +
+                 "전투 리그의 기본 줌(19.5)에 맞춰 두면 지금 보이는 굵기가 기준이 됩니다.")]
+        [FormerlySerializedAs("ReferenceDistance")]
+        public float ReferenceExtent = 19.5f;
 
         [Range(16, 1080)]
         [Tooltip("줌인해도 이보다 거칠어지지 않습니다.")]
@@ -63,9 +104,9 @@ namespace SRPG.Data
         /// 식이 두 곳에 있으면 언젠가 한쪽만 고쳐집니다.
         /// </summary>
         /// <param name="screenHeight">실제 화면의 세로 픽셀 수입니다.</param>
-        /// <param name="focusDistance">카메라가 초점에서 떨어진 거리입니다.</param>
+        /// <param name="viewExtent">지금 화면에 담기는 월드 높이의 절반입니다.</param>
         /// <returns>내부 세로 픽셀 수입니다.</returns>
-        public int ResolveHeight(int screenHeight, float focusDistance)
+        public int ResolveHeight(int screenHeight, float viewExtent)
         {
             if (!ZoomAdaptive)
             {
@@ -73,7 +114,7 @@ namespace SRPG.Data
             }
 
             return Rendering.PixelGrid.ResolveHeight(
-                screenHeight, InternalHeight, ReferenceDistance, focusDistance, MinHeight, MaxHeight);
+                screenHeight, InternalHeight, ReferenceExtent, viewExtent, MinHeight, MaxHeight);
         }
 
         // ====================================================================================================
@@ -88,8 +129,56 @@ namespace SRPG.Data
         {
             var settings = CreateInstance<PixelGridSettings>();
             settings.name = "PixelGrid_Default";
+            settings.SchemaVersion = CurrentSchemaVersion;
 
             return settings;
+        }
+
+        /// <summary>
+        /// 인스펙터에서 새로 만들거나 초기화할 때 유니티가 부릅니다.
+        /// 갓 만든 에셋이 옛 판으로 표시되지 않게 판 번호를 적어 둡니다.
+        /// </summary>
+        private void Reset()
+        {
+            SchemaVersion = CurrentSchemaVersion;
+        }
+
+        // ====================================================================================================
+        // 4. Migration
+        // ====================================================================================================
+
+        /// <summary>
+        /// 에셋을 지금 스키마에 맞춥니다. 이미 최신이면 아무것도 하지 않습니다.
+        ///
+        /// <b>1판 → 2판: 거리를 화면 높이로 환산합니다</b>
+        ///
+        /// 옛 값은 카메라 거리였고, 그 거리에서 원근 카메라가 담던 높이의 절반이 새 값입니다.
+        /// <c>extent = distance × tan(시야각 ÷ 2)</c> 이며 시야각 60도에서 계수는 약 0.577 입니다.
+        /// 기본값이던 34는 19.6이 되어, <b>화면에 보이던 픽셀 굵기가 그대로 유지됩니다</b>.
+        ///
+        /// 이름만 이어받는 것으로는 부족했던 이유가 여기 있습니다 —
+        /// <c>FormerlySerializedAs</c> 는 값을 옮겨 줄 뿐 단위를 바꿔 주지 않습니다.
+        /// </summary>
+        /// <returns>실제로 무언가 바꿨으면 true입니다.</returns>
+        public bool MigrateToCurrentSchema()
+        {
+            if (SchemaVersion >= CurrentSchemaVersion)
+            {
+                return false;
+            }
+
+            if (ReferenceExtent > 0f)
+            {
+                ReferenceExtent *= Mathf.Tan(LegacyFieldOfView * 0.5f * Mathf.Deg2Rad);
+            }
+            else
+            {
+                ReferenceExtent = 19.5f;
+            }
+
+            SchemaVersion = CurrentSchemaVersion;
+
+            return true;
         }
     }
 }

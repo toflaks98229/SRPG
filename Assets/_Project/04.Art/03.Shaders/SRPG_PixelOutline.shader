@@ -36,6 +36,7 @@ Shader "SRPG/PixelOutline"
         #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareNormalsTexture.hlsl"
+        #include "SRPG_Depth.hlsl"
 
         // 외곽선을 그릴 대상만 1인 마스크입니다. 전체 해상도로 그려집니다.
         TEXTURE2D(_OutlineMask);
@@ -48,11 +49,23 @@ Shader "SRPG/PixelOutline"
         float  _CreaseStrength;
         float  _DebugMode;          // 0=끔, 1=실루엣 파랑 / 크리스 빨강
 
-        // 눈에서 잰 거리입니다. 원시 깊이는 비선형이라 그대로 빼면
-        // 같은 간격이 가까이서는 크고 멀리서는 작게 나옵니다.
+        // 깊이 차를 나눌 기준입니다. 0이면 자기 깊이로 나눕니다(원근).
+        //
+        // <b>직교에서는 자기 깊이로 나누면 안 됩니다.</b> 시점 거리에 카메라를 물려 둔 몫이
+        // 통째로 들어 있어서, 카메라를 뒤로 물리는 것만으로 모든 깊이 차가 작아집니다.
+        // 실제로 그랬습니다 — 직교로 옮기며 물린 거리가 34에서 60이 되자
+        // 문턱을 넘던 윤곽이 넘지 못해 <b>외곽선이 군데군데 사라졌습니다</b>.
+        // 직교에서 화면의 축척을 정하는 것은 거리가 아니라 담기는 월드 높이이므로 그것을 받습니다.
+        float  _OutlineDepthScale;
+
+        // 눈에서 잰 거리입니다.
+        //
+        // <b>투영을 가립니다.</b> 원근에서는 원시 깊이가 비선형이라 되돌려야 하고,
+        // 직교에서는 이미 선형이라 근·원 사이를 보간해야 합니다.
+        // 한쪽 공식을 양쪽에 쓰면 값이 통째로 어긋나면서 오류는 나지 않습니다.
         float EyeDepthAt(float2 uv)
         {
-            return LinearEyeDepth(SampleSceneDepth(uv), _ZBufferParams);
+            return SrpgLinearEyeDepth(SampleSceneDepth(uv));
         }
 
         float3 NormalAt(float2 uv)
@@ -116,10 +129,16 @@ Shader "SRPG/PixelOutline"
 
                 // --- 실루엣: 깊이가 끊기는 곳 ---
                 //
-                // <b>차이를 자기 깊이로 나눕니다.</b>
-                // 절대 차이로 재면 같은 물체가 멀어질수록 선이 사라집니다 —
-                // 멀리 있는 두 픽셀은 실제 간격이 같아도 깊이 차가 작기 때문입니다.
-                // 비율로 재면 "이웃이 20% 더 멀다"가 거리와 무관하게 같은 뜻이 됩니다.
+                // <b>차이를 화면의 축척으로 나눕니다.</b>
+                // 절대 차이로 재면 줌에 따라 선이 생겼다 사라졌다 합니다.
+                // 나누어 두면 "화면 높이의 3%만큼 끊겼다"가 줌과 무관하게 같은 뜻이 됩니다.
+                //
+                // 원근에서는 그 축척이 곧 자기 깊이입니다(멀수록 같은 간격이 작게 보임).
+                // 직교에서는 깊이가 축척과 무관하므로 담기는 월드 높이를 CPU 가 넘겨 줍니다.
+                float normalizer = _OutlineDepthScale > 0.0
+                    ? _OutlineDepthScale
+                    : max(centerDepth, 1e-4);
+
                 float depthEdge = 0.0;
 
                 // --- 크리스: 면이 꺾이는 곳 ---
@@ -136,7 +155,7 @@ Shader "SRPG/PixelOutline"
 
                     // 이웃이 <b>더 먼</b> 경우만 셉니다.
                     // 양쪽을 다 세면 물체의 안쪽과 바깥쪽 모두에 선이 그려져 두 픽셀이 됩니다.
-                    float relative = (neighbourDepth - centerDepth) / max(centerDepth, 1e-4);
+                    float relative = (neighbourDepth - centerDepth) / normalizer;
 
                     depthDelta[i] = relative;
                     depthEdge = max(depthEdge, relative);

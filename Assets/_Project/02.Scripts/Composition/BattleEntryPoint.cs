@@ -358,6 +358,10 @@ namespace SRPG.Composition
                 camera = cameraObject.AddComponent<Camera>();
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = new Color(0.11f, 0.15f, 0.21f);
+
+                // 리그가 붙일 때도 되돌리지만, 여기서 미리 맞춰 두면
+                // 리그가 붙기 전 한 프레임이 원근으로 그려지는 것을 막습니다.
+                camera.orthographic = true;
             }
 
             if (camera == null)

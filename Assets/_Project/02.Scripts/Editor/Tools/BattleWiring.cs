@@ -5,6 +5,7 @@ using SRPG.Gameplay.CameraControl;
 using SRPG.Gameplay.Visual;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace SRPG.Editor.Tools
 {
@@ -94,6 +95,11 @@ namespace SRPG.Editor.Tools
             WireMissingConfigs();
             MigrateGrassProfiles();
             MigrateBattleTuning();
+            MigratePixelGrids();
+
+            // 후처리 프로필도 여기서 굽습니다. 씬을 굽는 쪽이 이 에셋을 찾아 볼륨에 꽂으므로
+            // 반드시 씬보다 <b>먼저</b> 있어야 합니다.
+            PostProcessBuilder.BuildBattleProfile();
 
             // 픽셀아트 피처도 배선 항목입니다. 여기서 빠져 있으면 '전체 수행'을 눌러도
             // 아웃라인이 붙지 않고, 그 사실을 화면을 들여다보기 전까지 알 수 없습니다.
@@ -124,6 +130,7 @@ namespace SRPG.Editor.Tools
             CheckUnitBillboards(problems);
             CheckConfigs(problems);
             CheckPixelGrid(problems);
+            CheckPostProcess(problems);
 
             if (problems.Count > 0)
             {
@@ -449,6 +456,53 @@ namespace SRPG.Editor.Tools
         }
 
         /// <summary>
+        /// 픽셀 격자 에셋의 스키마를 현재 코드에 맞춥니다.
+        ///
+        /// <b>왜 필요한가</b>
+        ///
+        /// 전투 카메라를 원근에서 직교로 옮기면서 줌의 단위가 바뀌었습니다 —
+        /// 카메라 거리(34)에서 화면 높이의 절반(약 19.6)으로.
+        ///
+        /// 이름은 <c>FormerlySerializedAs</c> 가 이어 주지만 <b>단위는 이어 주지 않습니다.</b>
+        /// 그대로 두면 34가 새 단위로 읽혀 기준 해상도가 적용되는 지점이 통째로 어긋나고,
+        /// 화면은 멀쩡해 보이는데 굵기만 달라집니다.
+        ///
+        /// 여러 번 실행해도 결과가 같습니다.
+        /// </summary>
+        [MenuItem("SRPG/배선/⑧ 픽셀 격자 스키마 갱신", priority = 37)]
+        public static void MigratePixelGrids()
+        {
+            var guids = AssetDatabase.FindAssets($"t:{nameof(PixelGridSettings)}");
+            int migrated = 0;
+
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var settings = AssetDatabase.LoadAssetAtPath<PixelGridSettings>(path);
+
+                if (settings == null || !settings.MigrateToCurrentSchema())
+                {
+                    continue;
+                }
+
+                EditorUtility.SetDirty(settings);
+                migrated++;
+
+                Debug.Log(
+                    $"[BattleWiring] 스키마 갱신: {settings.name} → v{PixelGridSettings.CurrentSchemaVersion} " +
+                    $"(기준 줌 {settings.ReferenceExtent:F2})",
+                    settings);
+            }
+
+            if (migrated > 0)
+            {
+                AssetDatabase.SaveAssets();
+            }
+
+            Debug.Log($"[BattleWiring] 픽셀 격자 {guids.Length}개 중 {migrated}개를 갱신했습니다.");
+        }
+
+        /// <summary>
         /// 프로젝트의 SRPG 셰이더가 실제로 컴파일되는지 확인합니다.
         ///
         /// <b>왜 별도의 점검이 필요한가</b>
@@ -459,7 +513,7 @@ namespace SRPG.Editor.Tools
         ///
         /// <c>ShaderUtil</c> 은 임포터가 기록해 둔 오류를 읽으므로 배치에서도 대답할 수 있습니다.
         /// </summary>
-        [MenuItem("SRPG/배선/⑧ 셰이더 오류 점검", priority = 37)]
+        [MenuItem("SRPG/배선/⑫ 셰이더 오류 점검", priority = 41)]
         public static void InspectShaders()
         {
             var guids = AssetDatabase.FindAssets("t:Shader");
@@ -534,7 +588,7 @@ namespace SRPG.Editor.Tools
         /// 인스턴스마다 노멀이 제대로 들어가지 않아 들판에 검은 얼룩이 집니다.
         /// 참조 구현들이 공통으로 경고하는 항목이고, 이 프로젝트가 정확히 그 조건입니다.
         /// </summary>
-        [MenuItem("SRPG/배선/⑨ 픽셀아트 피처 배선", priority = 38)]
+        [MenuItem("SRPG/배선/⑩ 픽셀아트 피처 배선", priority = 39)]
         public static void WirePixelArt()
         {
             var outline = Shader.Find("SRPG/PixelOutline");
@@ -601,7 +655,7 @@ namespace SRPG.Editor.Tools
             AssetDatabase.SaveAssets();
 
             Debug.Log(
-                $"[BattleWiring] ⑨ 픽셀아트 피처 {wired}개에 셰이더를 꽂았고, " +
+                $"[BattleWiring] ⑩ 픽셀아트 피처 {wired}개에 셰이더를 꽂았고, " +
                 $"SSAO {disabledAo}개를 껐습니다.");
         }
 
@@ -623,7 +677,7 @@ namespace SRPG.Editor.Tools
         ///
         /// 여러 번 실행해도 결과가 같습니다. 이미 꽂혀 있으면 건드리지 않습니다.
         /// </summary>
-        [MenuItem("SRPG/배선/⑩ 픽셀 격자·사운드 에셋 연결", priority = 39)]
+        [MenuItem("SRPG/배선/⑪ 픽셀 격자·사운드 에셋 연결", priority = 40)]
         public static void WireGridAndAudio()
         {
             var grid = EnsurePixelGrid();
@@ -684,7 +738,7 @@ namespace SRPG.Editor.Tools
             AssetDatabase.SaveAssets();
 
             Debug.Log(
-                $"[BattleWiring] ⑩ 격자를 피처 {features}개와 열린 씬의 카메라 {cameras}개에 꽂았습니다. " +
+                $"[BattleWiring] ⑪ 격자를 피처 {features}개와 열린 씬의 카메라 {cameras}개에 꽂았습니다. " +
                 (wiredBank ? "사운드 뱅크도 연결했습니다." : "사운드 뱅크는 이미 연결되어 있거나 구성 에셋이 없습니다."));
         }
 
@@ -1038,6 +1092,52 @@ namespace SRPG.Editor.Tools
                     $"'{snap.name}' 의 픽셀 격자가 렌더러 피처와 다릅니다 " +
                     $"(카메라: {Describe(property.objectReferenceValue)}, 피처: {Describe(featureGrid)}). " +
                     "화면이 기어다닙니다.");
+            }
+        }
+
+        /// <summary>
+        /// 후처리 프로필에 실제로 항목이 들어 있는지 확인합니다.
+        ///
+        /// <b>왜 이 확인이 필요한가</b>
+        ///
+        /// 프로필이 비어 있어도 아무 오류가 나지 않습니다. 볼륨은 그대로 서 있고,
+        /// 화면은 그려지고, 그저 톤매핑과 색보정이 <b>걸리지 않을 뿐</b>입니다.
+        ///
+        /// 실제로 그 상태였습니다. 굽는 도구가 컴포넌트를 하위 에셋으로 붙이지 않아
+        /// 넷이 전부 끊긴 참조로 저장되어 있었고, 그것을 알아차리는 데
+        /// "후처리 수치가 어디 있는가"를 되짚는 일이 필요했습니다.
+        /// </summary>
+        /// <param name="problems">발견한 문제가 여기 쌓입니다.</param>
+        private static void CheckPostProcess(List<string> problems)
+        {
+            var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(
+                PostProcessBuilder.BattleProfilePath);
+
+            if (profile == null)
+            {
+                problems.Add($"후처리 프로필이 없습니다: {PostProcessBuilder.BattleProfilePath}");
+                return;
+            }
+
+            int broken = 0;
+
+            for (int i = 0; i < profile.components.Count; i++)
+            {
+                if (profile.components[i] == null)
+                {
+                    broken++;
+                }
+            }
+
+            if (broken > 0)
+            {
+                problems.Add(
+                    $"후처리 프로필에 끊긴 항목이 {broken}개 있습니다. " +
+                    "컴포넌트가 하위 에셋으로 저장되지 않았습니다.");
+            }
+            else if (profile.components.Count == 0)
+            {
+                problems.Add("후처리 프로필이 비어 있습니다. 톤매핑도 색보정도 걸리지 않습니다.");
             }
         }
 

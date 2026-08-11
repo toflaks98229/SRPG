@@ -223,8 +223,10 @@ namespace SRPG.Rendering
             private static readonly int CreaseColorId = Shader.PropertyToID("_CreaseColor");
             private static readonly int CreaseStrengthId = Shader.PropertyToID("_CreaseStrength");
             private static readonly int DebugModeId = Shader.PropertyToID("_DebugMode");
+
+            /// <summary>깊이 차를 나눌 기준입니다. 0이면 셰이더가 자기 깊이로 나눕니다.</summary>
+            private static readonly int OutlineDepthScaleId = Shader.PropertyToID("_OutlineDepthScale");
             private static readonly int OutlineMaskId = Shader.PropertyToID("_OutlineMask");
-            private static readonly int PixelPanOffsetId = Shader.PropertyToID("_PixelPanOffset");
 
             /// <summary>마스크를 그릴 때 쓸 패스 태그입니다. 셰이더의 LightMode 와 같아야 합니다.</summary>
             private static readonly List<ShaderTagId> MaskTags = new List<ShaderTagId>
@@ -416,7 +418,7 @@ namespace SRPG.Rendering
 
                 var internalTexture = renderGraph.CreateTexture(internalDesc);
 
-                ApplyMaterialValues(internalWidth, internalHeight, useMask);
+                ApplyMaterialValues(internalWidth, internalHeight, useMask, camera);
 
                 RecordBlit(renderGraph, "SRPG Pixel Outline", source, internalTexture, 0, useMask, mask);
 
@@ -495,7 +497,7 @@ namespace SRPG.Rendering
             /// <returns>내부 세로 픽셀 수입니다.</returns>
             private int ResolveInternalHeight(Camera camera, int screenHeight)
             {
-                return _grid.ResolveHeight(screenHeight, PixelGrid.ResolveFocusDistance(camera));
+                return _grid.ResolveHeight(screenHeight, PixelGrid.ResolveViewExtent(camera));
             }
 
             /// <summary>
@@ -504,7 +506,8 @@ namespace SRPG.Rendering
             /// <param name="width">내부 해상도의 가로 픽셀 수입니다.</param>
             /// <param name="height">내부 해상도의 세로 픽셀 수입니다.</param>
             /// <param name="useMask">마스크를 쓰는지 여부입니다.</param>
-            private void ApplyMaterialValues(int width, int height, bool useMask)
+            /// <param name="camera">그리는 카메라입니다. 깊이 차를 나눌 기준을 여기서 얻습니다.</param>
+            private void ApplyMaterialValues(int width, int height, bool useMask, Camera camera)
             {
                 _outlineMaterial.SetVector(
                     OutlineParamsId,
@@ -525,9 +528,26 @@ namespace SRPG.Rendering
                 _outlineMaterial.SetFloat(CreaseStrengthId, _settings.CreaseStrength);
                 _outlineMaterial.SetFloat(DebugModeId, _settings.DebugEdges ? 1f : 0f);
 
-                // 카메라를 격자에 끊는 몫은 PixelSnapCamera 가 투영으로 처리합니다.
-                // 여기서는 확대할 때 추가로 밀 것이 없다는 뜻으로 0을 넣습니다.
-                _outlineMaterial.SetVector(PixelPanOffsetId, Vector4.zero);
+                // <b>깊이 차를 무엇으로 나눌지</b>를 정해 넘깁니다.
+                //
+                // 직교에서는 시점 거리에 "카메라를 얼마나 물려 두었는가"가 통째로 들어 있어,
+                // 그것으로 나누면 리그의 고정 거리를 바꾸는 것만으로 외곽선 굵기가 달라집니다.
+                // 화면의 축척을 정하는 것은 담기는 월드 높이이므로 그것을 넘깁니다.
+                //
+                // 원근에서는 0을 넘겨 셰이더가 자기 깊이로 나누게 둡니다 —
+                // 그쪽은 멀수록 같은 간격이 작게 보이는 것이 맞습니다.
+                _outlineMaterial.SetFloat(
+                    OutlineDepthScaleId,
+                    camera.orthographic ? camera.orthographicSize * 2f : 0f);
+
+                // <b>_PixelPanOffset 은 여기서 건드리지 않습니다.</b>
+                //
+                // 그 값을 아는 것은 카메라입니다(PixelSnapCamera). 격자에 붙이느라 버린 나머지가
+                // 곧 확대할 때 되돌려야 할 양이고, 카메라가 그것을 전역으로 넘깁니다.
+                //
+                // 예전에는 여기서 0을 넣었습니다. 머티리얼에 직접 넣은 값은 전역보다 <b>세므로</b>,
+                // 카메라가 아무리 제대로 넘겨도 이 한 줄이 매 프레임 덮어썼습니다.
+                // 셰이더에 배선이 다 있는데도 보정이 통째로 죽어 있던 것이 그 때문입니다.
             }
         }
     }

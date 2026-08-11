@@ -61,37 +61,37 @@ namespace SRPG.Rendering
         /// 그러지 않으면 줌인할 때 병사가 자기 스프라이트보다 촘촘해 보이고,
         /// 줌아웃하면 한 픽셀보다 작아져 뭉갭니다. 둘 다 픽셀아트의 환상을 깹니다.
         ///
-        /// 보이는 월드 높이는 거리에 비례하므로, 내부 해상도도 거리에 비례시키면
+        /// 화면에 담기는 월드 높이에 내부 해상도를 비례시키면
         /// 픽셀 하나가 덮는 월드 크기가 그대로 유지됩니다.
         ///
         /// <b>왜 셰이더가 스스로 줌을 알 수 없는가</b>
         ///
-        /// 이 게임의 줌은 시야각이 아니라 <b>카메라 거리</b>로 구현되어 있습니다.
-        /// 시야각은 처음부터 끝까지 같으므로 투영 행렬이 전혀 바뀌지 않고,
-        /// 셰이더가 읽을 수 있는 것에는 "초점까지의 거리"가 없습니다.
+        /// 직교 투영에서 줌은 <c>orthographicSize</c> 이고, 그것은 투영 행렬에 들어 있습니다.
+        /// 그러나 후처리 셰이더가 받는 것은 이미 그려진 그림 한 장이라
+        /// <b>그 그림이 얼마만 한 월드를 담고 있는지</b>를 알 방법이 없습니다.
         /// 그래서 이 값은 CPU 가 구해 넘겨야 합니다.
         /// </summary>
         /// <param name="screenHeight">실제 화면의 세로 픽셀 수입니다.</param>
-        /// <param name="baseHeight">기준 거리에서 쓸 내부 세로 픽셀 수입니다.</param>
-        /// <param name="referenceDistance">기준이 되는 카메라 거리입니다.</param>
-        /// <param name="currentDistance">지금 카메라가 초점에서 떨어진 거리입니다.</param>
+        /// <param name="baseHeight">기준 줌에서 쓸 내부 세로 픽셀 수입니다.</param>
+        /// <param name="referenceExtent">기준이 되는 화면 높이의 절반(월드 단위)입니다.</param>
+        /// <param name="currentExtent">지금 화면에 담기는 높이의 절반입니다.</param>
         /// <param name="minHeight">아무리 줌인해도 이보다 거칠어지지 않습니다.</param>
         /// <param name="maxHeight">아무리 줌아웃해도 이보다 촘촘해지지 않습니다.</param>
         /// <returns>정수 배율로 맞춰진 내부 세로 픽셀 수입니다.</returns>
         public static int ResolveHeight(
             int screenHeight,
             int baseHeight,
-            float referenceDistance,
-            float currentDistance,
+            float referenceExtent,
+            float currentExtent,
             int minHeight,
             int maxHeight)
         {
-            if (referenceDistance <= 0.01f || currentDistance <= 0.01f)
+            if (referenceExtent <= 0.01f || currentExtent <= 0.01f)
             {
                 return SnapToIntegerScale(screenHeight, baseHeight);
             }
 
-            float desired = baseHeight * (currentDistance / referenceDistance);
+            float desired = baseHeight * (currentExtent / referenceExtent);
 
             desired = Mathf.Clamp(desired, minHeight, maxHeight);
 
@@ -99,23 +99,80 @@ namespace SRPG.Rendering
         }
 
         /// <summary>
-        /// 카메라가 초점에서 떨어진 거리입니다.
+        /// 화면에 담기는 월드 높이의 <b>절반</b>입니다. 이 게임에서 "줌"이 곧 이 값입니다.
         ///
-        /// 카메라 리그가 피벗의 자식으로 카메라를 두고, 피벗이 곧 부대가 선 자리입니다.
-        /// 그래서 부모까지의 거리가 그대로 줌의 정도가 됩니다.
+        /// <b>왜 거리가 아니라 이것인가</b>
+        ///
+        /// 예전에는 카메라와 초점 사이의 거리를 줌으로 삼았습니다. 원근이었기 때문입니다.
+        /// 직교로 옮기면서 거리는 줌과 무관해졌습니다 — 카메라를 뒤로 물려도 화면은 그대로입니다.
+        ///
+        /// 두 투영을 하나로 잇는 개념이 이것입니다. 직교에서는 <c>orthographicSize</c> 그대로이고,
+        /// 원근에서는 초점 평면에서의 값이 됩니다. <b>원근 경로가 남아 있는 이유</b>는
+        /// 씬 뷰 카메라와 편집 중의 미리보기가 원근일 수 있기 때문입니다 —
+        /// 게임 카메라는 직교이지만 이 함수는 그것을 강제할 수 없습니다.
         /// </summary>
         /// <param name="camera">잴 카메라입니다.</param>
-        /// <returns>초점까지의 거리입니다. 초점을 알 수 없으면 0입니다.</returns>
-        public static float ResolveFocusDistance(Camera camera)
+        /// <returns>화면 높이의 절반(월드 단위)입니다. 구할 수 없으면 0입니다.</returns>
+        public static float ResolveViewExtent(Camera camera)
         {
             if (camera == null)
             {
                 return 0f;
             }
 
+            if (camera.orthographic)
+            {
+                return camera.orthographicSize;
+            }
+
             var pivot = camera.transform.parent;
 
-            return pivot != null ? Vector3.Distance(camera.transform.position, pivot.position) : 0f;
+            if (pivot == null)
+            {
+                return 0f;
+            }
+
+            float distance = Vector3.Distance(camera.transform.position, pivot.position);
+
+            return distance * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        }
+
+        /// <summary>
+        /// 내부 픽셀 하나가 덮는 월드 길이입니다.
+        ///
+        /// <b>직교에서만 이 값이 화면 전체에 통합니다.</b>
+        /// 원근에서는 깊이마다 달라져 한 평면에서만 맞고, 그래서 픽셀 격자를 온전히 붙잡을 수 없습니다.
+        /// 이 게임이 전투 카메라를 직교로 옮긴 이유가 이 한 줄입니다.
+        /// </summary>
+        /// <param name="viewExtent">화면 높이의 절반(월드 단위)입니다.</param>
+        /// <param name="internalHeight">내부 세로 픽셀 수입니다.</param>
+        /// <returns>픽셀 하나가 덮는 월드 길이입니다. 구할 수 없으면 0입니다.</returns>
+        public static float TexelSize(float viewExtent, int internalHeight)
+        {
+            if (viewExtent <= 0f || internalHeight <= 0)
+            {
+                return 0f;
+            }
+
+            return viewExtent * 2f / internalHeight;
+        }
+
+        /// <summary>
+        /// 격자에서 벗어난 만큼을 월드 길이로 구합니다.
+        ///
+        /// 결과는 항상 텍셀 하나의 절반 안쪽입니다 — 가장 가까운 격자점을 기준으로 재기 때문입니다.
+        /// </summary>
+        /// <param name="along">어떤 축 방향으로 잰 좌표입니다.</param>
+        /// <param name="texelSize">픽셀 하나가 덮는 월드 길이입니다.</param>
+        /// <returns>격자에서 벗어난 길이입니다. 텍셀 크기가 0이면 0입니다.</returns>
+        public static float SubTexelOffset(float along, float texelSize)
+        {
+            if (texelSize <= 0f)
+            {
+                return 0f;
+            }
+
+            return along - Mathf.Round(along / texelSize) * texelSize;
         }
     }
 }
