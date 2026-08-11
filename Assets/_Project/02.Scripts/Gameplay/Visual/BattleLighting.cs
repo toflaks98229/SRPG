@@ -57,6 +57,42 @@ namespace SRPG.Gameplay.Visual
         /// </summary>
         public const float AmbientBoost = 0.35f;
 
+        /// <summary>
+        /// 명암을 나누는 계단의 수입니다.
+        ///
+        /// <b>왜 계단으로 끊는가</b>
+        ///
+        /// 매끄러운 램버트는 밝기를 연속으로 깝니다. 눈은 연속된 밝기에서 경계를 못 읽습니다 —
+        /// 완만한 비탈은 어디가 능선인지 보이지 않습니다.
+        /// 서너 단으로 끊으면 그 경계가 등고선처럼 드러나고, 고도가 형태로 읽힙니다.
+        ///
+        /// 넷은 화면으로 고른 값입니다. 셋이면 평지와 비탈이 같은 단에 뭉치고,
+        /// 여섯을 넘기면 다시 매끄러운 것과 구별되지 않습니다.
+        /// </summary>
+        public const int ToonCuts = 4;
+
+        /// <summary>
+        /// 명암의 치우침입니다. 올리면 전체가 밝은 단으로 밀립니다.
+        /// </summary>
+        public const float ToonWrap = 0f;
+
+        /// <summary>
+        /// 명암의 기울기입니다. 올리면 밝은 단에 일찍 닿아 대비가 세집니다.
+        /// </summary>
+        public const float ToonSteepness = 1f;
+
+        /// <summary>
+        /// 계단 경계에 두는 그라디언트의 폭입니다. 한 단 폭에 대한 비율입니다.
+        ///
+        /// <b>0으로 두면 안 됩니다.</b> 순수한 계단은 넓고 완만한 지형에서
+        /// 경계선이 화면을 가로지르며 카메라가 움직일 때마다 출렁입니다.
+        /// 경계에만 좁은 그라디언트를 두면 계단은 계단대로 남으면서 그 출렁임이 사라집니다.
+        /// </summary>
+        public const float ToonGradient = 0.35f;
+
+        /// <summary>계단식 명암의 전역 식별자입니다.</summary>
+        private static readonly int ToonParamsId = Shader.PropertyToID("_ToonParams");
+
         // ====================================================================================================
         // 2. Public Methods
         // ====================================================================================================
@@ -73,6 +109,32 @@ namespace SRPG.Gameplay.Visual
             RenderSettings.ambientEquatorColor = AmbientEquator;
             RenderSettings.ambientGroundColor = AmbientGround;
             RenderSettings.fog = false;
+
+            // <b>여기서 같이 올립니다.</b>
+            //
+            // 따로 부르게 두면 언젠가 한 곳이 잊습니다. 그러면 전역이 안 올라간 채로
+            // 셰이더가 돌고, 명암만 조용히 예전처럼 매끄러워집니다.
+            // 오류도 안 나고 테스트도 통과하는데 화면만 다른, 이 파일이 막으려던 바로 그 버그입니다.
+            ApplyToon();
+        }
+
+        /// <summary>
+        /// 계단식 명암을 전역으로 올립니다.
+        ///
+        /// <b>왜 머티리얼이 아니라 전역인가</b>
+        ///
+        /// 명암의 단 수는 머티리얼의 성질이 아니라 <b>화면 전체의 그림체</b>입니다.
+        /// 구름과 같은 이유입니다 — 머티리얼마다 값을 두면 언젠가 하나가 어긋나고,
+        /// 그때부터 지형은 네 단인데 그 위의 풀만 여섯 단이 됩니다.
+        /// 값을 한 곳에서 올리고 네 셰이더가 같은 함수를 부릅니다.
+        /// </summary>
+        public static void ApplyToon()
+        {
+            Shader.SetGlobalVector(ToonParamsId, new Vector4(
+                ToonCuts,
+                ToonWrap,
+                ToonSteepness,
+                ToonGradient));
         }
 
         /// <summary>

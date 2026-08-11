@@ -79,6 +79,12 @@ Shader "SRPG/Terrain"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
+            // 물·풀과 <b>같은</b> 구름 그림자입니다. 갈라지면 지형만 다른 하늘 아래 놓입니다.
+            #include "SRPG_Noise.hlsl"
+
+            // 물·풀·유닛과 <b>같은</b> 계단식 명암입니다.
+            #include "SRPG_Toon.hlsl"
+
             CBUFFER_START(UnityPerMaterial)
                 float4 _LowColor;
                 float4 _HighColor;
@@ -146,15 +152,26 @@ Shader "SRPG/Terrain"
                 float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
                 Light mainLight = GetMainLight(shadowCoord);
 
-                // 램버트를 0~1로 접은 뒤(half lambert) 다시 눌러 씁니다.
+                // 램버트를 0~1로 접습니다(half lambert).
                 // 그대로 쓰면 빛을 등진 면이 새까매져 지형이 안 읽힙니다.
                 float lambert = dot(normal, mainLight.direction) * 0.5 + 0.5;
-                float shading = lerp(_AmbientBoost, 1.0, lambert);
 
-                // 그림자도 완전히 검게 두지 않습니다. 부대가 그늘에 들어가면 안 보입니다.
-                float shadow = lerp(1.0 - _ShadowDepth, 1.0, mainLight.shadowAttenuation);
+                // 지나가는 구름의 그늘입니다. 네 셰이더가 모두 같은 함수를 부릅니다.
+                float clouds = CloudShadow(input.positionWS, mainLight.direction);
 
-                return half4(albedo * shading * shadow * mainLight.color, 1.0);
+                // 명암·그림자·구름을 한 번에 접어 계단으로 끊습니다.
+                //
+                // <b>지형이 이 계단을 가장 크게 씁니다.</b>
+                // 완만한 비탈은 램버트가 아주 천천히 변해 어디가 능선인지 보이지 않습니다.
+                // 계단으로 끊으면 그 경계가 등고선처럼 드러나고, 고도가 형태로 읽힙니다.
+                float shading = ToonLight(
+                    lambert,
+                    mainLight.shadowAttenuation,
+                    clouds,
+                    _AmbientBoost,
+                    _ShadowDepth);
+
+                return half4(albedo * shading * mainLight.color, 1.0);
             }
             ENDHLSL
         }
@@ -211,13 +228,88 @@ Shader "SRPG/Terrain"
                 float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
                 float3 normalWS   = TransformObjectToWorldNormal(input.normalOS);
 
-                output.positionCS = ApplyShadowBias(positionWS, normalWS, _LightDirection);
+                // ApplyShadowBias 가 돌려주는 것은 <b>밀어낸 월드 좌표</b>이지 클립 좌표가 아닙니다.
+                // 반환값을 positionCS 에 바로 넣으면 float3 를 float4 에 넣는 셈이라 컴파일이 막히고,
+                // 이 패스가 죽으면 <b>지형이 그림자를 드리우지 않습니다</b>.
+                // 밀어낸 뒤에 반드시 클립 공간으로 옮겨야 합니다.
+                output.positionCS = TransformWorldToHClip(
+                    ApplyShadowBias(positionWS, normalWS, _LightDirection));
+
                 return output;
             }
 
             half4 ShadowFragment(Varyings input) : SV_Target
             {
                 return 0;
+            }
+            ENDHLSL
+        }
+
+        // ================================================================================================
+        // 깊이와 노멀을 함께 그리는 패스입니다.
+        //
+        // <b>없으면 화면 공간 주변 차폐가 지형을 통째로 건너뜁니다.</b>
+        //
+        // 렌더러의 SSAO 는 노멀 원본을 DepthNormals 로 잡고 있습니다.
+        // 이 패스가 없는 물체는 노멀 버퍼에 아무것도 남기지 않으므로,
+        // 지형 위에 차폐가 생기지 않고 바위 밑동도 어두워지지 않습니다.
+        // 컴파일도 되고 경고도 없이 효과만 사라지는 종류의 누락입니다.
+        // ================================================================================================
+        Pass
+        {
+            Name "DepthNormals"
+            Tags { "LightMode" = "DepthNormals" }
+
+            ZWrite On
+            Cull Back
+
+            HLSLPROGRAM
+            #pragma vertex DepthNormalsVertex
+            #pragma fragment DepthNormalsFragment
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _LowColor;
+                float4 _HighColor;
+                float4 _RockColor;
+                float4 _WetColor;
+                float  _SeaLevel;
+                float  _HeightRange;
+                float  _WetBand;
+                float  _ClimbLimit;
+                float  _RockBlend;
+                float  _AmbientBoost;
+                float  _ShadowDepth;
+            CBUFFER_END
+
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS   : NORMAL;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float3 normalWS   : TEXCOORD0;
+            };
+
+            Varyings DepthNormalsVertex(Attributes input)
+            {
+                Varyings output;
+
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+
+                return output;
+            }
+
+            half4 DepthNormalsFragment(Varyings input) : SV_Target
+            {
+                // 전방 렌더링에서는 월드 노멀을 그대로 씁니다.
+                // 지연 렌더링으로 옮기면 팔면체 부호화가 필요합니다.
+                return half4(NormalizeNormalPerPixel(input.normalWS), 0.0);
             }
             ENDHLSL
         }

@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b5dbee4446bdd0248861991398a04d7b, type: 3}
   m_Name: Battlefield_River
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.BattlefieldProfile
-  Kind: 4
-  MaxElevation: 2
+  Kind: 1
+  MaxElevation: 1
   HillScale: 0.08
   ClimbLimitDegrees: 34
   ObstacleDensity: 0.02

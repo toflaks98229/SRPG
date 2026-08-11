@@ -29,6 +29,10 @@ namespace SRPG.Tests
         private Color _savedGround;
         private Material _savedSkybox;
         private bool _savedFog;
+        private Vector4 _savedToonParams;
+
+        /// <summary>계단식 명암의 전역 식별자입니다.</summary>
+        private static readonly int ToonParamsId = Shader.PropertyToID("_ToonParams");
 
         [SetUp]
         public void SetUp()
@@ -40,6 +44,9 @@ namespace SRPG.Tests
             _savedGround = RenderSettings.ambientGroundColor;
             _savedSkybox = RenderSettings.skybox;
             _savedFog = RenderSettings.fog;
+
+            // 셰이더 전역도 마찬가지입니다.
+            _savedToonParams = Shader.GetGlobalVector(ToonParamsId);
         }
 
         [TearDown]
@@ -51,6 +58,8 @@ namespace SRPG.Tests
             RenderSettings.ambientGroundColor = _savedGround;
             RenderSettings.skybox = _savedSkybox;
             RenderSettings.fog = _savedFog;
+
+            Shader.SetGlobalVector(ToonParamsId, _savedToonParams);
         }
 
         // ====================================================================================================
@@ -196,7 +205,57 @@ namespace SRPG.Tests
         }
 
         // ====================================================================================================
-        // 5. Helpers
+        // 5. 계단식 명암
+        // ====================================================================================================
+
+        /// <summary>
+        /// 명암의 단 수는 셰이더가 전역으로 받습니다.
+        ///
+        /// 전역이 안 올라가면 셰이더는 <b>조용히</b> 예전처럼 매끄럽게 칠합니다.
+        /// 오류도 안 나고 다른 테스트도 전부 통과하는데 화면만 달라집니다.
+        /// 그래서 올리는 일을 <see cref="BattleLighting.ApplyAmbient"/> 안에 묶었고,
+        /// 여기서 그 묶음이 풀리지 않았는지 봅니다.
+        /// </summary>
+        [Test]
+        public void 환경광을_적용하면_계단식_명암도_함께_올라간다()
+        {
+            Shader.SetGlobalVector(ToonParamsId, Vector4.zero);
+
+            BattleLighting.ApplyAmbient();
+
+            Vector4 published = Shader.GetGlobalVector(ToonParamsId);
+
+            Assert.AreEqual(BattleLighting.ToonCuts, published.x, 0.001f,
+                "계단 수가 안 올라갔습니다. 화면이 예전처럼 매끄럽게 칠해집니다.");
+            Assert.AreEqual(BattleLighting.ToonWrap, published.y, 0.001f);
+            Assert.AreEqual(BattleLighting.ToonSteepness, published.z, 0.001f);
+            Assert.AreEqual(BattleLighting.ToonGradient, published.w, 0.001f);
+        }
+
+        /// <summary>
+        /// 단이 하나면 명암이 통째로 사라집니다. 셰이더는 그 값도 받아 그리므로
+        /// 아무 오류 없이 지형이 평평한 색 한 장이 됩니다.
+        /// </summary>
+        [Test]
+        public void 계단은_최소_두_단_이상이다()
+        {
+            Assert.GreaterOrEqual(BattleLighting.ToonCuts, 2,
+                "단이 하나면 지형의 굴곡이 통째로 사라집니다.");
+        }
+
+        /// <summary>
+        /// 경계에 그라디언트가 없으면 넓고 완만한 지형에서 계단선이 화면을 가로지르며
+        /// 카메라가 움직일 때마다 출렁입니다.
+        /// </summary>
+        [Test]
+        public void 계단_경계에는_그라디언트가_있다()
+        {
+            Assert.Greater(BattleLighting.ToonGradient, 0f,
+                "경계가 딱 갈리면 완만한 비탈에서 계단선이 출렁입니다.");
+        }
+
+        // ====================================================================================================
+        // 6. Helpers
         // ====================================================================================================
 
         /// <summary>
