@@ -171,11 +171,12 @@ namespace SRPG.Tests
             {
                 var roster = new CampaignRoster();
 
-                roster.Enlist(
+                var archers = roster.Enlist(
                     definition, 5, "궁수대",
                     default(WeaponProficiency).Gain(AttackStyle.Projectile, 75));
 
                 var request = roster.BuildRequest(
+                    new[] { archers.Id },
                     new[] { new SquadOrder { Id = 101, Definition = definition, SoldierCount = 3 } },
                     BattlefieldSpec.CreateDefault(),
                     1);

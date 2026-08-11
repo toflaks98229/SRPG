@@ -207,6 +207,7 @@ namespace SRPG.Tests
             roster.ApplyResult(result);
 
             var next = roster.BuildRequest(
+                new[] { squad.Id },
                 new[] { new SquadOrder { Id = 101, Definition = _archer, SoldierCount = 3 } },
                 BattlefieldSpec.CreateDefault(),
                 1);

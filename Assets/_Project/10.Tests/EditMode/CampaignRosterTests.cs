@@ -46,19 +46,20 @@ namespace SRPG.Tests
         // ====================================================================================================
 
         [Test]
-        public void 장부의_분대가_그대로_주문서에_오른다()
+        public void 고른_분대가_그대로_주문서에_오른다()
         {
             var roster = new CampaignRoster();
 
-            roster.Enlist(_definition, 5, "선봉대");
-            roster.Enlist(_definition, 3, "후위");
+            var vanguard = roster.Enlist(_definition, 5, "선봉대");
+            var rear = roster.Enlist(_definition, 3, "후위");
 
             var request = roster.BuildRequest(
+                new[] { vanguard.Id, rear.Id },
                 new[] { new SquadOrder { Id = 101, Definition = _definition, SoldierCount = 4 } },
                 BattlefieldSpec.CreateDefault(),
                 1234);
 
-            Assert.AreEqual(2, request.PlayerSquads.Count, "장부의 분대 수와 주문서가 다릅니다.");
+            Assert.AreEqual(2, request.PlayerSquads.Count, "고른 분대 수와 주문서가 다릅니다.");
             Assert.AreEqual("선봉대", request.PlayerSquads[0].DisplayName);
             Assert.AreEqual(5, request.PlayerSquads[0].SoldierCount);
             Assert.AreEqual(3, request.PlayerSquads[1].SoldierCount);
@@ -66,22 +67,76 @@ namespace SRPG.Tests
             Assert.IsTrue(request.IsValid(out string problem), $"주문서가 온전하지 않습니다: {problem}");
         }
 
+        /// <summary>
+        /// 고르지 않은 분대는 주문서에 오르지 않습니다.
+        ///
+        /// <b>이것이 출진 편성의 전부입니다.</b> 여기가 무너지면 체크를 빼도 부대가 따라 나가고,
+        /// 화면에서는 그것이 보이지 않습니다.
+        /// </summary>
         [Test]
-        public void 무너진_분대는_주문서에_오르지_않는다()
+        public void 고르지_않은_분대는_주문서에_오르지_않는다()
+        {
+            var roster = new CampaignRoster();
+
+            var going = roster.Enlist(_definition, 5, "선봉대");
+            roster.Enlist(_definition, 5, "남는 부대");
+
+            var request = roster.BuildRequest(
+                new[] { going.Id },
+                null,
+                BattlefieldSpec.CreateDefault(),
+                1);
+
+            Assert.AreEqual(1, request.PlayerSquads.Count, "두고 온 분대가 전장에 섰습니다.");
+            Assert.AreEqual("선봉대", request.PlayerSquads[0].DisplayName);
+        }
+
+        /// <summary>
+        /// 골라 두었더라도 무너진 분대는 서지 않습니다.
+        ///
+        /// 편성은 식별자만 들고 있으므로, 장부의 생사를 여기서 한 번 더 봅니다.
+        /// 인원 0인 분대를 내보내면 전장에 지휘관만 선 유령 분대가 생깁니다.
+        /// </summary>
+        [Test]
+        public void 무너진_분대는_골랐어도_주문서에_오르지_않는다()
         {
             var roster = new CampaignRoster();
 
             var doomed = roster.Enlist(_definition, 5);
-            roster.Enlist(_definition, 5);
+            var alive = roster.Enlist(_definition, 5);
 
             doomed.Disbanded = true;
 
             var request = roster.BuildRequest(
+                new[] { doomed.Id, alive.Id },
                 new[] { new SquadOrder { Id = 101, Definition = _definition, SoldierCount = 4 } },
                 BattlefieldSpec.CreateDefault(),
                 1);
 
             Assert.AreEqual(1, request.PlayerSquads.Count, "무너진 분대가 전장에 섰습니다.");
+        }
+
+        /// <summary>
+        /// 아무도 고르지 않으면 아군 없는 주문서가 나옵니다.
+        ///
+        /// <b>여기서 막지 않는 것이 규칙입니다.</b> 막는 자리는 <c>CampaignDirector.MoveTo</c> 이고,
+        /// 장부가 대신 전부 데려가면 "편성이 비었다"는 사실이 조용히 덮입니다.
+        /// </summary>
+        [Test]
+        public void 아무도_고르지_않으면_아군이_없다()
+        {
+            var roster = new CampaignRoster();
+
+            roster.Enlist(_definition, 5);
+            roster.Enlist(_definition, 5);
+
+            var request = roster.BuildRequest(
+                System.Array.Empty<int>(),
+                null,
+                BattlefieldSpec.CreateDefault(),
+                1);
+
+            Assert.AreEqual(0, request.PlayerSquads.Count, "고르지 않았는데 부대가 나갔습니다.");
         }
 
         // ====================================================================================================
@@ -168,6 +223,7 @@ namespace SRPG.Tests
             roster.ApplyResult(first);
 
             var next = roster.BuildRequest(
+                new[] { squad.Id },
                 new[] { new SquadOrder { Id = 101, Definition = _definition, SoldierCount = 4 } },
                 BattlefieldSpec.CreateDefault(),
                 2);

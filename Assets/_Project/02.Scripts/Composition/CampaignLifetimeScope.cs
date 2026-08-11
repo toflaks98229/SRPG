@@ -74,6 +74,9 @@ namespace SRPG.Composition
         [Tooltip("전투 성과를 부대의 성장으로 옮기는 규칙입니다. 비워 두면 기본 곡선을 씁니다.")]
         [SerializeField] private CampaignProgression _progression = new CampaignProgression();
 
+        [Tooltip("판과 판 사이의 규칙입니다. 지금은 출진 상한이 여기 있습니다.")]
+        [SerializeField] private CampaignTuning _campaignTuning = new CampaignTuning();
+
         [Header("씬")]
         [SerializeField]
         [Tooltip("전투가 벌어질 씬의 이름입니다.")]
@@ -150,10 +153,15 @@ namespace SRPG.Composition
         {
             var playerRoster = ResolveRoster(true);
             var progression = _progression ?? new CampaignProgression();
+            var campaignTuning = _campaignTuning ?? new CampaignTuning();
+
+            var roster = BuildRoster(playerRoster, progression);
 
             builder.RegisterInstance(progression);
+            builder.RegisterInstance(campaignTuning);
             builder.RegisterInstance(ResolveWorldMap());
-            builder.RegisterInstance(BuildRoster(playerRoster, progression));
+            builder.RegisterInstance(roster);
+            builder.RegisterInstance(BuildDeployment(roster, campaignTuning));
             builder.RegisterInstance(new BattleOrders());
             builder.Register<CampaignDirector>(Lifetime.Singleton);
 
@@ -187,6 +195,28 @@ namespace SRPG.Composition
             }
 
             return built;
+        }
+
+        /// <summary>
+        /// 이번 회차의 출진 편성을 만듭니다.
+        ///
+        /// <b>여기서 한 번만 채웁니다.</b> 처음 월드맵을 열었을 때 아무도 고르지 않은 채
+        /// 이동이 막혀 있으면 그것은 규칙이 아니라 고장으로 보입니다.
+        /// 그래서 상한까지 장부 순서대로 채워 두고, 이후에는 플레이어가 고칩니다.
+        ///
+        /// 전투가 끝날 때마다 다시 채우지는 않습니다 —
+        /// 그러면 "이 분대는 쉬게 두겠다"는 결정이 매 판 되돌려집니다.
+        /// </summary>
+        /// <param name="roster">채울 후보가 담긴 장부입니다.</param>
+        /// <param name="tuning">출진 상한이 담긴 규칙입니다.</param>
+        /// <returns>상한까지 채워진 편성입니다.</returns>
+        private static DeploymentPlan BuildDeployment(CampaignRoster roster, CampaignTuning tuning)
+        {
+            var plan = new DeploymentPlan(tuning);
+
+            plan.Refill(roster.Squads);
+
+            return plan;
         }
 
         /// <summary>지도를 정합니다. 연결되지 않았으면 기본 지도를 만듭니다.</summary>

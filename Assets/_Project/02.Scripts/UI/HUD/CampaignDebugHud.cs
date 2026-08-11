@@ -42,6 +42,9 @@ namespace SRPG.UI.HUD
         /// <summary>본문 글자 스타일입니다.</summary>
         private GUIStyle _labelStyle;
 
+        /// <summary>편성 체크박스 스타일입니다.</summary>
+        private GUIStyle _toggleStyle;
+
         /// <summary>패널 배경 텍스처입니다. 파괴할 때 함께 정리합니다.</summary>
         private Texture2D _panelTexture;
 
@@ -113,20 +116,42 @@ namespace SRPG.UI.HUD
             GUILayout.Label(_builder.ToString(), _labelStyle);
         }
 
-        /// <summary>거느린 부대를 적습니다. 이것이 전장에 그대로 섭니다.</summary>
+        /// <summary>
+        /// 거느린 부대를 적고, <b>데리고 나갈 것을 고르게</b> 합니다.
+        ///
+        /// 체크를 뺀 분대는 이 자리에 남습니다 — 주문서에 오르지 않으므로
+        /// 손실도 성장도 없습니다.
+        /// </summary>
         private void DrawRoster()
         {
-            _builder.Clear();
-            _builder.Append("<b>부대</b>  (분대 ").Append(_director.Roster.LivingSquadCount).AppendLine("개)");
-
+            var plan = _director.Deployment;
             var squads = _director.Roster.Squads;
+
+            _builder.Clear();
+            _builder
+                .Append("<b>출진 편성</b>  ")
+                .Append(plan.Count)
+                .Append('/')
+                .Append(plan.Cap)
+                .Append("  (거느린 분대 ")
+                .Append(_director.Roster.LivingSquadCount)
+                .Append("개)");
+
+            GUILayout.Label(_builder.ToString(), _labelStyle);
+
+            if (squads.Count == 0)
+            {
+                GUILayout.Label("· 남은 부대가 없습니다.", _labelStyle);
+                return;
+            }
 
             for (int i = 0; i < squads.Count; i++)
             {
                 var squad = squads[i];
+                bool selected = plan.IsSelected(squad.Id);
 
+                _builder.Clear();
                 _builder
-                    .Append("· ")
                     .Append(squad.Id)
                     .Append("번 ")
                     .Append(squad.ResolveName())
@@ -137,15 +162,57 @@ namespace SRPG.UI.HUD
                     .Append("명, 단련 ")
                     .Append(squad.Rank)
                     .Append(", 숙련 ")
-                    .AppendLine(DescribeProficiency(squad));
+                    .Append(DescribeProficiency(squad));
+
+                // 자리가 찼으면 <b>고르지 않은 것만</b> 잠급니다.
+                // 전부 잠그면 하나를 빼서 다른 하나를 넣는 것조차 못 하게 됩니다.
+                bool locked = !selected && !plan.HasRoom;
+
+                using (new EditorDisabledScope(locked))
+                {
+                    if (GUILayout.Toggle(selected, _builder.ToString(), _toggleStyle) != selected)
+                    {
+                        plan.Toggle(squad.Id);
+                    }
+                }
             }
 
-            if (squads.Count == 0)
+            if (!plan.IsReady)
             {
-                _builder.AppendLine("· 남은 부대가 없습니다.");
+                GUILayout.Label(
+                    $"<color=#FFB37A>· 최소 {plan.Minimum}개는 골라야 싸울 자리로 갈 수 있습니다.</color>",
+                    _labelStyle);
+            }
+        }
+
+        /// <summary>
+        /// <c>GUI.enabled</c> 를 잠시 껐다가 반드시 되돌리는 자리입니다.
+        ///
+        /// IMGUI 의 <c>enabled</c> 는 전역 상태라, 끄고 되돌리지 않으면
+        /// <b>그 아래로 그리는 모든 것</b>이 함께 잠깁니다. 그 증상은
+        /// "왜 갑자기 이동 버튼이 안 눌리지"로만 보입니다.
+        /// </summary>
+        private readonly struct EditorDisabledScope : System.IDisposable
+        {
+            /// <summary>들어오기 전의 상태입니다. 나갈 때 이것으로 되돌립니다.</summary>
+            private readonly bool _previous;
+
+            /// <param name="disabled">잠글지 여부입니다.</param>
+            public EditorDisabledScope(bool disabled)
+            {
+                _previous = GUI.enabled;
+
+                if (disabled)
+                {
+                    GUI.enabled = false;
+                }
             }
 
-            GUILayout.Label(_builder.ToString(), _labelStyle);
+            /// <inheritdoc />
+            public void Dispose()
+            {
+                GUI.enabled = _previous;
+            }
         }
 
         /// <summary>갈 수 있는 곳을 단추로 늘어놓습니다.</summary>
@@ -172,11 +239,17 @@ namespace SRPG.UI.HUD
                 any = true;
 
                 var node = map.GetNode(i);
-                string marker = _director.HasEnemyAt(i) ? " ⚔" : "";
+                bool fight = _director.HasEnemyAt(i);
+                string marker = fight ? " ⚔" : "";
 
-                if (GUILayout.Button($"{node.DisplayName}{marker}"))
+                // 편성이 비면 싸울 자리로는 갈 수 없습니다. 눌러도 되는 것처럼 두고
+                // 아무 일도 일어나지 않게 하는 것이 가장 나쁩니다 — 눌린 것인지 고장인지 알 수 없습니다.
+                using (new EditorDisabledScope(fight && !_director.Deployment.IsReady))
                 {
-                    _move?.Invoke(i);
+                    if (GUILayout.Button($"{node.DisplayName}{marker}"))
+                    {
+                        _move?.Invoke(i);
+                    }
                 }
             }
 
@@ -236,6 +309,17 @@ namespace SRPG.UI.HUD
             };
 
             _labelStyle.normal.textColor = Color.white;
+
+            _toggleStyle = new GUIStyle(GUI.skin.toggle)
+            {
+                richText = true,
+                wordWrap = true,
+            };
+
+            _toggleStyle.normal.textColor = Color.white;
+            _toggleStyle.onNormal.textColor = Color.white;
+            _toggleStyle.hover.textColor = Color.white;
+            _toggleStyle.onHover.textColor = Color.white;
         }
     }
 }

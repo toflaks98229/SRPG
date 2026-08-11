@@ -126,17 +126,32 @@ namespace SRPG.Gameplay.Campaign
         // ====================================================================================================
 
         /// <summary>
-        /// 장부에 적힌 부대로 이번 전투의 주문서를 씁니다.
+        /// 장부에서 <b>고른 부대만</b> 골라 이번 전투의 주문서를 씁니다.
+        ///
+        /// <b>고르는 일은 여기서 하지 않습니다.</b> 누구를 데려갈지는 이번 회차의 의도이고
+        /// (<c>DeploymentPlan</c>), 장부는 그 결정을 받아 옮겨 적을 뿐입니다.
+        /// 장부가 스스로 고르기 시작하면 "왜 이 분대가 나갔는가"의 답이 두 곳으로 갈립니다.
         ///
         /// <b>살아 있는 분대만 데려갑니다.</b> 무너진 분대를 인원 0으로 내보내면
         /// 전장에 지휘관만 선 유령 분대가 생깁니다.
+        ///
+        /// <b>순서는 고른 순서를 따릅니다.</b> 전개기가 앞에서부터 자리를 채우므로,
+        /// 이 순서가 곧 전장에 먼저 서는 순서가 됩니다.
         /// </summary>
+        /// <param name="deployedIds">
+        /// 데리고 나갈 분대의 식별자입니다. 비어 있으면 아군 없이 주문서가 나갑니다 —
+        /// 그것을 막는 것은 부르는 쪽의 일입니다(<c>CampaignDirector.MoveTo</c>).
+        /// 여기서 전부 데려가는 것으로 대신하면, 편성이 비어 있다는 사실이 조용히 덮입니다.
+        /// </param>
         /// <param name="enemySquads">상대가 데리고 나온 분대입니다.</param>
         /// <param name="battlefield">어디서 싸우는지입니다.</param>
         /// <param name="seed">지형과 배치를 재현하는 시드입니다.</param>
         /// <returns>전투에 넘길 주문서입니다.</returns>
         public BattleRequest BuildRequest(
-            IReadOnlyList<SquadOrder> enemySquads, BattlefieldSpec battlefield, int seed)
+            IReadOnlyList<int> deployedIds,
+            IReadOnlyList<SquadOrder> enemySquads,
+            BattlefieldSpec battlefield,
+            int seed)
         {
             var request = new BattleRequest
             {
@@ -144,11 +159,16 @@ namespace SRPG.Gameplay.Campaign
                 Battlefield = battlefield,
             };
 
-            for (int i = 0; i < _squads.Count; i++)
+            if (deployedIds != null)
             {
-                if (_squads[i].IsAlive)
+                for (int i = 0; i < deployedIds.Count; i++)
                 {
-                    request.PlayerSquads.Add(_squads[i].ToOrder());
+                    var squad = Find(deployedIds[i]);
+
+                    if (squad != null && squad.IsAlive)
+                    {
+                        request.PlayerSquads.Add(squad.ToOrder());
+                    }
                 }
             }
 

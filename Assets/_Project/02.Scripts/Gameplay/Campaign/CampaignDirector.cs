@@ -32,6 +32,9 @@ namespace SRPG.Gameplay.Campaign
         /// <summary>전투에 건넬 주문서를 올려 두는 자리입니다.</summary>
         private readonly BattleOrders _orders;
 
+        /// <summary>다음 전투에 데리고 나갈 부대를 골라 둔 것입니다. 절대 null이 아닙니다.</summary>
+        private readonly DeploymentPlan _deployment;
+
         /// <summary>적 분대 지시를 만들 때 쓰는 재사용 버퍼입니다.</summary>
         private readonly List<SquadOrder> _enemyBuffer = new List<SquadOrder>(8);
 
@@ -61,6 +64,9 @@ namespace SRPG.Gameplay.Campaign
         /// <summary>캠페인이 벌어지는 지도입니다.</summary>
         public WorldMapDefinition Map => _map;
 
+        /// <summary>다음 전투에 데리고 나갈 부대입니다. 월드맵 화면이 이것을 고칩니다.</summary>
+        public DeploymentPlan Deployment => _deployment;
+
         /// <summary>부대가 지금 있는 지점입니다.</summary>
         public WorldNode CurrentLocation => _map.GetNode(CurrentNode);
 
@@ -79,12 +85,21 @@ namespace SRPG.Gameplay.Campaign
         /// <param name="roster">거느린 부대의 장부입니다.</param>
         /// <param name="map">캠페인이 벌어지는 지도입니다.</param>
         /// <param name="orders">전투에 건넬 주문서를 올려 둘 자리입니다.</param>
+        /// <param name="deployment">
+        /// 데리고 나갈 부대를 골라 둔 것입니다. 비우면 기본 규칙으로 새로 만듭니다 —
+        /// 편성까지 신경 쓰지 않고 진행 규칙만 확인하는 검사가 그 경로로 옵니다.
+        /// </param>
         [UnityEngine.Scripting.Preserve]
-        public CampaignDirector(CampaignRoster roster, WorldMapDefinition map, BattleOrders orders)
+        public CampaignDirector(
+            CampaignRoster roster,
+            WorldMapDefinition map,
+            BattleOrders orders,
+            DeploymentPlan deployment = null)
         {
             _roster = roster;
             _map = map;
             _orders = orders;
+            _deployment = deployment ?? new DeploymentPlan();
         }
 
         // ====================================================================================================
@@ -109,14 +124,34 @@ namespace SRPG.Gameplay.Campaign
         ///
         /// <b>도착한 자리에 적이 있으면 주문서를 씁니다.</b>
         /// 쓰기만 하고 전투를 열지는 않습니다 — 여는 것은 씬을 아는 쪽의 일입니다.
+        ///
+        /// <b>싸울 자리로는 편성이 갖춰져야 갑니다.</b>
+        /// 아무도 데려가지 않고 전장에 들어서면 시작하자마자 패배하는데,
+        /// 그것은 플레이어의 선택이 아니라 사고입니다. 그래서 <b>발도 떼지 않습니다</b> —
+        /// 옮긴 뒤에 막으면 하루만 날아가고 부대는 엉뚱한 자리에 서 있게 됩니다.
         /// </summary>
         /// <param name="node">갈 지점 번호입니다.</param>
-        /// <returns>도착한 자리에서 전투가 벌어지면 true입니다.</returns>
+        /// <returns>
+        /// 도착한 자리에서 전투가 벌어지면 true입니다.
+        ///
+        /// <b>false 는 "가지 못했다"가 아닙니다.</b> 조용한 자리로 잘 옮겨도 false 입니다 —
+        /// 이 값이 답하는 것은 "씬을 갈아 끼워야 하는가" 하나뿐입니다.
+        /// 실제로 옮겼는지는 <see cref="CurrentNode"/> 로 보십시오.
+        /// </returns>
         public bool MoveTo(int node)
         {
             if (!CanMoveTo(node))
             {
                 Debug.LogWarning($"[Campaign] {CurrentNode}번에서 {node}번으로는 갈 수 없습니다.");
+                return false;
+            }
+
+            if (HasEnemyAt(node) && !_deployment.IsReady)
+            {
+                Debug.LogWarning(
+                    $"[Campaign] {_map.GetNode(node).DisplayName} 에는 적이 있습니다. " +
+                    $"출진할 부대를 최소 {_deployment.Minimum}개 골라야 합니다.");
+
                 return false;
             }
 
@@ -164,6 +199,11 @@ namespace SRPG.Gameplay.Campaign
             }
 
             _roster.ApplyResult(result);
+
+            // 무너진 분대는 장부에서 사라집니다. 편성에 그 식별자가 남아 있으면
+            // 다음 출진에서 그 자리가 채워진 것으로 세어져, 실제보다 적은 부대를 데리고 나갑니다.
+            // 오류는 나지 않고 "왜 둘만 나갔지"만 남습니다.
+            _deployment.Retain(_roster.Squads);
 
             if (result.Outcome == BattleOutcome.Victory)
             {
@@ -215,7 +255,7 @@ namespace SRPG.Gameplay.Campaign
                 battlefield.Seed = Day * 7919;
             }
 
-            return _roster.BuildRequest(_enemyBuffer, battlefield, battlefield.Seed);
+            return _roster.BuildRequest(_deployment.Selected, _enemyBuffer, battlefield, battlefield.Seed);
         }
     }
 }
