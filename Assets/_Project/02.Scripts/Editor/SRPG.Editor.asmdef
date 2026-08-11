@@ -10,6 +10,7 @@
         "SRPG.Gameplay",
         "SRPG.UI",
         "SRPG.Composition",
+        "VContainer",
         "Unity.TextMeshPro",
         "UnityEngine.UI",
         "Unity.InputSystem",

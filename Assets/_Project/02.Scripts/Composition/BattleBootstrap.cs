@@ -1,36 +1,42 @@
-﻿using System.Collections.Generic;
+using System;
 using SRPG.Common;
+using SRPG.Core;
+using SRPG.Core.Events;
+using SRPG.Core.Managers;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
-using SRPG.Gameplay.CameraControl;
-using SRPG.Gameplay.Debugging;
-using SRPG.Gameplay.Enemies;
-using SRPG.Gameplay.Island;
-using SRPG.Gameplay.Selection;
-using SRPG.Gameplay.Squads;
-using SRPG.Gameplay.Units;
-using SRPG.Gameplay.Visual;
+using SRPG.Gameplay.Campaign;
 using SRPG.Systems.Battlefield;
-using SRPG.Systems.Formation;
 using SRPG.Systems.Grid;
 using SRPG.Systems.Time;
-using SRPG.UI.HUD;
 using UnityEngine;
-using SRPG.Gameplay.Deployment;
+using VContainer;
+using VContainer.Unity;
 
 namespace SRPG.Composition
 {
     /// <summary>
-    /// 전투 씬의 조립 지점입니다. 이 클래스만이 전 계층을 알고 있습니다.
+    /// 전투 한 판의 조립 지점입니다. 이 스코프가 사는 동안만 전투가 존재합니다.
     ///
-    /// 에셋 사용 원칙: <see cref="_setup"/>에 연결된 에셋을 우선 사용하고, 비어 있으면 코드 기본값과
-    /// 프리미티브로 대체합니다. 에셋이 아직 없는 상태에서도 프로젝트가 항상 실행 가능해야
-    /// 새 팀원이 클론 직후 재생 버튼만으로 게임을 볼 수 있고, PlayMode 테스트도 에셋 없이 돌릴 수 있습니다.
+    /// <b>여기가 하는 일은 등록뿐입니다</b>
     ///
-    /// VContainer를 도입하면 이 클래스는 LifetimeScope로 대체됩니다.
+    /// 예전에 이 클래스는 등록과 조립과 생성과 판정을 전부 겸했습니다.
+    /// 지금은 셋으로 나뉘어 있습니다.
+    ///   · <b>여기</b> — 무엇이 있는지 적습니다. 씬을 건드리지 않습니다.
+    ///   · <see cref="BattleEntryPoint"/> — 그것을 어떤 순서로 화면에 세울지 정합니다.
+    ///   · <see cref="Gameplay.Units.UnitFactory"/> — 병사를 찍어 냅니다. 판이 도는 내내 불립니다.
+    ///
+    /// <b>수명이 여기서 갈립니다</b>
+    ///
+    /// 이 스코프에 등록된 것은 전투가 끝나면 전부 사라져야 합니다 —
+    /// 유닛 명부도, 공간 색인도, 위협 지도도 이번 판의 씬 오브젝트를 가리키고 있습니다.
+    /// 판을 넘겨 살아야 하는 것은 여기가 아니라 <see cref="RootLifetimeScope"/> 에 둡니다.
+    ///
+    /// 에셋 사용 원칙은 그대로입니다 — <see cref="_setup"/> 이 연결돼 있으면 그것을,
+    /// 비어 있으면 코드 기본값과 프리미티브를 씁니다. 클론 직후 재생 버튼만으로 게임이 보여야 합니다.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class BattleBootstrap : MonoBehaviour
+    public sealed class BattleBootstrap : LifetimeScope
     {
         // ====================================================================================================
         // 1. Inspector
@@ -82,33 +88,8 @@ namespace SRPG.Composition
         // 2. Fields
         // ====================================================================================================
 
-        private readonly Dictionary<UnitDefinition, Material> _materialCache = new Dictionary<UnitDefinition, Material>();
-
-        /// <summary>이번 판의 런타임 컨텍스트입니다. 조립 지점만이 이것을 통째로 듭니다.</summary>
-        private BattleContext _context;
-        /// <summary>슬로우모션을 거는 전술 시간 제어기입니다.</summary>
-        private TacticalTimeController _timeController;
-        /// <summary>플레이어의 유일한 조작 창구입니다.</summary>
-        private SquadSelectionController _selectionController;
-        /// <summary>양측을 세우고 지원군을 올려보내는 전개기입니다.</summary>
-        private SquadDeployer _deployer;
-        /// <summary>생성된 유닛이 붙을 부모입니다.</summary>
-        private Transform _unitRoot;
-        /// <summary>접지 그림자가 붙을 부모입니다. 첫 유닛을 만들 때 생깁니다.</summary>
-        private Transform _shadowRoot;
-
-        /// <summary>확정된 아군 병과 목록입니다. 에셋이 없으면 코드 기본값입니다.</summary>
-        private UnitDefinition[] _playerRoster;
-        /// <summary>확정된 적 병과 목록입니다. 에셋이 없으면 코드 기본값입니다.</summary>
-        private UnitDefinition[] _enemyRoster;
-
-        /// <summary>전황을 관측해 결말을 판정하고 보고서를 씁니다. 조립 지점은 그 결과만 발행합니다.</summary>
-        private readonly BattleReporter _reporter = new BattleReporter();
-
-        /// <summary>이번 판에 실제로 쓰인 주문서입니다.</summary>
-        private BattleRequest _activeRequest;
-        /// <summary>이번 판에 만들어진 전장입니다. 바깥이 격자만 꽂아 준 경우에는 비어 있습니다.</summary>
-        private Battlefield _battlefield;
+        /// <summary>결말 소식을 듣고 있는 통로입니다. 사라질 때 구독을 거두려고 들고 있습니다.</summary>
+        private IEventBus _eventBus;
 
         // ====================================================================================================
         // 3. Properties
@@ -117,13 +98,14 @@ namespace SRPG.Composition
         /// <summary>
         /// 섬을 공급하는 함수입니다. 인자는 시드이고, null을 돌려주면 전투가 시작되지 않습니다.
         ///
-        /// <b>Start 가 돌기 전에 연결해야 합니다.</b>
-        /// 지금은 맵 생성기가 없으므로 비어 있고, 그래서 전투도 시작되지 않습니다.
+        /// <b>컨테이너가 조립되기 전에 연결해야 합니다.</b>
+        /// 자동 검사가 고정된 지형을 꽂을 때 쓰는 경로입니다.
+        /// 비어 있으면 <see cref="BattlefieldGenerator"/> 가 주문서에 적힌 대로 전장을 만듭니다.
         /// </summary>
-        public System.Func<int, IslandGrid> IslandSource { get; set; }
+        public Func<int, IslandGrid> IslandSource { get; set; }
 
         /// <summary>
-        /// 지형 프로필입니다. 비우면 코드 기본값을 씁니다.
+        /// 지형 프로필입니다. 비우면 구성 에셋의 것을, 그것도 없으면 코드 기본값을 씁니다.
         ///
         /// 월드맵이 붙으면 좌표가 고른 종류에 맞는 프로필이 여기 들어옵니다.
         /// </summary>
@@ -134,7 +116,7 @@ namespace SRPG.Composition
         /// <summary>
         /// 이 전투의 주문서입니다. 무엇을 데리고 나가는지를 <b>바깥이</b> 정합니다.
         ///
-        /// <b>Start 가 돌기 전에 연결해야 합니다.</b>
+        /// <b>컨테이너가 조립되기 전에 연결해야 합니다.</b>
         /// 비워 두면 인스펙터 값으로 간단한 주문서를 만들어 씁니다 —
         /// 캠페인이 아직 없는 지금의 프로토타입 경로입니다.
         /// </summary>
@@ -143,16 +125,19 @@ namespace SRPG.Composition
         /// <summary>
         /// 전투가 끝나면 한 번 발행됩니다.
         ///
-        /// 캠페인은 이 보고를 받아 분대의 인원을 줄이고, 무너진 분대를 지웁니다.
-        /// 전투는 그 뒤의 일을 알지 못합니다 — 알 필요도 없습니다.
+        /// <b>이것은 편의 창구입니다.</b> 실제 소식은 <see cref="BattleConcludedEvent"/> 로
+        /// 버스에 오르고, 여기서는 그것을 다시 흘려 줄 뿐입니다.
+        /// 캠페인처럼 전투보다 오래 사는 쪽은 이 이벤트가 아니라 <b>버스를 구독해야 합니다</b> —
+        /// 이 스코프는 판이 끝나면 사라지고, 그때 이 이벤트도 함께 사라집니다.
         /// </summary>
-        public event System.Action<BattleResult> BattleConcluded;
+        public event Action<BattleResult> BattleConcluded;
 
         /// <summary>이 전투의 결말입니다. 아직 끝나지 않았으면 <c>Undecided</c> 입니다.</summary>
-        public BattleOutcome Outcome => _reporter.Outcome;
+        public BattleOutcome Outcome =>
+            TryResolve<BattleReporter>(out var reporter) ? reporter.Outcome : BattleOutcome.Undecided;
 
-        /// <summary>이 전투의 런타임 컨텍스트입니다.</summary>
-        public BattleContext Context => _context;
+        /// <summary>이 전투의 런타임 컨텍스트입니다. 조립이 도중에 멈췄으면 null입니다.</summary>
+        public BattleContext Context => TryResolve<BattleContext>(out var context) ? context : null;
 
         /// <summary>사용 중인 전투 구성 에셋입니다. 없을 수 있습니다.</summary>
         public BattleSetup Setup => _setup;
@@ -160,115 +145,210 @@ namespace SRPG.Composition
         /// <summary>
         /// 이번 판에 만들어진 전장입니다. 바깥이 격자만 꽂아 준 경우에는 비어 있습니다.
         /// </summary>
-        public Battlefield Battlefield => _battlefield;
+        public Battlefield Battlefield => TryResolve<BattlePlan>(out var plan) ? plan.Battlefield : null;
 
         // ====================================================================================================
         // 4. Unity Lifecycle
         // ====================================================================================================
 
-        private void Start()
-        {
-            BuildBattle();
-        }
-
-        private void Update()
-        {
-            // 스케일되지 않은 시간으로 갱신해야 슬로우모션 전환이 정상 속도로 진행됩니다.
-            _timeController?.Tick(UnityEngine.Time.unscaledDeltaTime);
-
-            TickConclusion();
-        }
-
-        private void OnDestroy()
-        {
-            // 씬을 벗어날 때 타임스케일을 반드시 되돌립니다. 그러지 않으면 다음 씬이 느려진 채 시작합니다.
-            _timeController?.Reset();
-        }
-
-        // ====================================================================================================
-        // 5. Private Methods - Composition Root
-        // ====================================================================================================
-
         /// <summary>
-        /// 전투 한 판에 필요한 모든 것을 조립합니다.
+        /// 컨테이너를 조립한 뒤 결말 소식을 듣기 시작합니다.
         /// </summary>
-        private void BuildBattle()
+        protected override void Awake()
         {
-            var tuning = ResolveTuning();
+            base.Awake();
 
-            ResolveRosters();
-
-            // 주문서를 먼저 풉니다. 어디서 싸우는지가 거기 적혀 있습니다.
-            _activeRequest = ResolveRequest();
-
-            if (!_activeRequest.IsValid(out string problem))
+            if (TryResolve(out _eventBus))
             {
-                Debug.LogError($"[Bootstrap] 주문서가 온전하지 않아 전투를 시작하지 못했습니다: {problem}");
-                return;
+                _eventBus.Subscribe<BattleConcludedEvent>(OnBattleConcluded);
             }
+        }
 
-            var grid = BuildIslandGrid();
+        /// <inheritdoc />
+        protected override void OnDestroy()
+        {
+            // 버스는 이 스코프보다 오래 삽니다. 거두지 않으면 죽은 구독이 다음 판까지 남습니다.
+            _eventBus?.Unsubscribe<BattleConcludedEvent>(OnBattleConcluded);
+            _eventBus = null;
 
-            if (grid == null)
-            {
-                Debug.LogError("[Bootstrap] 전장을 만들지 못해 전투를 시작하지 못했습니다.");
-                return;
-            }
-
-            _timeController = new TacticalTimeController(tuning.SlowMotionScale, tuning.SlowMotionTransitionSpeed);
-            _context = new BattleContext(grid, _timeController, tuning);
-
-            EnsureRuntimeRoot();
-            BuildBattlefieldView();
-
-            _unitRoot = CreateChild("Units");
-
-            // 대기 중인 화살이 전투 루트 아래 모이게 합니다. 전투가 끝나면 함께 사라집니다.
-            _context.ProjectilePool.SetRoot(CreateChild("Arrows"));
-
-            var battleCamera = EnsureCamera(grid, tuning);
-            EnsureLight();
-
-            BuildSelectionController(battleCamera);
-
-            // 전개기가 양측을 한꺼번에 세웁니다. 예전에는 아군은 여기서, 적은 스포너가 따로 세웠습니다.
-            BuildDeployer(_activeRequest);
-
-            BuildHud();
-            BuildAiOverlay();
+            base.OnDestroy();
         }
 
         /// <summary>
-        /// 전투가 벌어질 섬을 얻습니다.
+        /// 살아 있는 위층을 부모로 삼습니다. 캠페인이 있으면 캠페인, 없으면 전역입니다.
         ///
-        /// <b>여기가 맵 생성이 붙는 자리입니다.</b>
+        /// <b>왜 캠페인이 먼저인가</b>
         ///
-        /// 절차적 지형 생성을 걷어냈으므로 부트스트랩은 섬을 <b>만들지 않고 받습니다</b>.
-        /// 새 생성기가 생기면 <see cref="IslandSource"/> 에 연결하면 되고,
-        /// 나머지 조립 과정은 <see cref="IslandGrid"/> 하나만 보므로 손댈 것이 없습니다.
+        /// 캠페인이 도는 중이라면 이 전투는 그 캠페인의 한 판입니다.
+        /// 캠페인을 부모로 삼아야 부대 명부와 주문서를 부모 컨테이너에서 꺼낼 수 있습니다.
+        /// 전역을 부모로 삼으면 캠페인이 등록한 것에 손이 닿지 않습니다.
         ///
-        /// <b>부트스트랩이 맵을 만드는 방법을 아는 것은 좋지 않습니다.</b>
-        /// 조립 지점은 조립만 해야 합니다. 공급자를 밖에서 꽂는 편이
-        /// 생성 방식이 바뀔 때 이 클래스가 흔들리지 않게 합니다.
+        /// <b>왜 씬을 훑지 않는가</b>
+        ///
+        /// 위층 스코프는 씬 전환에서 살아남는 별도 오브젝트라 부모·자식 관계로는 찾을 수 없고,
+        /// 타입으로 씬을 훑는 방식은 씬을 두 개 열어 두었을 때 엉뚱한 것을 잡습니다.
+        /// 살아 있는 쪽이 스스로를 밝히고 있으니 그것을 그대로 씁니다.
+        ///
+        /// <b>위층이 아예 없어도 됩니다.</b> 전투 씬만 열어 보는 편집 중의 실행과 자동 검사가 그렇습니다.
+        /// 그때는 홀로 조립되고, <see cref="Configure"/> 가 빠진 전역 서비스를 채웁니다.
         /// </summary>
-        private IslandGrid BuildIslandGrid()
+        /// <returns>살아 있는 위층 스코프입니다. 없으면 null입니다.</returns>
+        protected override LifetimeScope FindParent()
         {
-            // 바깥이 꽂아 준 것이 우선입니다. 테스트가 고정된 지형을 넣을 때 씁니다.
+            if (CampaignLifetimeScope.Live != null)
+            {
+                return CampaignLifetimeScope.Live;
+            }
+
+            return RootLifetimeScope.Live;
+        }
+
+        // ====================================================================================================
+        // 5. Configuration
+        // ====================================================================================================
+
+        /// <summary>
+        /// 이번 판에 필요한 것을 컨테이너에 등록합니다.
+        /// </summary>
+        /// <param name="builder">등록을 받는 빌더입니다.</param>
+        protected override void Configure(IContainerBuilder builder)
+        {
+            // 루트 없이 전투만 여는 경로에서는 전역 서비스가 없습니다.
+            // 해석 실패는 컨테이너 조립 전체를 무너뜨리므로, 조용한 대체물로 자리를 채웁니다.
+            if (Parent == null)
+            {
+                builder.Register<EventBus>(Lifetime.Singleton).As<IEventBus>();
+                builder.Register<SilentAudioService>(Lifetime.Singleton).As<IAudioService>();
+            }
+
+            var tuning = _setup != null && _setup.Tuning != null ? _setup.Tuning : BattleTuning.CreateDefault();
+            builder.RegisterInstance(tuning);
+
+            var plan = BuildPlan();
+            builder.RegisterInstance(plan);
+
+            if (!plan.IsReady)
+            {
+                // 진입점을 등록하지 않으므로 씬에는 아무것도 세워지지 않습니다.
+                // 컨테이너 자체는 조립되므로, 무엇이 등록되었는지는 그대로 들여다볼 수 있습니다.
+                Debug.LogError($"[Battle] 전투를 시작하지 못했습니다: {plan.Problem}", this);
+                return;
+            }
+
+            var time = new TacticalTimeController(tuning.SlowMotionScale, tuning.SlowMotionTransitionSpeed);
+            builder.RegisterInstance(time);
+
+            // 컨텍스트는 역할별 인터페이스로 함께 등록합니다.
+            // 소비자는 자기가 실제로 쓰는 역할만 받고, 통째로 드는 것은 진입점뿐입니다.
+            // (ISpatialQuery · IUnitContext · ISquadContext<T> · IDeploymentContext 등)
+            builder.RegisterInstance(new BattleContext(plan.Grid, time, tuning))
+                   .AsImplementedInterfaces()
+                   .AsSelf();
+
+            builder.RegisterInstance(new BattleReporter());
+
+            builder.RegisterInstance(new BattleSceneSettings(
+                _setup,
+                _runtimeRoot != null ? _runtimeRoot : transform,
+                _battleCamera,
+                _showDebugHud,
+                _showAiDebugOverlay,
+                _createCameraAndLight));
+
+            builder.RegisterEntryPoint<BattleEntryPoint>();
+        }
+
+        // ====================================================================================================
+        // 6. Private Methods
+        // ====================================================================================================
+
+        /// <summary>
+        /// 씬을 건드리기 전에 확정할 수 있는 것을 전부 확정합니다.
+        ///
+        /// 주문서를 먼저 풉니다 — 어디서 싸우는지가 거기 적혀 있습니다.
+        /// </summary>
+        /// <returns>확정된 계획입니다. 열 수 없으면 이유가 담깁니다.</returns>
+        private BattlePlan BuildPlan()
+        {
+            var request = ResolveRequest();
+
+            if (!request.IsValid(out string problem))
+            {
+                return new BattlePlan($"주문서가 온전하지 않습니다 — {problem}");
+            }
+
+            // 바깥이 꽂아 준 것이 우선입니다. 자동 검사가 고정된 지형을 넣을 때 씁니다.
             if (IslandSource != null)
             {
-                return IslandSource(_seedOverride);
+                var supplied = IslandSource(request.Seed);
+
+                return supplied != null
+                    ? new BattlePlan(request, null, supplied)
+                    : new BattlePlan("바깥이 꽂아 준 섬 공급자가 빈 지형을 돌려주었습니다.");
             }
 
-            var spec = _activeRequest != null ? _activeRequest.Battlefield : default;
+            var spec = request.Battlefield;
 
             if (spec.Seed == 0)
             {
-                spec.Seed = _seedOverride;
+                spec.Seed = request.Seed;
             }
 
-            _battlefield = BattlefieldGenerator.Generate(spec.WithDefaults(), ResolveTerrainProfile());
+            var battlefield = BattlefieldGenerator.Generate(spec.WithDefaults(), ResolveTerrainProfile());
 
-            return _battlefield.Grid;
+            return battlefield != null && battlefield.Grid != null
+                ? new BattlePlan(request, battlefield, battlefield.Grid)
+                : new BattlePlan("전장을 만들지 못했습니다.");
+        }
+
+        /// <summary>
+        /// 이 전투의 주문서를 정합니다. 셋 중 먼저 있는 것을 씁니다.
+        ///
+        ///   1. <see cref="Request"/> — 코드가 직접 꽂은 것입니다. 자동 검사가 씁니다.
+        ///   2. <b>캠페인이 올려 둔 것</b> — 월드맵에 기록된 부대가 여기로 들어옵니다.
+        ///   3. 인스펙터 값 — 캠페인 없이 전투 씬만 열어 볼 때의 경로입니다.
+        ///
+        /// <b>2번이 이 게임의 정상 경로입니다.</b>
+        /// 캠페인이 살아 있으면 전투는 부대를 만들어 내지 않고 장부에 적힌 것을 받습니다.
+        /// 3번은 편집 중에 전장만 보려고 남겨 둔 것이고, 캠페인이 도는 중에는 쓰이지 않습니다.
+        /// </summary>
+        /// <returns>이번 판에 쓸 주문서입니다.</returns>
+        private BattleRequest ResolveRequest()
+        {
+            var supplied = Request ?? TakeCampaignOrders();
+
+            if (supplied != null)
+            {
+                // 시드가 비어 있으면 인스펙터 값으로 채웁니다.
+                // 지형과 배치가 <b>같은</b> 시드를 써야 두 실행을 비교할 수 있습니다.
+                if (supplied.Seed == 0)
+                {
+                    supplied.Seed = _seedOverride;
+                }
+
+                return supplied;
+            }
+
+            return BattleRequest.CreateSimple(
+                ResolvePlayerRoster(), ResolveEnemyRoster(), _playerSquadCount, _soldiersPerSquad, _seedOverride);
+        }
+
+        /// <summary>
+        /// 캠페인이 올려 둔 주문서를 가져옵니다.
+        ///
+        /// <b>부모 컨테이너에서 꺼냅니다.</b>
+        /// 부모는 이 스코프가 조립되기 전에 이미 조립을 마쳤으므로 순서가 보장됩니다.
+        /// 이것이 예전 <c>ForcedSeed</c> 같은 정적 필드를 대신하는 자리입니다.
+        /// </summary>
+        /// <returns>캠페인이 올려 둔 주문서입니다. 캠페인이 없거나 비어 있으면 null입니다.</returns>
+        private BattleRequest TakeCampaignOrders()
+        {
+            if (Parent == null || Parent.Container == null)
+            {
+                return null;
+            }
+
+            return Parent.Container.TryResolve<BattleOrders>(out var orders) ? orders.Take() : null;
         }
 
         /// <summary>
@@ -277,6 +357,7 @@ namespace SRPG.Composition
         /// 인스펙터에 직접 꽂은 것이 우선입니다 — 한 씬에서 지형만 바꿔 보는 경로입니다.
         /// 비어 있으면 구성 에셋의 것을 쓰고, 그것도 없으면 생성기가 코드 기본값을 만듭니다.
         /// </summary>
+        /// <returns>쓸 지형 프로필입니다. 없으면 null입니다.</returns>
         private BattlefieldProfile ResolveTerrainProfile()
         {
             if (TerrainProfile != null)
@@ -287,449 +368,56 @@ namespace SRPG.Composition
             return _setup != null ? _setup.TerrainProfile : null;
         }
 
-        /// <summary>
-        /// 이 전투의 주문서를 정합니다.
-        ///
-        /// 바깥이 꽂아 준 것이 있으면 그것을 쓰고, 없으면 인스펙터 값으로 간단히 만듭니다.
-        /// 캠페인이 붙으면 후자는 쓰이지 않습니다.
-        /// </summary>
-        private BattleRequest ResolveRequest()
+        /// <summary>아군 병과 목록을 정합니다. 에셋이 없으면 코드 기본값을 만들어 씁니다.</summary>
+        /// <returns>아군 병과 후보입니다.</returns>
+        private UnitDefinition[] ResolvePlayerRoster()
         {
-            if (Request != null)
-            {
-                return Request;
-            }
+            var roster = _setup != null ? _setup.GetPlayerRosterOrNull() : null;
 
-            return BattleRequest.CreateSimple(
-                _playerRoster, _enemyRoster, _playerSquadCount, _soldiersPerSquad, _seedOverride);
+            return roster ?? new[]
+            {
+                UnitDefinition.CreateDefault(UnitRole.Infantry),
+                UnitDefinition.CreateDefault(UnitRole.Archer),
+                UnitDefinition.CreateDefault(UnitRole.Pike),
+            };
         }
 
-        // ====================================================================================================
-        // 5-1. Private Methods - Conclusion
-        // ====================================================================================================
-
-        /// <summary>
-        /// 전투가 끝났는지 살피고, 끝났으면 보고서를 발행합니다.
-        ///
-        /// <b>관측도 판정도 여기서 하지 않습니다.</b>
-        /// 조립 지점이 하는 일은 관측값을 <see cref="BattleReporter"/>에 넘기고,
-        /// 돌아온 보고서를 바깥에 발행하는 것뿐입니다.
-        /// 그래야 "왜 승리 처리가 안 됐는가"를 씬을 재생하지 않고도 확인할 수 있습니다.
-        /// </summary>
-        private void TickConclusion()
+        /// <summary>적 병과 목록을 정합니다. 에셋이 없으면 코드 기본값을 만들어 씁니다.</summary>
+        /// <returns>적 병과 후보입니다.</returns>
+        private UnitDefinition[] ResolveEnemyRoster()
         {
-            if (_context == null)
+            var roster = _setup != null ? _setup.GetEnemyRosterOrNull() : null;
+
+            return roster ?? new[]
             {
-                return;
-            }
-
-            var result = _reporter.Tick(
-                UnityEngine.Time.deltaTime,
-                _context.EnemyUnits.Count,
-                _deployer != null ? _deployer.PlayerReserves : 0,
-                _deployer == null || _deployer.EnemyReinforcementsExhausted);
-
-            if (result == null)
-            {
-                return;
-            }
-
-            Debug.Log($"[Bootstrap] 전투 종료 — {result}");
-
-            BattleConcluded?.Invoke(result);
+                UnitDefinition.CreateEnemyDefault(UnitRole.Militia),
+                UnitDefinition.CreateEnemyDefault(UnitRole.Infantry),
+                UnitDefinition.CreateEnemyDefault(UnitRole.Archer),
+            };
         }
 
         /// <summary>
-        /// 생성물이 붙을 루트를 확보합니다. 씬에 미리 배치된 루트가 있으면 그것을 씁니다.
+        /// 컨테이너에서 하나 꺼냅니다. 조립이 실패했거나 등록되지 않았으면 실패합니다.
         /// </summary>
-        private void EnsureRuntimeRoot()
+        /// <typeparam name="T">꺼낼 타입입니다.</typeparam>
+        /// <param name="resolved">꺼낸 것입니다. 실패하면 기본값입니다.</param>
+        /// <returns>꺼냈으면 true입니다.</returns>
+        private bool TryResolve<T>(out T resolved)
         {
-            if (_runtimeRoot == null)
+            if (Container != null)
             {
-                _runtimeRoot = transform;
-            }
-        }
-
-        private Transform CreateChild(string childName)
-        {
-            var go = new GameObject(childName);
-            go.transform.SetParent(_runtimeRoot, false);
-            return go.transform;
-        }
-
-        // ====================================================================================================
-        // 6. Private Methods - Asset Resolution
-        // ====================================================================================================
-
-        /// <summary>
-        /// 전투 튜닝을 확정합니다. 절대 null을 돌려주지 않으므로 이후 소비자는 검사할 필요가 없습니다.
-        /// </summary>
-        private BattleTuning ResolveTuning()
-        {
-            if (_setup != null && _setup.Tuning != null)
-            {
-                return _setup.Tuning;
+                return Container.TryResolve(out resolved);
             }
 
-            return BattleTuning.CreateDefault();
+            resolved = default;
+            return false;
         }
 
-        /// <summary>
-        /// 병과 목록을 확정합니다. 에셋이 없으면 코드 기본값을 만들어 씁니다.
-        /// </summary>
-        private void ResolveRosters()
+        /// <summary>버스에 오른 결말을 편의 창구로 흘려 줍니다.</summary>
+        /// <param name="message">결말 소식입니다.</param>
+        private void OnBattleConcluded(BattleConcludedEvent message)
         {
-            _playerRoster = _setup != null ? _setup.GetPlayerRosterOrNull() : null;
-            _enemyRoster = _setup != null ? _setup.GetEnemyRosterOrNull() : null;
-
-            if (_playerRoster == null)
-            {
-                _playerRoster = new[]
-                {
-                    UnitDefinition.CreateDefault(UnitRole.Infantry),
-                    UnitDefinition.CreateDefault(UnitRole.Archer),
-                    UnitDefinition.CreateDefault(UnitRole.Pike),
-                };
-            }
-
-            if (_enemyRoster == null)
-            {
-                _enemyRoster = new[]
-                {
-                    UnitDefinition.CreateEnemyDefault(UnitRole.Militia),
-                    UnitDefinition.CreateEnemyDefault(UnitRole.Infantry),
-                    UnitDefinition.CreateEnemyDefault(UnitRole.Archer),
-                };
-            }
-        }
-
-        // ====================================================================================================
-        // 7. Private Methods - Sub-systems
-        // ====================================================================================================
-
-        /// <summary>
-        /// 전장을 화면에 세웁니다.
-        ///
-        /// 바깥이 격자만 꽂아 준 경우에는 그릴 지형이 없습니다.
-        /// 테스트가 그 경로를 쓰므로 오류가 아니라 조용히 넘어갑니다.
-        /// </summary>
-        private void BuildBattlefieldView()
-        {
-            if (_battlefield == null)
-            {
-                return;
-            }
-
-            var fieldObject = new GameObject("Battlefield");
-            fieldObject.transform.SetParent(_runtimeRoot, false);
-
-            var view = fieldObject.AddComponent<BattlefieldView>();
-            view.Build(_battlefield, _setup != null ? _setup.TerrainMaterials : default);
-        }
-
-        private void BuildSelectionController(Camera battleCamera)
-        {
-            var selectionObject = new GameObject("SquadSelection");
-            selectionObject.transform.SetParent(_runtimeRoot, false);
-
-            _selectionController = selectionObject.AddComponent<SquadSelectionController>();
-            _selectionController.Initialize(
-                _context.Grid,
-                _context.TimeController,
-                _context.Tuning,
-                battleCamera,
-                _setup != null ? _setup.SelectionMarkerPrefab : null,
-                _setup != null ? _setup.OrderMarkerPrefab : null);
-        }
-
-        /// <summary>
-        /// 양측 부대를 전장에 세우고 지원군을 관리할 전개기를 붙입니다.
-        ///
-        /// <b>무엇을 세울지는 주문서가, 어떻게 만들지는 여기가 압니다.</b>
-        /// 전개기는 순서와 자리만 정하고, 실제 생성은 아래 두 함수가 합니다.
-        /// </summary>
-        private void BuildDeployer(BattleRequest request)
-        {
-            var deployerObject = new GameObject("SquadDeployer");
-            deployerObject.transform.SetParent(_runtimeRoot, false);
-
-            _deployer = deployerObject.AddComponent<SquadDeployer>();
-            _deployer.Initialize(_context, request, CreatePlayerSquad, CreateEnemySquad);
-        }
-
-        private void BuildHud()
-        {
-            if (!_showDebugHud)
-            {
-                return;
-            }
-
-            var hudObject = new GameObject("BattleHud");
-            hudObject.transform.SetParent(_runtimeRoot, false);
-
-            var hud = hudObject.AddComponent<BattleDebugHud>();
-            hud.Initialize(_context, _context, _context.TimeController, _selectionController, _deployer);
-        }
-
-        /// <summary>
-        /// AI 판단을 씬 뷰에 그리는 오버레이를 붙입니다.
-        /// 기즈모라 게임 화면에는 나오지 않고 빌드에도 남지 않습니다.
-        /// </summary>
-        private void BuildAiOverlay()
-        {
-            if (!_showAiDebugOverlay)
-            {
-                return;
-            }
-
-            var overlayObject = new GameObject("AiDebugOverlay");
-            overlayObject.transform.SetParent(_runtimeRoot, false);
-
-            overlayObject.AddComponent<AiDebugOverlay>().Initialize(_context.Grid, _context, _context);
-        }
-
-        // ====================================================================================================
-        // 8. Private Methods - Squads
-        // ====================================================================================================
-
-        /// <summary>
-        /// 아군 분대 하나를 전장에 세웁니다. 전개기가 자리를 정해 부릅니다.
-        ///
-        /// <b>무엇을 데려가는지는 여기서 정하지 않습니다.</b>
-        /// 주문서가 이미 정해 놓은 것을 세우기만 합니다.
-        /// </summary>
-        private void CreatePlayerSquad(SquadOrder order, GridCoord coord)
-        {
-            var squadObject = new GameObject($"Squad_{order.Id}_{order.Definition.DisplayName}");
-            squadObject.transform.SetParent(_runtimeRoot, false);
-
-            var squad = squadObject.AddComponent<Squad>();
-            squad.Initialize(
-                _context,
-                order.Definition,
-                coord,
-                order.SoldierCount,
-                order.ResolveName(),
-                CreateUnit,
-                order.ClampedRank());
-
-            _selectionController.RegisterSquad(squad);
-
-            // 주문서의 식별자와 배치 인원을 기억해 둡니다.
-            // 전투가 끝나면 이 짝으로 보고서가 만들어집니다.
-            // 지원군으로 늦게 올라온 분대도 여기를 지나므로 함께 보고됩니다.
-            _reporter.Track(order.Id, squad, squad.AliveCount);
-        }
-
-        /// <summary>
-        /// 적 분대 하나를 전장에 세웁니다.
-        ///
-        /// 아군과 같은 자리에서 같은 방식으로 만듭니다 — 야전에서는 양측이 대칭입니다.
-        /// </summary>
-        private void CreateEnemySquad(SquadOrder order, GridCoord coord)
-        {
-            var squadObject = new GameObject($"EnemySquad_{order.Id}_{order.Definition.DisplayName}");
-            squadObject.transform.SetParent(_runtimeRoot, false);
-
-            squadObject.AddComponent<EnemySquad>().Initialize(
-                _context,
-                order.Definition,
-                coord,
-                order.SoldierCount,
-                CreateUnit,
-                order.ClampedRank());
-        }
-
-        // ====================================================================================================
-        // 9. Private Methods - Unit Factory
-        // ====================================================================================================
-
-        /// <summary>
-        /// 유닛 하나를 만듭니다. 분대와 상륙정이 공유하는 생성 경로입니다.
-        ///
-        /// 정의에 프리팹이 연결되어 있으면 그것을 인스턴스화하고, 없으면 프리미티브로 임시 몸체를 만듭니다.
-        /// 두 경로 모두 마지막에 <see cref="Unit.Initialize"/>를 거치므로 이후 동작은 완전히 같습니다.
-        /// </summary>
-        private Unit CreateUnit(UnitDefinition definition, Team team, bool isCommander, Vector3 position)
-        {
-            position.y = _context.Grid.SampleGroundHeight(position);
-
-            Unit unit = definition.Prefab != null
-                ? InstantiateFromPrefab(definition, position)
-                : CreatePrimitiveUnit(definition, team, isCommander, position);
-
-            if (unit == null)
-            {
-                return null;
-            }
-
-            unit.Initialize(definition, team, _context, isCommander);
-            AttachContactShadow(unit, definition);
-
-            return unit;
-        }
-
-        /// <summary>
-        /// 유닛 발밑에 접지 그림자를 답니다.
-        ///
-        /// 프리팹 경로와 프리미티브 경로가 함께 지나는 자리라 여기 한 번만 붙이면 됩니다.
-        ///
-        /// <b>왜 필요한가</b>
-        /// 빌보드는 평면이라 지면과 닿는 면이 없습니다.
-        /// 방향광 그림자만으로는 유닛이 어디에 서 있는지 읽히지 않고, 카메라를 돌리면 떠 보입니다.
-        /// </summary>
-        private void AttachContactShadow(Unit unit, UnitDefinition definition)
-        {
-            if (_shadowRoot == null)
-            {
-                _shadowRoot = CreateChild("Shadows");
-            }
-
-            // 발자국보다 조금 넓어야 그림자로 읽힙니다. 딱 맞으면 유닛에 가려 안 보입니다.
-            ContactShadow.Attach(unit.transform, _context.Grid, definition.Radius * 1.4f, _shadowRoot);
-        }
-
-        /// <summary>
-        /// 프리팹으로 유닛을 만듭니다.
-        /// </summary>
-        private Unit InstantiateFromPrefab(UnitDefinition definition, Vector3 position)
-        {
-            var instance = Instantiate(definition.Prefab, position, Quaternion.identity, _unitRoot);
-            var unit = instance.GetComponent<Unit>();
-
-            if (unit == null)
-            {
-                Debug.LogError($"[Bootstrap] 프리팹 '{definition.Prefab.name}' 루트에 Unit 컴포넌트가 없습니다. ({definition.name})");
-                Destroy(instance);
-                return null;
-            }
-
-            return unit;
-        }
-
-        /// <summary>
-        /// 프리팹 없이 프리미티브로 유닛을 만듭니다.
-        /// </summary>
-        private Unit CreatePrimitiveUnit(UnitDefinition definition, Team team, bool isCommander, Vector3 position)
-        {
-            var material = GetFallbackMaterial(definition);
-            var visual = PrototypeVisuals.CreateUnitVisual(definition, team, isCommander, material);
-
-            visual.transform.SetParent(_unitRoot, false);
-            visual.transform.position = position;
-
-            return visual.AddComponent<Unit>();
-        }
-
-        /// <summary>
-        /// 정의별 폴백 머티리얼을 캐시합니다. 유닛마다 머티리얼을 새로 만들면 배칭이 깨집니다.
-        /// </summary>
-        private Material GetFallbackMaterial(UnitDefinition definition)
-        {
-            if (_materialCache.TryGetValue(definition, out var cached))
-            {
-                return cached;
-            }
-
-            var material = PrototypeVisuals.CreateMaterial(definition.DebugColor);
-            _materialCache[definition] = material;
-            return material;
-        }
-
-        // ====================================================================================================
-        // 10. Private Methods - Scene Essentials
-        // ====================================================================================================
-
-        /// <summary>
-        /// 전투 카메라를 준비합니다. 씬에 배치된 카메라를 우선 쓰고, 없으면 만듭니다.
-        /// </summary>
-        private Camera EnsureCamera(IslandGrid grid, BattleTuning tuning)
-        {
-            var camera = _battleCamera != null ? _battleCamera : Camera.main;
-
-            if (camera == null && _createCameraAndLight)
-            {
-                var cameraObject = new GameObject("BattleCamera");
-                cameraObject.tag = "MainCamera";
-                camera = cameraObject.AddComponent<Camera>();
-                camera.clearFlags = CameraClearFlags.SolidColor;
-                camera.backgroundColor = new Color(0.11f, 0.15f, 0.21f);
-            }
-
-            if (camera == null)
-            {
-                Debug.LogError("[Bootstrap] 씬에 카메라가 없습니다.");
-                return null;
-            }
-
-            var rig = ResolveCameraRig(camera);
-
-            rig.AttachCamera(camera);
-            rig.Configure(grid, tuning);
-
-            rig.MoveTo(grid.WorldCenter);
-            rig.FrameArea(Mathf.Max(grid.Width, grid.Depth) * grid.CellSize);
-
-            _battleCamera = camera;
-            return camera;
-        }
-
-        /// <summary>
-        /// 카메라 피벗을 확보합니다.
-        ///
-        /// <b>예전 구성을 함께 처리합니다.</b>
-        /// 리그가 카메라 자신에게 붙어 있던 시절에 구워진 씬이 있습니다.
-        /// 그대로 두면 카메라가 자기 자신의 자식이 되려다 깨지므로, 그 리그는 걷어 내고
-        /// 부모 피벗을 새로 만듭니다. 씬을 다시 굽지 않아도 실행이 되게 하려는 것입니다.
-        /// </summary>
-        private BattleCameraRig ResolveCameraRig(Camera camera)
-        {
-            var onCamera = camera.GetComponent<BattleCameraRig>();
-            if (onCamera != null)
-            {
-                // Destroy는 프레임 끝에 처리되므로, 한 프레임 더 도는 것을 막으려 즉시 꺼 둡니다.
-                onCamera.enabled = false;
-                Destroy(onCamera);
-            }
-
-            var inParent = camera.GetComponentInParent<BattleCameraRig>();
-            if (inParent != null && inParent.transform != camera.transform)
-            {
-                return inParent;
-            }
-
-            var pivotObject = new GameObject("CameraPivot");
-            pivotObject.transform.SetParent(_runtimeRoot, false);
-
-            return pivotObject.AddComponent<BattleCameraRig>();
-        }
-
-        /// <summary>
-        /// 방향광이 없으면 하나 만듭니다. 조명이 없으면 지형이 전부 검게 보입니다.
-        ///
-        /// 환경광은 조명을 만들지 않더라도 맞춥니다.
-        /// 씬에 조명만 있고 환경광이 기본값이면 절벽 그늘이 새까맣게 죽습니다.
-        /// </summary>
-        private void EnsureLight()
-        {
-            if (!_createCameraAndLight)
-            {
-                return;
-            }
-
-            BattleLighting.ApplyAmbient();
-
-            var existing = FindAnyObjectByType<Light>();
-            if (existing != null && existing.type == LightType.Directional)
-            {
-                return;
-            }
-
-            var lightObject = new GameObject("BattleLight");
-            lightObject.transform.SetParent(_runtimeRoot, false);
-
-            // 값은 BattleLighting이 정합니다. 여기에 숫자를 적으면 씬 빌더와 조용히 어긋납니다.
-            BattleLighting.ApplyDirectional(lightObject.AddComponent<Light>());
+            BattleConcluded?.Invoke(message.Result);
         }
     }
 }

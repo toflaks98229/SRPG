@@ -108,6 +108,16 @@ namespace SRPG.Data
         /// </summary>
         public bool Destroyed;
 
+        /// <summary>
+        /// 이 분대가 상대에게 명중시킨 타격 수입니다.
+        ///
+        /// 캠페인이 무기 숙련도를 올리는 근거입니다.
+        /// <b>어느 무기인지는 적지 않습니다</b> — 분대의 병과가 이미 그것을 말하고 있고,
+        /// 캠페인은 자기 장부에서 그 병과를 알고 있습니다.
+        /// 전투가 숙련도 계열을 알 필요가 없어야 두 층이 서로를 모른 채로 남습니다.
+        /// </summary>
+        public int HitsLanded;
+
         /// <summary>잃은 인원입니다.</summary>
         public int Losses => Deployed - Survivors;
     }

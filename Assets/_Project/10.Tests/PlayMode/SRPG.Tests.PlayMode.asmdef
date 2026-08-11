@@ -11,6 +11,7 @@
         "SRPG.Gameplay",
         "SRPG.UI",
         "SRPG.Composition",
+        "VContainer",
         "UnityEngine.TestRunner"
     ],
     "includePlatforms": [],

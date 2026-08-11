@@ -234,8 +234,16 @@ namespace SRPG.Data
         /// <summary>지휘관을 제외한 병사 수입니다.</summary>
         public int SoldierCount;
 
-        /// <summary>분대 숙련도입니다.</summary>
+        /// <summary>분대 단련도입니다.</summary>
         public int Rank;
+
+        /// <summary>
+        /// 무기 계열별 숙련도입니다. 캠페인 장부가 채웁니다.
+        ///
+        /// 전투는 이 값을 해석하지 않고 병사에게 그대로 넘깁니다 —
+        /// 랭크와 같은 취급입니다. 어떻게 쌓였는지는 캠페인의 사정입니다.
+        /// </summary>
+        public WeaponProficiency Proficiency;
 
         /// <summary>HUD에 표시할 이름입니다. 비우면 병과 이름을 씁니다.</summary>
         public string DisplayName;
