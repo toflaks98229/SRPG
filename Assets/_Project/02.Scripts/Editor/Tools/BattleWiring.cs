@@ -275,6 +275,104 @@ namespace SRPG.Editor.Tools
         /// <see cref="BattleSetup.Tuning"/>이 비어 있으면 전투 수치가 전부 코드 기본값으로 돌아갑니다.
         /// 기획자가 인스펙터에서 만질 대상이 아예 존재하지 않는 상태입니다.
         /// </summary>
+        /// <summary>
+        /// 유닛 정의 에셋의 스키마를 현재 코드에 맞춥니다.
+        ///
+        /// <b>왜 <see cref="PrototypeAssetBuilder"/> 를 쓰지 않는가</b>
+        ///
+        /// 그쪽은 프리팹과 머티리얼까지 함께 굽습니다. 스키마 하나 올리려고 부르면
+        /// 손으로 다듬어 둔 셰이더와 머티리얼이 같이 날아갑니다.
+        /// 여기서 필요한 것은 <b>새로 생긴 필드만 채우기</b>이고,
+        /// 이관 자체는 정의가 스스로 합니다(<c>MigrateToCurrentSchema</c>).
+        ///
+        /// 여러 번 실행해도 결과가 같습니다. 이미 최신인 에셋은 건드리지 않습니다.
+        /// </summary>
+        [MenuItem("SRPG/배선/⑤ 유닛 정의 스키마 갱신", priority = 34)]
+        public static void MigrateUnitDefinitions()
+        {
+            var guids = AssetDatabase.FindAssets($"t:{nameof(UnitDefinition)}");
+            int migrated = 0;
+
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var definition = AssetDatabase.LoadAssetAtPath<UnitDefinition>(path);
+
+                if (definition == null)
+                {
+                    continue;
+                }
+
+                // 적 정의인지는 경로가 아니라 파일 이름으로 봅니다.
+                // 폴더는 옮겨질 수 있지만 이름 규칙은 에셋 빌더가 정한 것이라 함께 움직입니다.
+                bool isEnemy = definition.name.StartsWith("EnemyDef", System.StringComparison.Ordinal);
+
+                if (!definition.MigrateToCurrentSchema(isEnemy))
+                {
+                    continue;
+                }
+
+                EditorUtility.SetDirty(definition);
+                migrated++;
+
+                Debug.Log(
+                    $"[BattleWiring] 스키마 갱신: {definition.name} → v{UnitDefinition.CurrentSchemaVersion} " +
+                    $"(피해 {definition.Damage}, 방어 {definition.Armor})", definition);
+            }
+
+            if (migrated > 0)
+            {
+                AssetDatabase.SaveAssets();
+            }
+
+            Debug.Log($"[BattleWiring] 유닛 정의 {guids.Length}개 중 {migrated}개를 갱신했습니다.");
+        }
+
+        /// <summary>
+        /// 들판 프로필 에셋의 스키마를 현재 코드에 맞춥니다.
+        ///
+        /// <b>왜 필요한가</b>
+        ///
+        /// 종의 설정은 구조체라 필드 초기값을 가질 수 없습니다.
+        /// 에셋이 만들어진 뒤에 필드를 추가하면 그 필드는 YAML에 없어 0으로 로드되고,
+        /// 0은 대개 <b>틀린 값</b>입니다 — 잎이 예전처럼 카메라 자리를 향하고, 색이 검어지고,
+        /// 크기가 0이라 아예 보이지 않게 됩니다. 오류는 나지 않고 화면만 조용히 틀립니다.
+        ///
+        /// 손으로 맞춰 둔 값은 건드리지 않고 빠진 것만 채웁니다.
+        /// 여러 번 실행해도 결과가 같습니다.
+        /// </summary>
+        [MenuItem("SRPG/배선/⑥ 들판 프로필 스키마 갱신", priority = 35)]
+        public static void MigrateGrassProfiles()
+        {
+            var guids = AssetDatabase.FindAssets($"t:{nameof(GrassProfile)}");
+            int migrated = 0;
+
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var profile = AssetDatabase.LoadAssetAtPath<GrassProfile>(path);
+
+                if (profile == null || !profile.MigrateToCurrentSchema())
+                {
+                    continue;
+                }
+
+                EditorUtility.SetDirty(profile);
+                migrated++;
+
+                Debug.Log(
+                    $"[BattleWiring] 스키마 갱신: {profile.name} → v{GrassProfile.CurrentSchemaVersion} " +
+                    $"(풀 시선정렬 {profile.Grass.ViewAlign}, 색결속 {profile.Grass.ColorCohesion})", profile);
+            }
+
+            if (migrated > 0)
+            {
+                AssetDatabase.SaveAssets();
+            }
+
+            Debug.Log($"[BattleWiring] 들판 프로필 {guids.Length}개 중 {migrated}개를 갱신했습니다.");
+        }
+
         [MenuItem("SRPG/배선/④ 빠진 설정 에셋 연결", priority = 33)]
         public static void WireMissingConfigs()
         {

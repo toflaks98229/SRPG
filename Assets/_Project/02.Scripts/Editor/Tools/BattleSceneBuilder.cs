@@ -1,11 +1,13 @@
-﻿using System.IO;
+using System.IO;
 using SRPG.Composition;
+using SRPG.Core.Managers;
 using SRPG.Data;
 using SRPG.Gameplay.CameraControl;
 using SRPG.Gameplay.Visual;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
 namespace SRPG.Editor.Tools
@@ -17,6 +19,7 @@ namespace SRPG.Editor.Tools
     /// 구성이 바뀔 때마다 메뉴 한 번으로 씬을 다시 만들 수 있고, 씬 파일의 병합 충돌도 줄어듭니다.
     ///
     /// 씬에 배치되는 것은 "런타임에 만들 수 없거나, 만들면 손해인 것"으로 한정합니다.
+    ///   · 전역 스코프 + 그 아래 매니저 — 앱 수명 동안 유지되어야 하는 것
     ///   · 카메라 / 조명 / 조명 환경 설정 — 씬 에셋에 저장되어야 하는 것
     ///   · 부트스트랩 + 구성 에셋 참조 — 기획자가 인스펙터에서 바꿔야 하는 것
     ///   · 생성물이 담길 빈 루트 — 하이라키를 정돈하기 위한 것
@@ -33,6 +36,11 @@ namespace SRPG.Editor.Tools
         /// <summary>전투 씬 에셋의 경로입니다.</summary>
         private const string ScenePath = SceneDirectory + "/Battle.unity";
 
+        /// <summary>월드맵 씬을 굽는 폴더입니다.</summary>
+        private const string WorldMapDirectory = "Assets/_Project/01.Scenes/WorldMap";
+        /// <summary>월드맵 씬 에셋의 경로입니다.</summary>
+        private const string WorldMapScenePath = WorldMapDirectory + "/WorldMap.unity";
+
         // ====================================================================================================
         // 2. Menu Items
         // ====================================================================================================
@@ -45,6 +53,84 @@ namespace SRPG.Editor.Tools
         {
             PrototypeAssetBuilder.BuildAll();
             CreateBattleScene();
+            CreateWorldMapScene();
+        }
+
+        /// <summary>
+        /// 월드맵 씬을 새로 만들어 저장합니다.
+        ///
+        /// <b>여기가 게임의 시작 씬입니다.</b>
+        /// 캠페인 스코프가 여기서 서고, 전투는 그 아래에서 한 판씩 열립니다.
+        /// 그래서 빌드 목록에서 이 씬이 전투 씬보다 앞에 와야 합니다.
+        /// </summary>
+        [MenuItem("SRPG/월드맵 씬 생성 및 열기", priority = 12)]
+        public static void CreateWorldMapScene()
+        {
+            if (!Application.isBatchMode)
+            {
+                if (File.Exists(WorldMapScenePath) &&
+                    !EditorUtility.DisplayDialog(
+                        "월드맵 씬 덮어쓰기",
+                        $"이미 {WorldMapScenePath} 이 있습니다.\n새로 만들어 덮어쓸까요?",
+                        "덮어쓰기",
+                        "취소"))
+                {
+                    return;
+                }
+
+                if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+                {
+                    return;
+                }
+            }
+
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            CreateGameSystems();
+            CreateCampaign();
+
+            // 월드맵은 아직 표현이 없어 IMGUI 화면만 뜹니다.
+            // 그래도 카메라와 오디오 리스너는 있어야 합니다 — 없으면 화면이 검고 소리가 나지 않습니다.
+            var environment = new GameObject("Environment").transform;
+
+            var cameraObject = new GameObject("WorldMapCamera");
+            cameraObject.transform.SetParent(environment, false);
+            cameraObject.tag = "MainCamera";
+
+            var camera = cameraObject.AddComponent<Camera>();
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = new Color(0.07f, 0.09f, 0.13f);
+            cameraObject.AddComponent<UniversalAdditionalCameraData>();
+            cameraObject.AddComponent<AudioListener>();
+
+            Directory.CreateDirectory(WorldMapDirectory);
+            EditorSceneManager.SaveScene(scene, WorldMapScenePath);
+            AssetDatabase.Refresh();
+
+            RegisterInBuildSettings(WorldMapScenePath, true);
+
+            Debug.Log(
+                $"[BattleSceneBuilder] 월드맵 씬을 만들었습니다: {WorldMapScenePath}\n" +
+                "재생하면 부대 장부가 뜨고, 적이 있는 지점으로 이동하면 전투 씬이 열립니다.");
+        }
+
+        /// <summary>
+        /// 캠페인 스코프를 만듭니다.
+        ///
+        /// <b>씬의 최상위에 둡니다.</b> 전역 스코프와 같은 이유입니다 —
+        /// 이 오브젝트는 전투 씬을 오가는 동안 살아남아야 하고,
+        /// <c>DontDestroyOnLoad</c> 는 루트 오브젝트에만 걸립니다.
+        /// </summary>
+        private static void CreateCampaign()
+        {
+            var campaignObject = new GameObject("Campaign");
+            var scope = campaignObject.AddComponent<CampaignLifetimeScope>();
+
+            var setup = AssetDatabase.LoadAssetAtPath<BattleSetup>(PrototypeAssetBuilder.BattleSetupPath);
+
+            var serialized = new SerializedObject(scope);
+            serialized.FindProperty("_setup").objectReferenceValue = setup;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         /// <summary>
@@ -74,10 +160,14 @@ namespace SRPG.Editor.Tools
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
+            CreateGameSystems();
+
             var environment = new GameObject("Environment").transform;
             var camera = CreateCamera(environment);
             CreateLight(environment);
             ConfigureLighting();
+
+            CreateGlobalVolume(environment);
 
             var runtimeRoot = new GameObject("Runtime").transform;
             CreateBootstrap(camera, runtimeRoot);
@@ -86,7 +176,7 @@ namespace SRPG.Editor.Tools
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.Refresh();
 
-            RegisterInBuildSettings();
+            RegisterInBuildSettings(ScenePath);
 
             Debug.Log(
                 $"[BattleSceneBuilder] 전투 씬을 만들었습니다: {ScenePath}\n" +
@@ -117,6 +207,38 @@ namespace SRPG.Editor.Tools
         // ====================================================================================================
 
         /// <summary>
+        /// 앱 수명 동안 유지되는 전역 시스템을 만듭니다.
+        ///
+        /// <b>씬의 최상위에 둡니다.</b>
+        /// <see cref="RootLifetimeScope"/> 는 <c>DontDestroyOnLoad</c> 로 씬 전환을 넘기는데,
+        /// 그것은 루트 오브젝트에만 걸립니다. 정돈하겠다고 Environment 아래로 넣으면
+        /// 씬을 넘길 때 조용히 함께 파괴됩니다.
+        ///
+        /// <b>여기에 씬 전용 물건을 매달지 마십시오.</b>
+        /// 이 오브젝트는 다음 씬으로 따라갑니다. 전투 전용 컴포넌트를 자식으로 넣으면
+        /// 살아남는 것이 전역 상태가 아니라 죽은 씬 참조가 됩니다.
+        /// </summary>
+        private static void CreateGameSystems()
+        {
+            var rootObject = new GameObject("GameSystems");
+            var scope = rootObject.AddComponent<RootLifetimeScope>();
+
+            var stateObject = new GameObject("GameState");
+            stateObject.transform.SetParent(rootObject.transform, false);
+            var gameState = stateObject.AddComponent<GameStateManager>();
+
+            var audioObject = new GameObject("Audio");
+            audioObject.transform.SetParent(rootObject.transform, false);
+            var audio = audioObject.AddComponent<AudioManager>();
+
+            // private [SerializeField] 는 SerializedObject로 연결합니다.
+            var serialized = new SerializedObject(scope);
+            serialized.FindProperty("_gameState").objectReferenceValue = gameState;
+            serialized.FindProperty("_audio").objectReferenceValue = audio;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
         /// 카메라 피벗과 그 자식 카메라를 만듭니다.
         ///
         /// 리그는 <b>피벗</b>에 붙습니다. 피벗이 초점이자 WASD로 움직이는 주체이고,
@@ -142,7 +264,7 @@ namespace SRPG.Editor.Tools
             // 없어도 URP가 실행 중에 붙여 주긴 합니다. 그래서 없어도 굴러갑니다.
             // 하지만 그러면 씬 에셋에 저장된 것과 실제로 도는 것이 달라지고,
             // 안티에일리어싱이나 포스트 프로세싱 같은 설정을 씬에서 만질 수가 없습니다.
-            cameraObject.AddComponent<UniversalAdditionalCameraData>();
+            var cameraData = cameraObject.AddComponent<UniversalAdditionalCameraData>();
 
             // 실제 위치와 각도는 BattleCameraRig가 런타임에 섬 크기에 맞춰 잡습니다.
             // 여기 값은 편집 중 씬 뷰에서 대략의 구도를 보기 위한 것입니다.
@@ -152,7 +274,46 @@ namespace SRPG.Editor.Tools
 
             cameraObject.AddComponent<AudioListener>();
 
+            // <b>저해상도로 그리므로 픽셀 격자에 맞춰 세워야 합니다.</b>
+            // 없으면 카메라를 움직일 때마다 화면 전체가 지글지글 기어다닙니다.
+            cameraObject.AddComponent<PixelSnapCamera>();
+
+            // 후처리는 카메라가 켜 주어야 볼륨이 먹힙니다.
+            cameraData.renderPostProcessing = true;
+
             return camera;
+        }
+
+        /// <summary>
+        /// 전장 전체에 걸리는 후처리 볼륨을 만듭니다.
+        ///
+        /// <b>전역 볼륨입니다.</b> 경계가 있는 볼륨은 카메라가 그 안에 들어가야 먹히는데,
+        /// 이 게임의 카메라는 전장 위를 자유롭게 돕니다. 자리에 따라 색이 달라지면
+        /// 그것은 연출이 아니라 결함으로 보입니다.
+        ///
+        /// 프로필이 없으면 볼륨만 세워 둡니다 — 메뉴에서 프로필을 구우면 그때 연결됩니다.
+        /// </summary>
+        /// <param name="parent">볼륨을 매달 부모입니다.</param>
+        private static void CreateGlobalVolume(Transform parent)
+        {
+            var volumeObject = new GameObject("PostProcessing");
+            volumeObject.transform.SetParent(parent, false);
+
+            var volume = volumeObject.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 0f;
+
+            var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(PostProcessBuilder.BattleProfilePath);
+
+            if (profile != null)
+            {
+                volume.sharedProfile = profile;
+                return;
+            }
+
+            Debug.LogWarning(
+                $"[BattleSceneBuilder] 후처리 프로필을 찾지 못했습니다: {PostProcessBuilder.BattleProfilePath}\n" +
+                "메뉴 'SRPG → 배선 → ⑦ 후처리 프로필 생성'을 실행한 뒤 씬을 다시 구우십시오.");
         }
 
         private static void CreateLight(Transform parent)
@@ -206,23 +367,49 @@ namespace SRPG.Editor.Tools
         /// <summary>
         /// 빌드 설정에 씬을 등록합니다. 이미 있으면 아무것도 하지 않습니다.
         /// </summary>
-        private static void RegisterInBuildSettings()
+        /// <param name="scenePath">등록할 씬의 경로입니다.</param>
+        /// <param name="first">
+        /// 목록의 맨 앞에 둘지 여부입니다.
+        /// 빌드는 첫 씬부터 시작하므로, 게임의 시작점인 월드맵이 앞에 와야 합니다.
+        /// </param>
+        private static void RegisterInBuildSettings(string scenePath, bool first = false)
         {
             var scenes = EditorBuildSettings.scenes;
 
             for (int i = 0; i < scenes.Length; i++)
             {
-                if (scenes[i].path == ScenePath)
+                if (scenes[i].path == scenePath)
                 {
+                    // 이미 있는데 앞으로 와야 한다면 자리를 옮깁니다.
+                    if (!first || i == 0)
+                    {
+                        return;
+                    }
+
+                    var moved = new System.Collections.Generic.List<EditorBuildSettingsScene>(scenes);
+                    var entry = moved[i];
+
+                    moved.RemoveAt(i);
+                    moved.Insert(0, entry);
+
+                    EditorBuildSettings.scenes = moved.ToArray();
                     return;
                 }
             }
 
-            var updated = new EditorBuildSettingsScene[scenes.Length + 1];
-            scenes.CopyTo(updated, 0);
-            updated[scenes.Length] = new EditorBuildSettingsScene(ScenePath, true);
+            var updated = new System.Collections.Generic.List<EditorBuildSettingsScene>(scenes);
+            var added = new EditorBuildSettingsScene(scenePath, true);
 
-            EditorBuildSettings.scenes = updated;
+            if (first)
+            {
+                updated.Insert(0, added);
+            }
+            else
+            {
+                updated.Add(added);
+            }
+
+            EditorBuildSettings.scenes = updated.ToArray();
         }
     }
 }

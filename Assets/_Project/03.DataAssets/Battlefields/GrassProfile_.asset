@@ -1,0 +1,105 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b3be5823dced03944b20437e71e304a0, type: 3}
+  m_Name: GrassProfile_
+  m_EditorClassIdentifier: SRPG.Data::SRPG.Data.GrassProfile
+  SchemaVersion: 2
+  Density: 19.1
+  ReedBand: 0.35
+  ReedChance: 0.7
+  WeedSlopeRatio: 0.55
+  WeedChance: 0.65
+  SizeVariation: 1
+  FullDensityDistance: 12
+  ThinDistance: 70
+  MinimumDensityRatio: 0.22
+  Grass:
+    HeightRange: {x: 0.5, y: 1}
+    WidthRange: {x: 0.5, y: 1}
+    BaseColor: {r: 0.062476102, g: 0.5754717, b: 0, a: 0}
+    TipColor: {r: 0.12432773, g: 0.8301887, b: 0, a: 0}
+    DryColor: {r: 0.6886792, g: 0.37944946, b: 0.11369702, a: 0}
+    PatchColorA: {r: 0.081493944, g: 0.7075472, b: 0, a: 0}
+    PatchColorB: {r: 0.5771156, g: 0.8018868, b: 0.3290762, a: 0}
+    TipBlend: 0.53
+    RootShade: 0.254
+    DryStrength: 0.466
+    ColorJitter: 0.147
+    ClusterScale: 0.12
+    ClusterJitter: 0.18
+    HueSpread: 0.35
+    ColorCohesion: 0.25
+    NormalRound: 0.55
+    NormalTipUp: 0.5
+    NormalScatter: 0.8
+    Translucency: 0.22
+    TranslucencyColor: {r: 0.72, g: 0.85, b: 0.35, a: 1}
+    TranslucencyPower: 4
+    TranslucencyRoot: 0.15
+    ViewAlign: 1
+    FacingNoise: 18
+    WindSwayAngle: 37
+    AccentChance: 0.229
+  Reed:
+    HeightRange: {x: 0.6, y: 1}
+    WidthRange: {x: 0.34, y: 0.52}
+    BaseColor: {r: 0.22, g: 0.41, b: 0.3, a: 1}
+    TipColor: {r: 0.52, g: 0.6, b: 0.38, a: 1}
+    DryColor: {r: 0.44, g: 0.48, b: 0.32, a: 1}
+    PatchColorA: {r: 0.2, g: 0.38, b: 0.28, a: 1}
+    PatchColorB: {r: 0.28, g: 0.45, b: 0.31, a: 1}
+    TipBlend: 0.65
+    RootShade: 0.45
+    DryStrength: 0.55
+    ColorJitter: 0.06
+    ClusterScale: 0.16
+    ClusterJitter: 0.12
+    HueSpread: 0.15
+    ColorCohesion: 0.4
+    NormalRound: 0.4
+    NormalTipUp: 0.65
+    NormalScatter: 0.6
+    Translucency: 0.16
+    TranslucencyColor: {r: 0.62, g: 0.8, b: 0.42, a: 1}
+    TranslucencyPower: 5
+    TranslucencyRoot: 0.1
+    ViewAlign: 1
+    FacingNoise: 10
+    WindSwayAngle: 46
+    AccentChance: 0
+  Weed:
+    HeightRange: {x: 0.16, y: 0.28}
+    WidthRange: {x: 0.26, y: 0.42}
+    BaseColor: {r: 0.55, g: 0.51, b: 0.31, a: 1}
+    TipColor: {r: 0.7, g: 0.66, b: 0.42, a: 1}
+    DryColor: {r: 0.62, g: 0.57, b: 0.35, a: 1}
+    PatchColorA: {r: 0.48, g: 0.45, b: 0.28, a: 1}
+    PatchColorB: {r: 0.63, g: 0.58, b: 0.34, a: 1}
+    TipBlend: 0.65
+    RootShade: 0.45
+    DryStrength: 0.55
+    ColorJitter: 0.1
+    ClusterScale: 0.1
+    ClusterJitter: 0.22
+    HueSpread: 0.45
+    ColorCohesion: 0.2
+    NormalRound: 0.6
+    NormalTipUp: 0.35
+    NormalScatter: 0.9
+    Translucency: 0.28
+    TranslucencyColor: {r: 0.86, g: 0.8, b: 0.45, a: 1}
+    TranslucencyPower: 3
+    TranslucencyRoot: 0.2
+    ViewAlign: 1
+    FacingNoise: 32
+    WindSwayAngle: 14
+    AccentChance: 0

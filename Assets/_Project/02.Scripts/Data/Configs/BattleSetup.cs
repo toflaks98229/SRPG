@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 namespace SRPG.Data
 {
@@ -28,6 +28,10 @@ namespace SRPG.Data
         [Tooltip("전장의 성격입니다. 비우면 코드 기본값(벌판)을 씁니다.\n" +
                  "월드맵이 붙으면 좌표가 고른 지형에 맞는 프로필이 여기 들어옵니다.")]
         public BattlefieldProfile TerrainProfile;
+
+        [Tooltip("들판의 생김새입니다. 밀도·크기 노이즈·음영이 여기서 옵니다.\n" +
+                 "비우면 코드 기본값을 씁니다.")]
+        public GrassProfile GrassProfile;
 
         // ====================================================================================================
         // 2. Rosters

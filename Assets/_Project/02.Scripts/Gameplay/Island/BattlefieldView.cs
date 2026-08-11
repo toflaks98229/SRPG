@@ -1,4 +1,4 @@
-﻿using SRPG.Common;
+using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Visual;
 using SRPG.Systems.Battlefield;
@@ -36,6 +36,9 @@ namespace SRPG.Gameplay.Island
         /// <summary>장애물의 폭입니다. 칸 크기에 대한 비율입니다.</summary>
         private const float ObstacleWidth = 0.85f;
 
+        /// <summary>수면 메시 한 칸의 월드 크기입니다. 파도의 최단 파장보다 촘촘해야 합니다.</summary>
+        private const float WaterCellSize = 1f;
+
         // ====================================================================================================
         // 1-1. Palette
         // ====================================================================================================
@@ -54,6 +57,54 @@ namespace SRPG.Gameplay.Island
         /// <summary>연결된 머티리얼입니다. 비어 있으면 임시 머티리얼을 만들어 씁니다.</summary>
         private TerrainMaterialSet _materials;
 
+        /// <summary>이번 전장의 풀밭입니다. 바깥이 유닛을 눌림 주체로 등록할 때 씁니다.</summary>
+        public GrassField Grass { get; private set; }
+
+        // ====================================================================================================
+        // 1-3. Clouds
+        // ====================================================================================================
+
+        [Header("구름 그림자")]
+        [SerializeField]
+        [Range(0f, 0.8f)]
+        [Tooltip("구름 그늘의 깊이입니다.\n" +
+                 "0이면 꺼집니다. 깊게 하면 연출은 살지만, 지형이 색으로 말하던\n" +
+                 "'갈 수 있는 곳'이 지나가는 그늘에 묻힙니다.")]
+        private float _cloudDepth = 0.28f;
+
+        [SerializeField]
+        [Range(0.002f, 0.1f)]
+        [Tooltip("구름 덩어리의 크기입니다. 작을수록 큰 구름입니다.")]
+        private float _cloudScale = 0.012f;
+
+        [SerializeField]
+        [Range(0f, 2f)]
+        [Tooltip("구름이 흘러가는 속도입니다.")]
+        private float _cloudSpeed = 0.35f;
+
+        [SerializeField]
+        [Tooltip("구름이 흘러가는 방향입니다. 바람과 같은 쪽이어야 자연스럽습니다.")]
+        private Vector2 _cloudDirection = new Vector2(1f, 0.35f);
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        [Tooltip("하늘을 덮는 정도입니다. 높이면 맑고, 낮추면 흐립니다.")]
+        private float _cloudCoverage = 0.52f;
+
+        [SerializeField]
+        [Range(0.01f, 0.5f)]
+        [Tooltip("구름 가장자리의 부드러움입니다.")]
+        private float _cloudSoftness = 0.16f;
+
+        [SerializeField]
+        [Tooltip("구름이 떠 있는 높이입니다. 지형보다 충분히 위여야 그림자가 옆으로 길게 눕습니다.")]
+        private float _cloudHeight = 60f;
+
+        /// <summary>구름의 배율·속도·깊이·높이 식별자입니다.</summary>
+        private static readonly int CloudParamsId = Shader.PropertyToID("_CloudParams");
+        /// <summary>구름의 방향·덮임·부드러움 식별자입니다.</summary>
+        private static readonly int CloudFlowId = Shader.PropertyToID("_CloudFlow");
+
         // ====================================================================================================
         // 2. Public Methods
         // ====================================================================================================
@@ -63,7 +114,9 @@ namespace SRPG.Gameplay.Island
         /// </summary>
         /// <param name="battlefield">화면에 세울 전장입니다. 지형과 물이 여기서 나옵니다.</param>
         /// <param name="materials">지형·물 머티리얼 묶음입니다. 비어 있으면 코드로 만듭니다.</param>
-        public void Build(Battlefield battlefield, TerrainMaterialSet materials = default)
+        /// <param name="grass">들판의 생김새입니다. 비우면 코드 기본값을 씁니다.</param>
+        public void Build(
+            Battlefield battlefield, TerrainMaterialSet materials = default, GrassProfile grass = null)
         {
             ClearChildren();
 
@@ -76,9 +129,41 @@ namespace SRPG.Gameplay.Island
             // 무엇이 연결되고 무엇이 빠졌는지 알아보기 더 어렵습니다.
             _materials = materials.IsComplete ? materials : default;
 
+            PublishCloudSettings();
+
             BuildTerrain(battlefield);
             BuildWater(battlefield);
             BuildObstacles(battlefield);
+            BuildGrass(battlefield, grass);
+        }
+
+        /// <summary>
+        /// 구름 설정을 전역으로 올립니다.
+        ///
+        /// <b>왜 머티리얼이 아니라 전역인가</b>
+        ///
+        /// 구름은 머티리얼의 성질이 아니라 하늘의 성질입니다.
+        /// 지형·물·풀·유닛이 각자 값을 들면 언젠가 하나가 어긋나고,
+        /// 그때부터 <b>지형은 그늘인데 그 위의 풀은 볕을 받습니다</b>.
+        /// 값을 한 곳에서 올리고 네 셰이더가 같은 함수를 부릅니다.
+        /// </summary>
+        private void PublishCloudSettings()
+        {
+            Shader.SetGlobalVector(CloudParamsId, new Vector4(
+                _cloudScale,
+                _cloudSpeed,
+                _cloudDepth,
+                _cloudHeight));
+
+            var direction = _cloudDirection.sqrMagnitude > 1e-6f
+                ? _cloudDirection.normalized
+                : Vector2.right;
+
+            Shader.SetGlobalVector(CloudFlowId, new Vector4(
+                direction.x,
+                direction.y,
+                _cloudCoverage,
+                _cloudSoftness));
         }
 
         // ====================================================================================================
@@ -134,8 +219,9 @@ namespace SRPG.Gameplay.Island
         /// </summary>
         private void BuildWater(Battlefield battlefield)
         {
-            var water = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            water.name = "Water";
+            // 물은 클릭 대상이 아닙니다. 프리미티브로 만들면 콜라이더가 딸려 와
+            // 바다를 클릭했을 때 이동 명령이 나가므로, 필요한 것만 직접 붙입니다.
+            var water = new GameObject("Water");
             water.transform.SetParent(transform, false);
 
             // 카메라가 전장 밖을 비출 때 빈 공간이 보이지 않도록 넉넉하게 키웁니다.
@@ -149,11 +235,14 @@ namespace SRPG.Gameplay.Island
             water.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             water.transform.localScale = new Vector3(size, size, 1f);
 
-            // 물은 클릭 대상이 아닙니다. 콜라이더가 있으면 바다를 클릭해 이동 명령이 나갑니다.
-            Destroy(water.GetComponent<Collider>());
+            // 한 칸이 대략 1 월드 단위가 되도록 나눕니다.
+            // 파도의 가장 짧은 파장이 3~4 단위이므로 이 정도면 마루가 뭉개지지 않습니다.
+            int segments = Mathf.Clamp(Mathf.RoundToInt(size / WaterCellSize), 32, 250);
 
-            var renderer = water.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = ResolveWaterMaterial();
+            water.AddComponent<MeshFilter>().sharedMesh = PrototypeVisuals.GetWaterGridMesh(segments);
+
+            var renderer = water.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = ResolveWaterMaterial(battlefield);
 
             // 물은 그림자를 드리우지 않습니다. 반투명한 판이 강바닥을 검게 덮어 버립니다.
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -208,6 +297,28 @@ namespace SRPG.Gameplay.Island
         }
 
         /// <summary>
+        /// 풀을 심습니다.
+        ///
+        /// 지형과 물과 장애물이 모두 선 뒤에 심습니다 —
+        /// 어디가 물이고 어디가 절벽인지 정해진 다음이라야 심을 자리를 고를 수 있습니다.
+        /// </summary>
+        /// <param name="battlefield">풀을 심을 전장입니다.</param>
+        /// <param name="grass">들판의 생김새입니다. 비우면 코드 기본값을 씁니다.</param>
+        private void BuildGrass(Battlefield battlefield, GrassProfile grass)
+        {
+            var grassObject = new GameObject("Grass");
+            grassObject.transform.SetParent(transform, false);
+
+            // 인스턴싱 호출이 이 오브젝트의 레이어로 나갑니다.
+            // 지형과 같은 레이어에 두어야 카메라 컬링 마스크가 땅과 풀을 함께 다룹니다.
+            // 콜라이더는 붙이지 않으므로 클릭 레이캐스트는 풀을 그대로 통과합니다.
+            GameLayers.ApplyRecursively(grassObject, GameLayers.Terrain);
+
+            Grass = grassObject.AddComponent<GrassField>();
+            Grass.Build(battlefield, grass);
+        }
+
+        /// <summary>
         /// 터레인이 쓸 머티리얼을 정합니다.
         ///
         /// <b>이 전장의 숫자를 셰이더에 넣어야 합니다</b>
@@ -247,24 +358,165 @@ namespace SRPG.Gameplay.Island
         }
 
         /// <summary>
-        /// 물이 쓸 머티리얼을 정합니다. 연결된 것이 물 셰이더면 그대로 쓰고, 아니면 새로 만듭니다.
+        /// 물이 쓸 머티리얼을 정합니다.
         ///
-        /// 여기서는 전장마다 다른 숫자를 넣지 않습니다.
-        /// 수심은 셰이더가 <b>깊이 버퍼에서 직접 재므로</b> 미리 알려 줄 것이 없습니다.
+        /// <b>연결된 에셋을 그대로 쓰지 않습니다</b>
+        ///
+        /// 색은 여전히 화면 깊이에서 나오지만, <b>파도는 정지 수심 지도를 알아야</b> 합니다 —
+        /// 물가에서 파고를 죽이지 않으면 해수면이 오르내려 보이는 물가와
+        /// 실제로 건널 수 있는 경계가 어긋납니다.
+        ///
+        /// 그 지도는 전장마다 다릅니다. 공유 에셋에 써 넣으면 마지막 전장의 지도가 남으므로,
+        /// 지형 머티리얼과 같이 복제해서 이번 전장의 것을 덮어씁니다.
         /// </summary>
-        private Material ResolveWaterMaterial()
+        private Material ResolveWaterMaterial(Battlefield battlefield)
         {
-            if (_materials.Water != null && IsWaterShader(_materials.Water.shader))
-            {
-                return _materials.Water;
-            }
+            var restDepthMap = CreateWaterRestDepthMap(
+                battlefield,
+                out float maxRestDepth,
+                out float shorelineSlope);
 
-            return PrototypeVisuals.CreateWaterMaterial(WaterColor);
+            var heightmap = battlefield.Heightmap;
+            int resolution = heightmap.Resolution;
+
+            // 하이트맵의 표본은 격자의 <b>모서리</b>에 있고 텍스처의 표본은 텍셀 <b>가운데</b>에 있습니다.
+            // 반 텍셀을 보정하지 않으면 물가에서 파도가 죽는 선이 실제 물가와 어긋납니다.
+            var depthArea = new Vector4(
+                battlefield.Origin.x,
+                battlefield.Origin.z,
+                (resolution - 1f) / (resolution * heightmap.WorldSize),
+                0.5f / resolution);
+
+            return PrototypeVisuals.CreateWaterMaterial(
+                _materials.Water,
+                restDepthMap,
+                depthArea,
+                maxRestDepth,
+                shorelineSlope,
+                WaterColor);
         }
 
-        private static bool IsWaterShader(Shader shader)
+        /// <summary>
+        /// 파도가 없을 때의 수심을 구워 텍스처로 만듭니다. 붉은 채널이 미터 단위 수심입니다.
+        ///
+        /// <b>왜 화면 깊이를 쓰지 않는가</b>
+        ///
+        /// 파고를 정하는 일은 정점 셰이더가 하는데, 그 단계에는 화면 깊이가 없습니다.
+        /// 있다 해도 쓰면 안 됩니다 — 파도가 만든 깊이 변화에 파도가 다시 반응하면
+        /// 되먹임이 생겨 수면이 요동칩니다. 지형에서 한 번 구운 값이라야 안정적입니다.
+        /// </summary>
+        /// <param name="battlefield">수심을 읽을 전장입니다.</param>
+        /// <param name="maxDepth">이 전장에서 가장 깊은 물의 깊이입니다. 파도가 잦아드는 폭이 여기서 나옵니다.</param>
+        /// <param name="shorelineSlope">
+        /// 물가에서 1미터 나아갈 때 깊어지는 정도입니다. 거품선의 폭이 여기서 나옵니다.
+        /// </param>
+        /// <returns>정지 수심 지도입니다.</returns>
+        private static Texture2D CreateWaterRestDepthMap(
+            Battlefield battlefield,
+            out float maxDepth,
+            out float shorelineSlope)
         {
-            return shader != null && shader.name == PrototypeVisuals.WaterShaderName;
+            var heightmap = battlefield.Heightmap;
+
+            int resolution = heightmap.Resolution;
+            float[,] heights = heightmap.ToTerrainHeights();
+
+            float maxElevation = heightmap.MaxElevation;
+
+            // 원점의 높이는 양변에서 지워지므로 지형 안쪽 값끼리 비교하면 됩니다.
+            float seaLevel = heightmap.SeaLevel;
+
+            var texture = new Texture2D(resolution, resolution, TextureFormat.RFloat, false, true)
+            {
+                name = "Water_RestDepth",
+                hideFlags = HideFlags.DontSave,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+            };
+
+            var pixels = new Color[resolution * resolution];
+            var depths = new float[resolution, resolution];
+
+            maxDepth = 0f;
+
+            for (int z = 0; z < resolution; z++)
+            {
+                for (int x = 0; x < resolution; x++)
+                {
+                    // 터레인 높이 배열은 [z, x] 순서입니다. 뒤집으면 지도가 대각으로 어긋납니다.
+                    float ground = heights[z, x] * maxElevation;
+                    float depth = Mathf.Max(0f, seaLevel - ground);
+
+                    depths[z, x] = depth;
+                    pixels[z * resolution + x] = new Color(depth, 0f, 0f, 0f);
+
+                    if (depth > maxDepth)
+                    {
+                        maxDepth = depth;
+                    }
+                }
+            }
+
+            shorelineSlope = MeasureShorelineSlope(depths, resolution, heightmap.WorldSize);
+
+            texture.SetPixels(pixels);
+            texture.Apply(false, false);
+
+            return texture;
+        }
+
+        /// <summary>
+        /// 물가에서 물이 얼마나 가파르게 깊어지는지 잽니다. 1미터 나아갈 때의 깊이 변화입니다.
+        ///
+        /// <b>왜 최대 수심으로는 안 되는가</b>
+        ///
+        /// 처음에는 거품선의 폭을 전장의 <b>가장 깊은 물</b>에 비례시켰습니다.
+        /// 그런데 가장 깊은 곳은 지도 가장자리의 먼바다입니다 — 강과는 아무 상관이 없습니다.
+        /// 그래서 얕은 강이 있는 전장에서는 거품선이 <b>강 전체를 덮어</b> 하얗게 만들었습니다.
+        ///
+        /// 거품선은 물가에서 일정한 <b>폭</b>으로 보여야 합니다.
+        /// 그 폭을 깊이로 옮기려면 물가가 얼마나 가파른지를 알아야 합니다 —
+        /// 완만한 모래톱에서는 얕은 깊이가 넓게 퍼지고, 가파른 벼랑에서는 좁습니다.
+        /// </summary>
+        /// <param name="depths">정지 수심 배열입니다.</param>
+        /// <param name="resolution">한 변의 표본 수입니다.</param>
+        /// <param name="worldSize">전장의 월드 크기입니다.</param>
+        /// <returns>물가의 평균 깊이 기울기입니다. 물가가 없으면 완만한 기본값입니다.</returns>
+        private static float MeasureShorelineSlope(float[,] depths, int resolution, float worldSize)
+        {
+            float spacing = worldSize / Mathf.Max(1, resolution - 1);
+
+            double total = 0.0;
+            int samples = 0;
+
+            for (int z = 1; z < resolution - 1; z++)
+            {
+                for (int x = 1; x < resolution - 1; x++)
+                {
+                    if (depths[z, x] <= 0f)
+                    {
+                        continue;
+                    }
+
+                    // 물가란 물이면서 뭍과 맞닿은 자리입니다.
+                    bool touchesLand = depths[z, x - 1] <= 0f || depths[z, x + 1] <= 0f
+                                    || depths[z - 1, x] <= 0f || depths[z + 1, x] <= 0f;
+
+                    if (!touchesLand)
+                    {
+                        continue;
+                    }
+
+                    float gradientX = (depths[z, x + 1] - depths[z, x - 1]) / (2f * spacing);
+                    float gradientZ = (depths[z + 1, x] - depths[z - 1, x]) / (2f * spacing);
+
+                    total += Mathf.Sqrt(gradientX * gradientX + gradientZ * gradientZ);
+                    samples++;
+                }
+            }
+
+            // 물가가 한 곳도 없는 전장(물이 없거나 통째로 잠긴)에서는 완만하다고 봅니다.
+            return samples > 0 ? (float)(total / samples) : 0.05f;
         }
 
         private void ClearChildren()

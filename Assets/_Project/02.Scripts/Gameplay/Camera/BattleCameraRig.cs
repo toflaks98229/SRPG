@@ -73,6 +73,15 @@ namespace SRPG.Gameplay.CameraControl
         [Tooltip("피벗으로부터의 거리입니다.")]
         private float _distance = 34f;
 
+        [SerializeField]
+        [Range(0, 32)]
+        [Tooltip("수평 회전을 몇 개의 자세로 끊을지입니다. 0이면 자유롭게 돕니다.\n\n" +
+                 "저해상도로 그릴 때 카메라가 도는 동안 그림이 픽셀 격자 위에서 계속 다시 표본을 뽑아 " +
+                 "지글거립니다. 픽셀 격자를 붙잡아도 이것만은 남습니다 — 회전이 정말로 일어나고 있기 때문입니다.\n" +
+                 "자세를 끊으면 넘어가는 순간에만 다시 뽑히고, 머무는 동안에는 완전히 고정된 그림이 됩니다.\n\n" +
+                 "8이면 45도마다, 16이면 22.5도마다 섭니다. 조작감이 크게 달라지므로 켜기 전에 시험해 보십시오.")]
+        private int _yawSteps;
+
         [Header("이동")]
         [SerializeField]
         [Min(1f)]
@@ -136,7 +145,7 @@ namespace SRPG.Gameplay.CameraControl
             ReadOrbitInput(deltaTime);
             ReadPanInput(deltaTime);
 
-            _yaw = Mathf.LerpAngle(_yaw, _targetYaw, SmoothSpeed * deltaTime);
+            _yaw = Mathf.LerpAngle(_yaw, ResolveTargetYaw(), SmoothSpeed * deltaTime);
             _distance = Mathf.Lerp(_distance, _targetDistance, SmoothSpeed * deltaTime);
 
             FollowGround(deltaTime);
@@ -323,6 +332,34 @@ namespace SRPG.Gameplay.CameraControl
         /// 카메라를 피벗 뒤쪽으로 <c>distance</c>만큼 밀고 같은 회전을 주면,
         /// 시선이 정확히 피벗의 원점을 지납니다.
         /// </summary>
+        /// <summary>
+        /// 이번 프레임에 향할 야우입니다. 단계가 정해져 있으면 그 눈금으로 끊습니다.
+        ///
+        /// <b>왜 회전을 끊는가</b>
+        ///
+        /// 저해상도로 그리면 카메라가 도는 동안 그림이 픽셀 격자 위에서 계속 다시 표본을 뽑습니다.
+        /// 픽셀 격자를 아무리 붙잡아도 이것은 남습니다 — 어긋난 것이 아니라
+        /// <b>회전이 정말로 일어나고 있는</b> 것이기 때문입니다.
+        ///
+        /// 3D 픽셀아트가 이 문제를 다루는 방법은 하나뿐입니다. 회전을 <b>몇 개의 자세로</b> 끊는 것입니다.
+        /// 자세 사이를 넘어갈 때만 다시 뽑히고, 머물러 있는 동안에는 완전히 고정된 그림이 됩니다.
+        ///
+        /// <b>기본은 꺼져 있습니다.</b> 자유 회전을 끊는 것은 그림의 문제가 아니라 조작감의 문제이고,
+        /// 그 판단은 코드가 아니라 사람이 해야 합니다.
+        /// </summary>
+        /// <returns>보간이 향할 야우입니다.</returns>
+        private float ResolveTargetYaw()
+        {
+            if (_yawSteps <= 0)
+            {
+                return _targetYaw;
+            }
+
+            float stepDegrees = 360f / _yawSteps;
+
+            return Mathf.Round(_targetYaw / stepDegrees) * stepDegrees;
+        }
+
         private void PlaceCamera()
         {
             if (_cameraTransform == null)
