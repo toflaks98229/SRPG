@@ -5,7 +5,6 @@
         "SRPG.Tests.Support",
         "SRPG.Common",
         "SRPG.Data",
-        "SRPG.Framework",
         "SRPG.Core",
         "SRPG.Systems",
         "SRPG.Gameplay",

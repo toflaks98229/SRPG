@@ -102,6 +102,12 @@ namespace SRPG.Gameplay.Battle
         /// <summary>화살 재사용 풀입니다. 궁수가 여기서 화살을 꺼내 씁니다.</summary>
         public ProjectilePool ProjectilePool { get; } = new ProjectilePool();
 
+        /// <summary>
+        /// 전장의 소리 창구입니다. 절대 null이 아닙니다.
+        /// 연결되지 않았으면 생성자가 <see cref="SilentBattleAudio"/> 로 채웁니다.
+        /// </summary>
+        public IBattleAudio Audio { get; }
+
         /// <summary>전술 시간 제어기입니다.</summary>
         public TacticalTimeController TimeController { get; }
 
@@ -145,7 +151,18 @@ namespace SRPG.Gameplay.Battle
         /// <param name="grid">섬 지형입니다.</param>
         /// <param name="timeController">전술 시간 제어기입니다.</param>
         /// <param name="tuning">전투 튜닝 에셋입니다. null이면 코드 기본값을 씁니다.</param>
-        public BattleContext(IslandGrid grid, TacticalTimeController timeController, BattleTuning tuning = null)
+        /// <param name="audio">
+        /// 전장의 소리 창구입니다. null이면 아무 소리도 내지 않는 것으로 채웁니다.
+        ///
+        /// 기본값을 둔 것은 <b>소리가 곁가지이기 때문</b>입니다. 격자 질의만 확인하는 검사가
+        /// 오디오를 세워야 할 이유는 없고, 그런 검사에서 여기에 무엇을 넣을지 고민하게 만드는 것은
+        /// 그 검사가 실제로 보는 것을 흐립니다.
+        /// </param>
+        public BattleContext(
+            IslandGrid grid,
+            TacticalTimeController timeController,
+            BattleTuning tuning = null,
+            IBattleAudio audio = null)
         {
             Grid = grid;
             Pathfinder = CreatePathfinder();
@@ -153,6 +170,7 @@ namespace SRPG.Gameplay.Battle
 
             // 이후 모든 소비자가 null 검사 없이 쓸 수 있도록 여기서 한 번만 확정합니다.
             Tuning = tuning != null ? tuning : BattleTuning.CreateDefault();
+            Audio = audio ?? SilentBattleAudio.Instance;
 
             _playerIndex = CreateUnitIndex(grid);
             _enemyIndex = CreateUnitIndex(grid);
@@ -478,7 +496,7 @@ namespace SRPG.Gameplay.Battle
         public InfluenceMap GetThreatMap(Team team)
         {
             float now = UnityEngine.Time.time;
-            float interval = Mathf.Max(0.02f, Tuning.InfluenceRefreshInterval);
+            float interval = Mathf.Max(0.02f, Tuning.Ai.InfluenceRefreshInterval);
 
             if (team == Team.Player)
             {
@@ -531,7 +549,7 @@ namespace SRPG.Gameplay.Battle
                 map.AddSourceWorld(unit.Position, Mathf.Max(0.05f, unit.HealthRatio));
             }
 
-            map.Propagate(Tuning.InfluenceDecayPerTile);
+            map.Propagate(Tuning.Ai.InfluenceDecayPerTile);
         }
 
         // ====================================================================================================

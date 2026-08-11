@@ -193,8 +193,8 @@ namespace SRPG.Gameplay.CameraControl
 
             if (tuning != null)
             {
-                _panSpeed = tuning.CameraPanSpeed;
-                margin = tuning.CameraBoundsMargin;
+                _panSpeed = tuning.Camera.PanSpeed;
+                margin = tuning.Camera.BoundsMargin;
             }
 
             ComputeBounds(grid, margin);

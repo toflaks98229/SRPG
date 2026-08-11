@@ -1,6 +1,7 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using SRPG.Data;
+using SRPG.Gameplay.CameraControl;
 using SRPG.Gameplay.Visual;
 using UnityEditor;
 using UnityEngine;
@@ -44,6 +45,12 @@ namespace SRPG.Editor.Tools
         /// <summary>기본 튜닝 에셋의 경로입니다.</summary>
         private const string TuningPath = ConfigDirectory + "/BattleTuning_Default.asset";
 
+        /// <summary>픽셀 격자 설정 에셋의 경로입니다. 렌더러 피처와 카메라가 <b>둘 다</b> 이것을 봅니다.</summary>
+        private const string PixelGridPath = ConfigDirectory + "/PixelGrid_Default.asset";
+
+        /// <summary>전투 사운드 뱅크 에셋의 경로입니다.</summary>
+        private const string AudioBankPath = ConfigDirectory + "/BattleAudio_Default.asset";
+
         /// <summary>빌드에 반드시 들어가야 하는 셰이더입니다.</summary>
         private static readonly string[] RequiredShaders =
         {
@@ -51,6 +58,12 @@ namespace SRPG.Editor.Tools
             PrototypeVisuals.WaterShaderName,
             PrototypeVisuals.BillboardShaderName,
             PrototypeVisuals.ContactShadowShaderName,
+            PrototypeVisuals.GrassShaderName,
+
+            // 픽셀아트 패스가 쓰는 셰이더입니다. 빌드에 없으면 Shader.Find 가 실패하고
+            // 화면이 그대로 나옵니다 — 에디터에서는 되고 빌드에서만 안 되는 종류의 고장입니다.
+            "SRPG/PixelOutline",
+            "SRPG/OutlineMask",
         };
 
         /// <summary>
@@ -79,6 +92,15 @@ namespace SRPG.Editor.Tools
             WireTerrainMaterials();
             WireUnitBillboards();
             WireMissingConfigs();
+            MigrateGrassProfiles();
+            MigrateBattleTuning();
+
+            // 픽셀아트 피처도 배선 항목입니다. 여기서 빠져 있으면 '전체 수행'을 눌러도
+            // 아웃라인이 붙지 않고, 그 사실을 화면을 들여다보기 전까지 알 수 없습니다.
+            WirePixelArt();
+
+            // 씬을 굽기 전이어야 합니다. 굽는 쪽이 여기서 만든 격자 에셋을 카메라에 꽂습니다.
+            WireGridAndAudio();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -101,6 +123,7 @@ namespace SRPG.Editor.Tools
             CheckTerrainMaterials(problems);
             CheckUnitBillboards(problems);
             CheckConfigs(problems);
+            CheckPixelGrid(problems);
 
             if (problems.Count > 0)
             {
@@ -373,6 +396,373 @@ namespace SRPG.Editor.Tools
             Debug.Log($"[BattleWiring] 들판 프로필 {guids.Length}개 중 {migrated}개를 갱신했습니다.");
         }
 
+        /// <summary>
+        /// 전투 튜닝 에셋의 스키마를 현재 코드에 맞춥니다.
+        ///
+        /// <b>왜 필요한가</b>
+        ///
+        /// 쉰여덟 개가 평평하게 놓여 있던 것을 영역별 묶음으로 중첩했습니다.
+        /// 그러면 YAML 의 키 모양이 통째로 바뀝니다 — 옛 키는 갈 곳이 없어 버려지고,
+        /// 새 키는 파일에 없어 코드 기본값으로 로드됩니다.
+        ///
+        /// <b>이번에는 그것이 손실이 아닙니다.</b> 옮기기 전에 에셋을 열어 확인한 결과
+        /// 담긴 값이 전부 코드 기본값과 같았고, 그중 여섯 개는 이미 사라진 필드를 가리키고
+        /// 있었습니다(<c>EnemyAggroRadius</c> · <c>ShipSpeed</c> 따위). 손으로 맞춰 둔 값이 없었습니다.
+        ///
+        /// 여기서 하는 일은 그 사실을 <b>파일에 적어 두는 것</b>입니다 —
+        /// 새 모양으로 다시 구워 두지 않으면 죽은 키가 계속 남아, 다음 사람이
+        /// "이 값이 왜 안 먹히지"를 묻게 됩니다.
+        ///
+        /// 여러 번 실행해도 결과가 같습니다.
+        /// </summary>
+        [MenuItem("SRPG/배선/⑦ 전투 튜닝 스키마 갱신", priority = 36)]
+        public static void MigrateBattleTuning()
+        {
+            var guids = AssetDatabase.FindAssets($"t:{nameof(BattleTuning)}");
+            int migrated = 0;
+
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var tuning = AssetDatabase.LoadAssetAtPath<BattleTuning>(path);
+
+                if (tuning == null || !tuning.MigrateToCurrentSchema())
+                {
+                    continue;
+                }
+
+                EditorUtility.SetDirty(tuning);
+                migrated++;
+
+                Debug.Log(
+                    $"[BattleWiring] 스키마 갱신: {tuning.name} → v{BattleTuning.CurrentSchemaVersion} " +
+                    $"(느린시간 {tuning.Time.SlowMotionScale}, 방패 충격보존 {tuning.Shield.BlockedKnockbackRetention})",
+                    tuning);
+            }
+
+            if (migrated > 0)
+            {
+                AssetDatabase.SaveAssets();
+            }
+
+            Debug.Log($"[BattleWiring] 전투 튜닝 {guids.Length}개 중 {migrated}개를 갱신했습니다.");
+        }
+
+        /// <summary>
+        /// 프로젝트의 SRPG 셰이더가 실제로 컴파일되는지 확인합니다.
+        ///
+        /// <b>왜 별도의 점검이 필요한가</b>
+        ///
+        /// 배치 모드는 화면이 없으면 셰이더 변형을 굽지 않습니다.
+        /// 그래서 "컴파일 오류 0"이 곧 "셰이더가 멀쩡하다"는 뜻이 아닙니다.
+        /// include 경로를 하나 잘못 적으면 C# 은 통과하고 화면만 조용히 비어 있습니다.
+        ///
+        /// <c>ShaderUtil</c> 은 임포터가 기록해 둔 오류를 읽으므로 배치에서도 대답할 수 있습니다.
+        /// </summary>
+        [MenuItem("SRPG/배선/⑧ 셰이더 오류 점검", priority = 37)]
+        public static void InspectShaders()
+        {
+            var guids = AssetDatabase.FindAssets("t:Shader");
+            int checkedCount = 0;
+            int brokenCount = 0;
+
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+
+                // 패키지의 셰이더까지 훑을 이유는 없습니다.
+                if (!path.StartsWith("Assets/", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+
+                if (shader == null)
+                {
+                    continue;
+                }
+
+                checkedCount++;
+
+                if (!ShaderUtil.ShaderHasError(shader))
+                {
+                    continue;
+                }
+
+                brokenCount++;
+
+                var messages = ShaderUtil.GetShaderMessages(shader);
+
+                foreach (var message in messages)
+                {
+                    if (message.severity != UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error)
+                    {
+                        continue;
+                    }
+
+                    Debug.LogError(
+                        $"[BattleWiring] {shader.name} ({System.IO.Path.GetFileName(path)}:{message.line}) — {message.message}",
+                        shader);
+                }
+            }
+
+            if (brokenCount == 0)
+            {
+                Debug.Log($"[BattleWiring] 셰이더 {checkedCount}개를 점검했고 오류가 없습니다.");
+                return;
+            }
+
+            Debug.LogError($"[BattleWiring] 셰이더 {checkedCount}개 중 {brokenCount}개에 오류가 있습니다.");
+        }
+
+        /// <summary>
+        /// 픽셀아트 렌더러 피처를 쓸 수 있는 상태로 맞춥니다.
+        ///
+        /// <b>왜 셰이더를 직접 꽂는가</b>
+        ///
+        /// 피처는 비어 있으면 <see cref="Shader.Find"/> 로 찾습니다. 에디터에서는 프로젝트 전체를
+        /// 뒤지므로 잘 됩니다. 그런데 <b>빌드에서는 포함된 셰이더만</b> 찾습니다.
+        /// 참조가 없으면 포함되지 않고, 포함되지 않으면 찾지 못하고, 화면은 그냥 원본이 나옵니다.
+        /// 에디터에서는 되고 빌드에서만 안 되는, 가장 늦게 발견되는 종류의 고장입니다.
+        ///
+        /// 에셋 참조로 꽂아 두면 그 자체가 포함 근거가 되어 이 고리가 끊깁니다.
+        ///
+        /// <b>SSAO 를 끕니다</b>
+        ///
+        /// 화면 공간 차폐는 GPU 인스턴싱으로 그리는 풀과 맞지 않습니다.
+        /// 인스턴스마다 노멀이 제대로 들어가지 않아 들판에 검은 얼룩이 집니다.
+        /// 참조 구현들이 공통으로 경고하는 항목이고, 이 프로젝트가 정확히 그 조건입니다.
+        /// </summary>
+        [MenuItem("SRPG/배선/⑨ 픽셀아트 피처 배선", priority = 38)]
+        public static void WirePixelArt()
+        {
+            var outline = Shader.Find("SRPG/PixelOutline");
+            var mask = Shader.Find("SRPG/OutlineMask");
+
+            if (outline == null || mask == null)
+            {
+                Debug.LogError("[BattleWiring] 픽셀아트 셰이더를 찾지 못했습니다. 임포트 오류를 먼저 확인하십시오.");
+                return;
+            }
+
+            int wired = 0;
+            int disabledAo = 0;
+
+            foreach (string guid in AssetDatabase.FindAssets("t:ScriptableRendererData"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+
+                foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(path))
+                {
+                    if (asset == null)
+                    {
+                        continue;
+                    }
+
+                    string typeName = asset.GetType().Name;
+
+                    if (typeName == "PixelArtFeature")
+                    {
+                        var serialized = new SerializedObject(asset);
+
+                        serialized.FindProperty("_outlineShader").objectReferenceValue = outline;
+                        serialized.FindProperty("_maskShader").objectReferenceValue = mask;
+                        serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                        EditorUtility.SetDirty(asset);
+                        wired++;
+
+                        continue;
+                    }
+
+                    // 이름으로 봅니다. SSAO 타입은 URP 내부에 있어 직접 참조할 수 없습니다.
+                    if (typeName != "ScreenSpaceAmbientOcclusion")
+                    {
+                        continue;
+                    }
+
+                    var ao = new SerializedObject(asset);
+                    var active = ao.FindProperty("m_Active");
+
+                    if (active == null || !active.boolValue)
+                    {
+                        continue;
+                    }
+
+                    active.boolValue = false;
+                    ao.ApplyModifiedPropertiesWithoutUndo();
+
+                    EditorUtility.SetDirty(asset);
+                    disabledAo++;
+                }
+            }
+
+            AssetDatabase.SaveAssets();
+
+            Debug.Log(
+                $"[BattleWiring] ⑨ 픽셀아트 피처 {wired}개에 셰이더를 꽂았고, " +
+                $"SSAO {disabledAo}개를 껐습니다.");
+        }
+
+        /// <summary>
+        /// 픽셀 격자 에셋과 사운드 뱅크를 만들어 쓰는 쪽에 꽂습니다.
+        ///
+        /// <b>격자를 왜 도구가 꽂는가</b>
+        ///
+        /// 격자 값을 렌더러 피처와 카메라가 <b>둘 다</b> 씁니다. 각자 값을 들고 있던 것을
+        /// 에셋 하나로 모았지만, 그 에셋을 <b>한쪽에만</b> 꽂으면 예전과 똑같아집니다 —
+        /// 한쪽은 에셋을, 다른 쪽은 코드 기본값을 보게 되니까요.
+        /// 어긋나도 컴파일은 통과하고 오류도 나지 않으므로 손으로 맡길 일이 아닙니다.
+        ///
+        /// <b>뱅크는 왜 만들어 두는가</b>
+        ///
+        /// 비워 두어도 코드가 파형을 합성해 채웁니다. 다만 그것은 <b>매번 새로 합성</b>되고
+        /// 인스펙터에 보이지 않아, 실제 클립으로 갈아 끼울 자리가 프로젝트에 없습니다.
+        /// 에셋으로 한 번 구워 두면 그 자리가 생깁니다.
+        ///
+        /// 여러 번 실행해도 결과가 같습니다. 이미 꽂혀 있으면 건드리지 않습니다.
+        /// </summary>
+        [MenuItem("SRPG/배선/⑩ 픽셀 격자·사운드 에셋 연결", priority = 39)]
+        public static void WireGridAndAudio()
+        {
+            var grid = EnsurePixelGrid();
+            var bank = EnsureAudioBank();
+
+            int features = 0;
+
+            foreach (string guid in AssetDatabase.FindAssets("t:ScriptableRendererData"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+
+                foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(path))
+                {
+                    if (asset == null || asset.GetType().Name != "PixelArtFeature")
+                    {
+                        continue;
+                    }
+
+                    var serialized = new SerializedObject(asset);
+                    var property = serialized.FindProperty("_grid");
+
+                    if (property == null || property.objectReferenceValue == grid)
+                    {
+                        continue;
+                    }
+
+                    property.objectReferenceValue = grid;
+                    serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                    EditorUtility.SetDirty(asset);
+                    features++;
+                }
+            }
+
+            // 지금 열려 있는 씬만 봅니다. 다른 씬을 몰래 열었다 닫으면
+            // 사용자가 편집 중이던 것을 건드릴 위험이 있고, 전투 씬은 어차피 다시 구워집니다.
+            int cameras = 0;
+
+            foreach (var snap in UnityEngine.Object.FindObjectsByType<PixelSnapCamera>(
+                         FindObjectsInactive.Include))
+            {
+                if (AssignPixelGrid(snap))
+                {
+                    cameras++;
+                }
+            }
+
+            var setup = AssetDatabase.LoadAssetAtPath<BattleSetup>(PrototypeAssetBuilder.BattleSetupPath);
+            bool wiredBank = false;
+
+            if (setup != null && setup.AudioBank == null)
+            {
+                setup.AudioBank = bank;
+                EditorUtility.SetDirty(setup);
+                wiredBank = true;
+            }
+
+            AssetDatabase.SaveAssets();
+
+            Debug.Log(
+                $"[BattleWiring] ⑩ 격자를 피처 {features}개와 열린 씬의 카메라 {cameras}개에 꽂았습니다. " +
+                (wiredBank ? "사운드 뱅크도 연결했습니다." : "사운드 뱅크는 이미 연결되어 있거나 구성 에셋이 없습니다."));
+        }
+
+        /// <summary>
+        /// 픽셀 격자 에셋을 카메라에 꽂습니다. 이미 같은 것이 꽂혀 있으면 아무것도 하지 않습니다.
+        ///
+        /// 씬을 굽는 쪽(<see cref="BattleSceneBuilder"/>)도 이것을 부릅니다 —
+        /// 꽂는 규칙이 두 곳에 있으면 언젠가 한쪽만 고쳐집니다.
+        /// </summary>
+        /// <param name="snap">격자를 꽂을 카메라 컴포넌트입니다. null이면 아무것도 하지 않습니다.</param>
+        /// <returns>실제로 바꿨으면 true입니다.</returns>
+        public static bool AssignPixelGrid(PixelSnapCamera snap)
+        {
+            if (snap == null)
+            {
+                return false;
+            }
+
+            var serialized = new SerializedObject(snap);
+            var property = serialized.FindProperty("_grid");
+            var grid = EnsurePixelGrid();
+
+            if (property == null || property.objectReferenceValue == grid)
+            {
+                return false;
+            }
+
+            property.objectReferenceValue = grid;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            EditorUtility.SetDirty(snap);
+            return true;
+        }
+
+        /// <summary>격자 에셋을 확보합니다. 없으면 코드 기본값으로 하나 굽습니다.</summary>
+        /// <returns>프로젝트에 저장된 격자 에셋입니다.</returns>
+        private static PixelGridSettings EnsurePixelGrid()
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<PixelGridSettings>(PixelGridPath);
+
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            EnsureFolder(ConfigDirectory);
+
+            var created = PixelGridSettings.CreateDefault();
+            AssetDatabase.CreateAsset(created, PixelGridPath);
+
+            return created;
+        }
+
+        /// <summary>
+        /// 사운드 뱅크 에셋을 확보합니다. 없으면 하나 굽습니다.
+        ///
+        /// <b>합성 클립은 굽지 않습니다.</b> <see cref="BattleAudioBank.CreateDefault"/> 가 만드는 클립은
+        /// 런타임 <c>AudioClip</c> 이라 에셋으로 직렬화되지 않습니다. 여기서는 <b>빈</b> 뱅크를 만듭니다 —
+        /// 클립 칸이 비면 소비자 쪽에서 그 칸만 조용해지고, 실제 소리를 넣을 자리는 남습니다.
+        /// </summary>
+        /// <returns>프로젝트에 저장된 사운드 뱅크입니다.</returns>
+        private static BattleAudioBank EnsureAudioBank()
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<BattleAudioBank>(AudioBankPath);
+
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            EnsureFolder(ConfigDirectory);
+
+            var created = ScriptableObject.CreateInstance<BattleAudioBank>();
+            AssetDatabase.CreateAsset(created, AudioBankPath);
+
+            return created;
+        }
+
         [MenuItem("SRPG/배선/④ 빠진 설정 에셋 연결", priority = 33)]
         public static void WireMissingConfigs()
         {
@@ -569,6 +959,94 @@ namespace SRPG.Editor.Tools
             {
                 problems.Add("BattleSetup.Tuning 이 비어 있습니다. 전투 수치가 전부 코드 기본값으로 돌아갑니다.");
             }
+
+            // 전장 프로필의 종류는 파일 이름에서 파생됩니다. 어긋나면 강을 고르고 숲에서 싸우게 되는데,
+            // 인스펙터에서 한 번 잘못 누르면 생기고 아무 소리도 나지 않습니다. 실제로 한 번 그랬습니다.
+            foreach (TerrainKind kind in System.Enum.GetValues(typeof(TerrainKind)))
+            {
+                string path = $"Assets/_Project/03.DataAssets/Battlefields/Battlefield_{kind}.asset";
+                var profile = AssetDatabase.LoadAssetAtPath<BattlefieldProfile>(path);
+
+                if (profile == null)
+                {
+                    problems.Add($"{kind} 전장 프로필이 없습니다: {path}");
+                    continue;
+                }
+
+                if (profile.Kind != kind)
+                {
+                    problems.Add($"{path} 의 종류가 {profile.Kind} 입니다. 파일 이름과 어긋납니다.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 렌더러 피처와 열린 씬의 카메라가 <b>같은</b> 격자를 보는지 확인합니다.
+        ///
+        /// <b>이것이 이 진단의 유일한 이유입니다.</b>
+        /// 둘이 어긋나도 컴파일은 통과하고 오류도 나지 않습니다. 증상은
+        /// "카메라가 붙잡는 시늉만 하고 화면은 그대로 기어다닌다" 하나뿐이라,
+        /// 원인이 설정 불일치라는 것을 화면만 보고 알아내기는 매우 어렵습니다.
+        ///
+        /// 둘 다 비어 있는 것은 <b>문제가 아닙니다</b> — 그때는 양쪽이 같은 코드 기본값을 씁니다.
+        /// </summary>
+        /// <param name="problems">발견한 문제가 여기 쌓입니다.</param>
+        private static void CheckPixelGrid(List<string> problems)
+        {
+            Object featureGrid = null;
+            bool sawFeature = false;
+
+            foreach (string guid in AssetDatabase.FindAssets("t:ScriptableRendererData"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+
+                foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(path))
+                {
+                    if (asset == null || asset.GetType().Name != "PixelArtFeature")
+                    {
+                        continue;
+                    }
+
+                    var property = new SerializedObject(asset).FindProperty("_grid");
+
+                    if (property == null)
+                    {
+                        continue;
+                    }
+
+                    featureGrid = property.objectReferenceValue;
+                    sawFeature = true;
+                }
+            }
+
+            if (!sawFeature)
+            {
+                return;
+            }
+
+            foreach (var snap in UnityEngine.Object.FindObjectsByType<PixelSnapCamera>(
+                         FindObjectsInactive.Include))
+            {
+                var property = new SerializedObject(snap).FindProperty("_grid");
+
+                if (property == null || property.objectReferenceValue == featureGrid)
+                {
+                    continue;
+                }
+
+                problems.Add(
+                    $"'{snap.name}' 의 픽셀 격자가 렌더러 피처와 다릅니다 " +
+                    $"(카메라: {Describe(property.objectReferenceValue)}, 피처: {Describe(featureGrid)}). " +
+                    "화면이 기어다닙니다.");
+            }
+        }
+
+        /// <summary>진단 문구에 쓸 에셋 이름입니다.</summary>
+        /// <param name="asset">이름을 물을 에셋입니다. 비어 있어도 됩니다.</param>
+        /// <returns>에셋 이름, 또는 비어 있다는 표시입니다.</returns>
+        private static string Describe(Object asset)
+        {
+            return asset != null ? asset.name : "비어 있음(코드 기본값)";
         }
 
         // ====================================================================================================

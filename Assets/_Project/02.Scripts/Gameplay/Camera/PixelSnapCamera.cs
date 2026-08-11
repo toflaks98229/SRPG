@@ -1,5 +1,6 @@
+using SRPG.Data;
+using SRPG.Rendering;
 using UnityEngine;
-using UnityEngine.Rendering.Universal;
 
 namespace SRPG.Gameplay.CameraControl
 {
@@ -52,9 +53,10 @@ namespace SRPG.Gameplay.CameraControl
         private Transform _focus;
 
         [SerializeField]
-        [Range(0.05f, 1f)]
-        [Tooltip("렌더 배율을 읽지 못했을 때 쓸 값입니다. 파이프라인 에셋의 Render Scale 과 같게 두십시오.")]
-        private float _fallbackRenderScale = 0.25f;
+        [Tooltip("픽셀 격자 설정입니다. 렌더러 피처의 PixelArtFeature 와 같은 에셋을 꽂아야 합니다.\n" +
+                 "어긋나면 카메라는 A 격자에 맞춰 서는데 화면은 B 격자로 잘려, " +
+                 "붙잡는 시늉만 하고 화면은 그대로 기어다닙니다.")]
+        private PixelGridSettings _grid;
 
         // ====================================================================================================
         // 2. Fields
@@ -62,6 +64,9 @@ namespace SRPG.Gameplay.CameraControl
 
         /// <summary>이 컴포넌트가 붙은 카메라입니다.</summary>
         private Camera _camera;
+
+        /// <summary>격자 에셋이 연결되지 않았을 때 쓰는 코드 기본값입니다.</summary>
+        private PixelGridSettings _fallbackGrid;
 
         // ====================================================================================================
         // 3. Properties
@@ -149,6 +154,26 @@ namespace SRPG.Gameplay.CameraControl
         // ====================================================================================================
 
         /// <summary>
+        /// 쓸 격자 설정을 정합니다. 연결되지 않았으면 코드 기본값을 만들어 들고 있습니다.
+        /// </summary>
+        /// <returns>격자 설정입니다. 절대 null 이 아닙니다.</returns>
+        private PixelGridSettings ResolveGrid()
+        {
+            if (_grid != null)
+            {
+                return _grid;
+            }
+
+            if (_fallbackGrid == null)
+            {
+                _fallbackGrid = PixelGridSettings.CreateDefault();
+                _fallbackGrid.hideFlags = HideFlags.HideAndDontSave;
+            }
+
+            return _fallbackGrid;
+        }
+
+        /// <summary>
         /// 격자에서 벗어난 만큼을 픽셀 단위로 구합니다.
         /// </summary>
         /// <param name="along">카메라 축 방향의 좌표입니다.</param>
@@ -169,10 +194,12 @@ namespace SRPG.Gameplay.CameraControl
         /// <returns>월드 길이입니다. 구할 수 없으면 0입니다.</returns>
         private float ResolveWorldUnitsPerPixel(out float renderWidth, out float renderHeight)
         {
-            float scale = ResolveRenderScale();
+            // 격자 간격은 렌더러 피처와 <b>같은 에셋</b>에서 나옵니다.
+            // 각자 값을 들고 있으면 어긋나도 컴파일이 통과하고 오류도 나지 않습니다.
+            renderHeight = ResolveGrid().ResolveHeight(
+                Screen.height, PixelGrid.ResolveFocusDistance(_camera));
 
-            renderWidth = Mathf.Max(1f, Screen.width * scale);
-            renderHeight = Mathf.Max(1f, Screen.height * scale);
+            renderWidth = Mathf.Max(1f, renderHeight * _camera.aspect);
 
             if (_camera.orthographic)
             {
@@ -196,18 +223,5 @@ namespace SRPG.Gameplay.CameraControl
             return visibleHeight / renderHeight;
         }
 
-        /// <summary>
-        /// 지금 파이프라인이 쓰는 렌더 배율입니다.
-        ///
-        /// <b>읽기만 합니다.</b> 파이프라인 에셋은 스크립터블 오브젝트라,
-        /// 런타임에 고치면 에디터에서 그 값이 에셋 파일에 그대로 박힙니다.
-        /// </summary>
-        /// <returns>렌더 배율입니다. 읽지 못하면 인스펙터의 대체값입니다.</returns>
-        private float ResolveRenderScale()
-        {
-            var asset = UniversalRenderPipeline.asset;
-
-            return asset != null ? asset.renderScale : _fallbackRenderScale;
-        }
     }
 }

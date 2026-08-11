@@ -117,7 +117,7 @@ namespace SRPG.Tests.PlayMode
                 if (center.z > maxZ) maxZ = center.z;
             }
 
-            float margin = bootstrap.Context.Tuning.CameraBoundsMargin + 0.01f;
+            float margin = bootstrap.Context.Tuning.Camera.BoundsMargin + 0.01f;
 
             Assert.LessOrEqual(clamped.x, maxX + margin, "피벗이 섬 동쪽 밖으로 나갔습니다.");
             Assert.LessOrEqual(clamped.z, maxZ + margin, "피벗이 섬 북쪽 밖으로 나갔습니다.");

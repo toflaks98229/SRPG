@@ -1,4 +1,5 @@
 using SRPG.Data;
+using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Units;
 using UnityEngine;
 
@@ -37,6 +38,16 @@ namespace SRPG.Gameplay.Weapons
 
         /// <summary>전투 튜닝 수치입니다. 무기별 감각을 재컴파일 없이 조정하는 통로입니다.</summary>
         protected BattleTuning Tuning { get; private set; }
+
+        /// <summary>
+        /// 전장의 소리 창구입니다. 절대 null이 아닙니다.
+        ///
+        /// <b>무기가 내는 소리는 하나뿐입니다</b> — 활을 놓는 소리입니다.
+        /// 맞는 소리는 맞은 병사가 냅니다(<c>Unit.ReceiveHit</c>). 때린 쪽은 자기 타격이
+        /// 닿았는지조차 모르기 때문입니다. 발사는 반대입니다 — 화살이 어디에 꽂히든
+        /// 시위를 놓는 순간은 확실히 일어나고, 그것을 아는 것은 무기뿐입니다.
+        /// </summary>
+        protected IBattleAudio Audio { get; private set; } = SilentBattleAudio.Instance;
 
         /// <summary>무기 모델이 붙는 트랜스폼입니다. 프리팹에서 연결하거나 런타임에 만듭니다.</summary>
         [SerializeField]
@@ -171,16 +182,19 @@ namespace SRPG.Gameplay.Weapons
         /// <param name="definition">소유자의 정의 데이터입니다.</param>
         /// <param name="projectilePool">투사체 재사용 풀입니다. 없어도 동작합니다.</param>
         /// <param name="tuning">전투 튜닝입니다. 없으면 무기가 코드 기본값으로 동작합니다.</param>
+        /// <param name="audio">전장의 소리 창구입니다. 없으면 소리를 내지 않습니다.</param>
         public virtual void Initialize(
             Unit owner,
             UnitDefinition definition,
             ProjectilePool projectilePool = null,
-            BattleTuning tuning = null)
+            BattleTuning tuning = null,
+            IBattleAudio audio = null)
         {
             Owner = owner;
             Definition = definition;
             ProjectilePool = projectilePool;
             Tuning = tuning;
+            Audio = audio ?? SilentBattleAudio.Instance;
 
             if (WeaponPivot == null)
             {

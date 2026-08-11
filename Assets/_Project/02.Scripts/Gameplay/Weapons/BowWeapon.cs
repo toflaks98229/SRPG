@@ -179,6 +179,10 @@ namespace SRPG.Gameplay.Weapons
                 Definition.ProjectileGravityScale,
                 Definition.ArcLaunchAngleDegrees,
                 Definition.Damage);
+
+            // 화살이 실제로 나간 뒤에만 냅니다. 위에서 탄도 해가 없어 돌아가는 길이 있어서,
+            // 동작 시작에 붙이면 <b>쏘지 않은 화살의 소리</b>가 납니다.
+            Audio.PlayShot(muzzle);
         }
 
         /// <summary>

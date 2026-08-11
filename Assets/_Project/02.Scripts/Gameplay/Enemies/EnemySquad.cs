@@ -125,12 +125,16 @@ namespace SRPG.Gameplay.Enemies
             _replanTimer -= deltaTime;
             if (_replanTimer <= 0f)
             {
-                _replanTimer = _context.Tuning.EnemyReplanInterval;
+                _replanTimer = _context.Tuning.Enemy.ReplanInterval;
                 Replan();
             }
 
             _motor.Advance(deltaTime, _anchorSpeed, _context.Grid);
             AssignUnitTargets();
+
+            // 자리를 정한 <b>다음에</b> 병사를 돌립니다. 아군 분대와 같은 순서입니다 —
+            // 양측이 같은 장부(SquadMembers)를 쓰는 이유가 이런 순서까지 함께 가져가기 위해서입니다.
+            _members.Tick(deltaTime);
         }
 
         // ====================================================================================================
@@ -176,7 +180,7 @@ namespace SRPG.Gameplay.Enemies
             Vector3 anchor = context.Grid.CoordToWorld(deployCoord);
             _motor.Teleport(anchor, deployCoord);
 
-            _anchorSpeed = definition.MoveSpeed * context.Tuning.AnchorSpeedFactor;
+            _anchorSpeed = definition.MoveSpeed * context.Tuning.Squad.AnchorSpeedFactor;
 
             // 명부에 스스로 올립니다. 이게 없으면 표시하는 쪽이 씬 전체를 훑어야 합니다.
             context.RegisterSquad(this);
@@ -187,8 +191,8 @@ namespace SRPG.Gameplay.Enemies
             int total = Mathf.Max(1, soldierCount);
 
             // 플레이어보다 넓게 섭니다 — 질서 대 혼돈의 대비가 첫 화면부터 보여야 합니다.
-            float spacing = context.Tuning.FormationSpacing
-                            * Mathf.Max(0.1f, context.Tuning.EnemyFormationLooseness);
+            float spacing = context.Tuning.Squad.FormationSpacing
+                            * Mathf.Max(0.1f, context.Tuning.Enemy.FormationLooseness);
 
             FormationSolver.SolveRings(anchor, total, spacing, _slots);
             FormationSolver.ClampToWalkable(context.Grid, anchor, _slots);
@@ -251,7 +255,7 @@ namespace SRPG.Gameplay.Enemies
             }
 
             // 이동 중이라면, 바꿀 만큼 나은지 확인합니다.
-            if (!_motor.HasArrived && score < _currentGoalScore + _context.Tuning.EnemyGoalSwitchMargin)
+            if (!_motor.HasArrived && score < _currentGoalScore + _context.Tuning.Enemy.GoalSwitchMargin)
             {
                 return;
             }
@@ -298,9 +302,9 @@ namespace SRPG.Gameplay.Enemies
 
             return new EnemyGoalPlanner.Weights
             {
-                Proximity = tuning.AiProximityWeight,
-                Isolation = tuning.AiIsolationWeight,
-                OpenGround = tuning.AiOpenGroundWeight,
+                Proximity = tuning.Ai.ProximityWeight,
+                Isolation = tuning.Ai.IsolationWeight,
+                OpenGround = tuning.Ai.OpenGroundWeight,
             };
         }
 
@@ -382,21 +386,21 @@ namespace SRPG.Gameplay.Enemies
 
                     // 앵커 한 점으로 몰리면 서로 밀어내느라 뭉개집니다.
                     // 각자 조금씩 다른 지점을 향하게 해 자연스러운 무리로 흘러가게 합니다.
-                    unit.SetSlotTarget(_motor.Anchor + ScatterFor(unit, tuning.EnemyChargeScatter));
+                    unit.SetSlotTarget(_motor.Anchor + ScatterFor(unit, tuning.Enemy.ChargeScatter));
                 }
 
                 return;
             }
 
             // 자리를 잡을 때도 플레이어보다 넓게 섭니다.
-            float spacing = tuning.FormationSpacing * Mathf.Max(0.1f, tuning.EnemyFormationLooseness);
+            float spacing = tuning.Squad.FormationSpacing * Mathf.Max(0.1f, tuning.Enemy.FormationLooseness);
 
             FormationSolver.SolveRings(_motor.Anchor, count, spacing, _slots);
             FormationSolver.ClampToWalkable(_context.Grid, _motor.Anchor, _slots);
 
             // 가까운 병사에게 자리를 줍니다. 순서대로 나눠 주면 대열을 가로질러 걸어갑니다.
             _members.ReassignSlots(
-                _slots, tuning.SquadAssignmentInterval, UnityEngine.Time.deltaTime, _motor.Anchor);
+                _slots, tuning.Squad.AssignmentInterval, UnityEngine.Time.deltaTime, _motor.Anchor);
 
             for (int i = 0; i < count; i++)
             {
@@ -404,7 +408,7 @@ namespace SRPG.Gameplay.Enemies
 
                 if (unit != null && _members.TryGetSlot(i, _slots, out Vector3 slot))
                 {
-                    unit.SetSlotTarget(slot + ScatterFor(unit, tuning.EnemyFormationJitter));
+                    unit.SetSlotTarget(slot + ScatterFor(unit, tuning.Enemy.FormationJitter));
                 }
             }
         }

@@ -780,6 +780,18 @@ namespace SRPG.Editor.Tools
         /// 그건 "왜 이 지역만 다르게 생겼지"로만 보입니다.
         ///
         /// 지금은 그 연결이 없으므로 구성 에셋이 하나를 골라 씁니다.
+        ///
+        /// <b>이름과 종류가 어긋나면 바로잡습니다</b>
+        ///
+        /// 실제로 어긋났던 적이 있습니다. <c>Battlefield_River</c> 의 <c>Kind</c> 가
+        /// <c>Forest</c> 로 바뀐 채 커밋되어, 강 프로필을 골랐는데 숲이 나오는 상태가 이어졌습니다.
+        ///
+        /// 이 종류의 어긋남은 <b>인스펙터에서 한 번 잘못 누르면 생기고 아무 소리도 나지 않습니다</b>.
+        /// 그런데 <c>Kind</c> 는 다른 값과 달리 기획이 정할 것이 아닙니다 —
+        /// 파일 이름이 이미 답을 들고 있으므로 <b>파생될 수 있는 값</b>입니다.
+        /// 파생될 수 있는 값을 손으로 맞추게 두는 것 자체가 결함이라, 여기서 되돌립니다.
+        ///
+        /// 나머지 수치는 건드리지 않습니다. 그쪽은 기획이 손으로 맞추는 것이 맞습니다.
         /// </summary>
         private static Dictionary<TerrainKind, BattlefieldProfile> BuildTerrainProfiles()
         {
@@ -789,9 +801,21 @@ namespace SRPG.Editor.Tools
             {
                 var captured = kind;
 
-                profiles[kind] = LoadOrCreate(
+                var profile = LoadOrCreate(
                     $"{TerrainDataDir}/Battlefield_{kind}.asset",
                     () => BattlefieldProfile.CreateDefault(captured));
+
+                if (profile.Kind != kind)
+                {
+                    Debug.LogWarning(
+                        $"[Prototype] Battlefield_{kind}.asset 의 종류가 {profile.Kind} 로 되어 있어 " +
+                        $"{kind} 로 되돌립니다.");
+
+                    profile.Kind = kind;
+                    EditorUtility.SetDirty(profile);
+                }
+
+                profiles[kind] = profile;
             }
 
             return profiles;

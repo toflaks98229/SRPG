@@ -125,12 +125,12 @@ namespace SRPG.Gameplay.Deployment
             var tuning = context.Tuning;
 
             _playerPool = new ReinforcementPool(
-                request.PlayerSquads, tuning.FieldSquadCap, tuning.ReinforcementInterval);
+                request.PlayerSquads, tuning.Deployment.FieldSquadCap, tuning.Deployment.ReinforcementInterval);
 
             _enemyPool = new ReinforcementPool(
-                request.EnemySquads, tuning.FieldSquadCap, tuning.ReinforcementInterval);
+                request.EnemySquads, tuning.Deployment.FieldSquadCap, tuning.Deployment.ReinforcementInterval);
 
-            ResolveSlots(tuning.FieldSquadCap);
+            ResolveSlots(tuning.Deployment.FieldSquadCap);
 
             DeployInitial(Team.Player);
             DeployInitial(Team.Enemy);

@@ -276,7 +276,11 @@ namespace SRPG.Editor.Tools
 
             // <b>저해상도로 그리므로 픽셀 격자에 맞춰 세워야 합니다.</b>
             // 없으면 카메라를 움직일 때마다 화면 전체가 지글지글 기어다닙니다.
-            cameraObject.AddComponent<PixelSnapCamera>();
+            //
+            // 격자 에셋은 렌더러 피처가 쓰는 것과 <b>같은 것</b>이어야 합니다.
+            // 여기서 함께 꽂아 두지 않으면 씬을 구울 때마다 카메라만 비어,
+            // 화면은 A 격자로 잘리는데 카메라는 B 격자에 맞춰 서게 됩니다.
+            BattleWiring.AssignPixelGrid(cameraObject.AddComponent<PixelSnapCamera>());
 
             // 후처리는 카메라가 켜 주어야 볼륨이 먹힙니다.
             cameraData.renderPostProcessing = true;

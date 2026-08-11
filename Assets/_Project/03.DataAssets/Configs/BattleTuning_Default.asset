@@ -12,42 +12,73 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 13e530aa59e692448bfc1531667ec915, type: 3}
   m_Name: BattleTuning_Default
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.BattleTuning
-  SlowMotionScale: 0.15
-  SlowMotionTransitionSpeed: 8
-  FormationSpacing: 0.95
-  AnchorSpeedFactor: 0.92
-  MeleeLungeForce: 3.6
-  MeleeLungeMinDistance: 0.7
-  AllySeparationWeight: 1.6
-  EnemySeparationWeight: 0.6
-  SeparationSmoothing: 8
-  MeleeBreakFormationTiles: 2
-  EnemyAggroRadius: 11
-  EnemyRepathInterval: 0.9
-  EnemyReplanInterval: 2.5
-  EnemyGoalSwitchMargin: 0.08
-  EnemyFormationLooseness: 1.5
-  EnemyFormationJitter: 0.5
-  EnemyChargeScatter: 1.2
-  AiProximityWeight: 0.7
-  AiValueWeight: 1
-  AiUndefendedWeight: 0.85
-  AiOpenGroundWeight: 0.45
-  InfluenceRefreshInterval: 0.4
-  InfluenceDecayPerTile: 0.72
-  ShipSpeed: 4.2
-  ShipUnloadInterval: 0.35
-  CameraPanSpeed: 18
-  CameraBoundsMargin: 8
-  ShieldSteepBlockMarginDegrees: 11
-  PikeInnerDeadZoneRatio: 0.45
-  PikeAimLeadSeconds: 0.15
-  PikeMaxAimLeadSeconds: 1.2
-  PikeTargetLockSeconds: 1.1
-  PikeTurnSpringFrequency: 1.4
-  PikeTurnSpringDamping: 0.5
-  PikeBreakRecoverySeconds: 1.4
-  MaxSimultaneousAttackers: 4
-  BlockedKnockbackRetention: 1
-  ShieldMovingEffectiveness: 0.35
-  ShieldThreatRadius: 14
+  SchemaVersion: 2
+  _time:
+    SlowMotionScale: 0.15
+    SlowMotionTransitionSpeed: 8
+  _squad:
+    FormationSpacing: 0.95
+    AnchorSpeedFactor: 0.92
+    AssignmentInterval: 0.35
+    FacingScanInterval: 0.4
+    PickRadius: 2.2
+    ContactRangeTiles: 1.5
+    FacingLeadSeconds: 1.5
+  _unit:
+    LungeForce: 3.6
+    LungeMinDistance: 0.7
+    AllySeparationWeight: 1.6
+    EnemySeparationWeight: 0.6
+    SeparationSmoothing: 8
+    BreakFormationTiles: 2
+    DrownKnockbackThreshold: 1.2
+    MaxSimultaneousAttackers: 4
+  _enemy:
+    ReplanInterval: 2.5
+    GoalSwitchMargin: 0.08
+    FormationLooseness: 1.5
+    FormationJitter: 0.5
+    ChargeScatter: 1.2
+  _ai:
+    ProximityWeight: 0.7
+    IsolationWeight: 0.85
+    OpenGroundWeight: 0.45
+    InfluenceRefreshInterval: 0.4
+    InfluenceDecayPerTile: 0.72
+  _deployment:
+    FieldSquadCap: 4
+    ReinforcementInterval: 6
+  _camera:
+    PanSpeed: 18
+    BoundsMargin: 8
+  _shield:
+    SteepBlockMarginDegrees: 11
+    BlockedKnockbackRetention: 1
+    MovingEffectiveness: 0.35
+    ThreatRadius: 14
+  _pike:
+    InnerDeadZoneRatio: 0.45
+    AimLeadSeconds: 0.15
+    MaxAimLeadSeconds: 1.2
+    TargetLockSeconds: 1.1
+    TurnSpringFrequency: 1.4
+    TurnSpringDamping: 0.5
+    BreakRecoverySeconds: 1.4
+  _growth:
+    RankHealthGain: 0.1
+    RankDamageGain: 0.08
+    RankAttackSpeedGain: 0.05
+    RankMoveSpeedGain: 0.02
+    ProficiencyAccuracyGain: 0.6
+    ProficiencyAttackSpeedGain: 0.2
+    ProficiencyDamageGain: 0.15
+  _matchup:
+    SlashVsUnarmored: 1
+    SlashVsLight: 1.1
+    SlashVsHeavy: 0.7
+    PierceVsUnarmored: 0.9
+    PierceVsLight: 1
+    PierceVsHeavy: 1.3
+    BluntVsUnarmored: 0.8
+    BluntVsLight: 0.9
+    BluntVsHeavy: 1.2

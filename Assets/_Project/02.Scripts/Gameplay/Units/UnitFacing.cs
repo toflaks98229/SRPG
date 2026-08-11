@@ -205,7 +205,7 @@ namespace SRPG.Gameplay.Units
             {
                 _threatScanTimer = ThreatScanInterval;
 
-                float radius = _tuning.ShieldThreatRadius;
+                float radius = _tuning.Shield.ThreatRadius;
                 _threatSource = radius > 0f
                     ? _spatial.FindNearestEnemy(position, _owner.Team, radius)
                     : null;

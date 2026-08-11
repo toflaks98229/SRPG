@@ -209,20 +209,42 @@ namespace SRPG.Gameplay.Units
             _transform = transform;
         }
 
+        private void OnDestroy()
+        {
+            _context?.Unregister(this);
+        }
+
+        // ====================================================================================================
+        // 6-1. Public Methods - Tick
+        // ====================================================================================================
+
         /// <summary>
         /// 한 프레임의 판단 순서입니다. <b>이 순서 자체가 규칙입니다.</b>
         ///
         /// 표적을 먼저 정해야 어디로 갈지가 나오고, 이동 여부가 정해져야 창병이 찌를지가 나옵니다.
         /// 그래서 <see cref="IsMoving"/>은 조향 다음, 전투 앞에서 <b>한 번만</b> 확정됩니다.
+        ///
+        /// <b>유니티가 아니라 분대가 부릅니다</b>
+        ///
+        /// 예전에는 이것이 <c>Update</c> 였습니다. 그러면 병사 수만큼 관리되는 호출이 생기고,
+        /// 그 비용은 안에서 무엇을 하든 똑같이 듭니다. 지금은 분대가 자기 병사를 훑습니다
+        /// (<see cref="Squads.SquadMembers.Tick"/>).
+        ///
+        /// 덤으로 순서가 생겼습니다. 분대가 이번 프레임의 슬롯을 정한 <b>다음에</b> 여기가 돕니다 —
+        /// 예전에는 유니티의 <c>Update</c> 순서가 정해져 있지 않아 한 프레임 늦은 자리를 향할 수 있었습니다.
+        ///
+        /// <b>분대에 속하지 않은 병사는 돌지 않습니다.</b> 지금 그런 병사는 없습니다 —
+        /// 전장의 병사는 전부 분대가 만들어 명부에 올립니다. 병사 하나만 세워 시험하려면
+        /// 세운 쪽이 이것을 직접 불러야 합니다.
         /// </summary>
-        private void Update()
+        /// <param name="deltaTime">지난 시간입니다. 0 이하면 아무것도 하지 않습니다.</param>
+        public void Tick(float deltaTime)
         {
             if (!IsAlive || _context == null || _definition == null)
             {
                 return;
             }
 
-            float deltaTime = UnityEngine.Time.deltaTime;
             if (deltaTime <= 0f)
             {
                 return;
@@ -233,7 +255,7 @@ namespace SRPG.Gameplay.Units
             _targeting.Refresh(
                 _weapon != null && _weapon.UsesAttackQueue,
                 _weapon != null ? _weapon.TargetLockSeconds : 0f,
-                _context.Tuning.MaxSimultaneousAttackers);
+                _context.Tuning.Unit.MaxSimultaneousAttackers);
 
             // 경직 중이거나 공격 동작에 붙잡힌 동안에는 스스로 움직이지 않습니다.
             // 넉백은 그와 무관하게 계속 적용됩니다. 맞고 밀려나는 도중에 버티면 넉백이 무의미해집니다.
@@ -251,11 +273,6 @@ namespace SRPG.Gameplay.Units
 
             TickCombat(deltaTime);
             ApplyMovement(steering, deltaTime);
-        }
-
-        private void OnDestroy()
-        {
-            _context?.Unregister(this);
         }
 
         // ====================================================================================================
@@ -436,12 +453,21 @@ namespace SRPG.Gameplay.Units
         /// <summary>
         /// 타격을 받습니다. <see cref="IDamageable"/> 구현입니다.
         ///
-        /// 피해 → 감쇠 → 넉백 → 경직이 여기 한 곳에서 순서대로 처리됩니다.
+        /// <b>여기는 모든 피해가 지나는 유일한 길목입니다.</b>
         /// 무기는 "무엇을 어느 방향으로 때렸는지"만 넘기고 감쇠에는 관여하지 않습니다.
         ///
         /// 예전에는 무기가 피해와 넉백을 <b>따로</b> 호출했고, 화살만 자기가 감쇠를 계산한 뒤
         /// bool 인자로 "이미 깎았다"고 알렸습니다. 그래서 감쇠 규칙이 두 곳에 나뉘어 있었고,
         /// 넉백에 감쇠를 곱하는 것을 잊으면 <b>막아 낸 화살에 밀려나</b> 물에 빠지는 일이 생겼습니다.
+        ///
+        /// <b>여기서 하는 일과 하지 않는 일</b>
+        ///
+        /// 하는 일은 셋입니다 — 전과를 세고, 소리를 내고, 결과를 자기 몸에 적용합니다.
+        /// 셋 다 <b>이 병사에게 일어난 일</b>이라 병사가 알아야 합니다.
+        ///
+        /// 얼마나 들어가는지를 <b>정하는</b> 것은 여기가 아닙니다(<see cref="DamageResolver"/>).
+        /// 방패 각도와 갑옷 상성은 누가 맞았는지와 무관한 규칙이고,
+        /// 그것이 이 클래스 안에 있으면 확인하는 데 씬이 필요해집니다.
         /// </summary>
         /// <param name="hit">무엇을 어느 방향으로 때렸는지가 담긴 타격 정보입니다.</param>
         public void ReceiveHit(in DamageInfo hit)
@@ -455,12 +481,14 @@ namespace SRPG.Gameplay.Units
             // 숙련은 '잘 맞히는 것'이라 방패에 막혔어도 맞힌 것은 맞힌 것입니다.
             (hit.Source as Unit)?.NotifyLandedHit();
 
-            float mitigation = ComputeMitigation(hit);
+            // 소리도 같은 이유로 여기서 냅니다. 막혔든 뚫었든 <b>부딪힌 것은 부딪힌 것</b>이고,
+            // 무엇보다 이곳이 모든 피해가 지나는 유일한 길목입니다.
+            // 무기마다 소리를 내게 하면 새 무기를 만들 때마다 잊을 자리가 하나씩 늘어납니다.
+            _context?.Audio.PlayHit(hit.Type, Position);
 
-            // 방패와 갑옷은 따로 곱합니다. 하나로 합치면 넉백까지 갑옷 상성을 타게 되는데,
-            // 갑옷은 피해를 줄일 뿐 충격량을 없애지 못합니다 —
-            // 판금에 막힌 철퇴도 사람을 밀어냅니다. 아래에서 넉백은 방패 감쇠만 봅니다.
-            _health -= hit.Amount * mitigation * ComputeArmorEffectiveness(hit);
+            var outcome = DamageResolver.Resolve(hit, BuildDefenderProfile(), _context?.Tuning);
+
+            _health -= outcome.HealthLoss;
 
             if (_health <= 0f)
             {
@@ -468,90 +496,35 @@ namespace SRPG.Gameplay.Units
                 return;
             }
 
-            // 넉백은 수평 성분만 씁니다. 위에서 내리꽂힌 화살이 유닛을 땅으로 박을 수는 없습니다.
-            Vector3 push = hit.Direction;
-            push.y = 0f;
-
-            if (push.sqrMagnitude <= 0.0001f)
+            if (outcome.HasImpulse)
             {
-                return;
+                ApplyKnockback(outcome.Impulse, outcome.StaggerSeconds);
             }
-
-            // <b>막아 내도 운동 에너지는 전달됩니다.</b>
-            // 방패는 날붙이를 막을 뿐 충격량까지 없애지는 못합니다.
-            // 이 덕분에 큰 적의 일격은 피해가 막혀도 방패벽을 뒤로 밀어 틈을 벌립니다.
-            float impulseRetention = _context != null
-                ? Mathf.Clamp01(_context.Tuning.BlockedKnockbackRetention)
-                : 1f;
-
-            float knockbackScale = Mathf.Lerp(mitigation, 1f, impulseRetention);
-
-            ApplyKnockback(
-                push.normalized * (hit.KnockbackForce * knockbackScale),
-                hit.StaggerSeconds * knockbackScale);
         }
 
         /// <summary>
-        /// 이 타격이 얼마나 통하는지 구합니다. 1이면 그대로 들어가고, 0에 가까우면 거의 막힙니다.
+        /// 지금 이 병사의 <b>맞는 쪽</b> 상태를 한 덩어리로 묶습니다.
         ///
-        /// 방패는 투사체만 막습니다. 그리고 <b>맞은 방향</b>으로 판정합니다.
-        /// 조사에서 확인한 "측면에서 쏠 때 가장 잘 밀리고, 고지대에서 쏘면 잘 안 통한다"가
-        /// 이 판정 하나에서 나옵니다.
+        /// <b>정의가 없으면 방패도 갑옷도 없는 것으로 봅니다.</b>
+        /// 병과 정의 없이 병사만 세워 두는 경로가 있고(자동 검사),
+        /// 그때 방어 수치를 어림잡으면 검사가 보는 것이 흐려집니다.
         /// </summary>
-        /// <summary>
-        /// 이 타격의 성질이 내 갑옷에 얼마나 잘 드는지 구합니다.
-        ///
-        /// <b>방패와 축이 다릅니다.</b>
-        /// 방패는 앞에서 오는 화살만 막는 상황 방어라 방향과 각도를 봅니다.
-        /// 갑옷은 어디서 맞든 같은 규칙이고, 대신 무엇으로 맞았는지를 봅니다.
-        /// 그래서 중갑 보병을 뚫는 길이 둘 생깁니다 — 측면으로 돌아가거나, 자돌 무기를 붙이거나.
-        ///
-        /// 튜닝이 없으면 상성이 없는 것으로 봅니다. 유닛만 떼어 검사하는 경로가 그렇습니다.
-        /// </summary>
-        /// <param name="hit">받은 타격입니다.</param>
-        /// <returns>피해량에 곱할 배율입니다.</returns>
-        private float ComputeArmorEffectiveness(in DamageInfo hit)
+        /// <returns>이번 판정에 쓸 방어 측 상태입니다.</returns>
+        private DefenderProfile BuildDefenderProfile()
         {
-            if (_definition == null || _context == null || _context.Tuning == null)
+            // 캐시해 둔 트랜스폼을 먼저 씁니다. Awake 전에 맞는 경우가 있어 폴백을 둡니다.
+            Vector3 forward = _transform != null ? _transform.forward : transform.forward;
+
+            if (_definition == null)
             {
-                return 1f;
+                return new DefenderProfile(forward, 0f, ArmorType.Unarmored, IsMoving);
             }
 
-            return _context.Tuning.GetArmorEffectiveness(hit.Type, _definition.Armor);
-        }
-
-        private float ComputeMitigation(in DamageInfo hit)
-        {
-            if (hit.Kind != DamageKind.Projectile)
-            {
-                return 1f;
-            }
-
-            if (_definition == null || Stats.ProjectileResistance <= 0f)
-            {
-                return 1f;
-            }
-
-            float steepMargin = _context != null
-                ? _context.Tuning.ShieldSteepBlockMarginDegrees
-                : BattleTuning.DefaultSteepBlockMarginDegrees;
-
-            // 이동 중에는 방패가 제 몫을 못 합니다.
-            // 뛰는 동안 방패가 위아래로 흔들려 물리적인 빈틈이 생기기 때문입니다.
-            // 그래서 "궁수 앞에서 뛰어다니지 마라"가 규칙이 아니라 결과로 나옵니다.
-            float resistance = Stats.ProjectileResistance;
-
-            if (IsMoving && _context != null)
-            {
-                resistance *= Mathf.Clamp01(_context.Tuning.ShieldMovingEffectiveness);
-            }
-
-            return ShieldSolver.ComputeBlockFactor(
-                hit.Direction,
-                _transform != null ? _transform.forward : transform.forward,
-                resistance,
-                hit.ArcAngleDegrees,
-                steepMargin);
+            return new DefenderProfile(
+                forward,
+                Stats.ProjectileResistance,
+                _definition.Armor,
+                IsMoving);
         }
 
         /// <summary>
@@ -609,6 +582,10 @@ namespace SRPG.Gameplay.Units
             _health = 0f;
 
             _weapon?.CancelAttack();
+
+            // 오브젝트가 사라지기 전에 냅니다. 소리는 자리에 놓이는 것이지
+            // 이 오브젝트에 붙는 것이 아니라, 시체가 없어져도 소리는 남습니다.
+            _context?.Audio.PlayDeath(Position);
 
             Died?.Invoke(this);
             _context?.Unregister(this);
@@ -744,7 +721,7 @@ namespace SRPG.Gameplay.Units
                 };
             }
 
-            _weapon.Initialize(this, _definition, _context.ProjectilePool, _context.Tuning);
+            _weapon.Initialize(this, _definition, _context.ProjectilePool, _context.Tuning, _context.Audio);
         }
 
         // ====================================================================================================
@@ -842,7 +819,7 @@ namespace SRPG.Gameplay.Units
             // 공격 대기열: 찌르기 직전에 자리를 예약합니다.
             // 자리가 없으면 이번 공격을 보류합니다.
             if (_weapon.UsesAttackQueue &&
-                !target.TryCommitAttacker(this, Stats.AttackDamage, _context.Tuning.MaxSimultaneousAttackers))
+                !target.TryCommitAttacker(this, Stats.AttackDamage, _context.Tuning.Unit.MaxSimultaneousAttackers))
             {
                 _targeting.BreakLock();
                 return;

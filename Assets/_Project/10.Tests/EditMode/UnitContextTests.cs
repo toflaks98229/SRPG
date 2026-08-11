@@ -55,6 +55,9 @@ namespace SRPG.Tests
 
             public ProjectilePool ProjectilePool { get; } = new ProjectilePool();
 
+            /// <summary>소리를 내지 않습니다. 났는지를 검사가 판단할 방법이 없습니다.</summary>
+            public IBattleAudio Audio { get; } = SilentBattleAudio.Instance;
+
             /// <summary>등록된 유닛입니다. 검증용으로만 노출합니다.</summary>
             public IReadOnlyList<Unit> Registered => _registered;
 

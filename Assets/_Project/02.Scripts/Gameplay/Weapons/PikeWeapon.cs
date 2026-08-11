@@ -98,7 +98,7 @@ namespace SRPG.Gameplay.Weapons
             get
             {
                 float ratio = Tuning != null
-                    ? Tuning.PikeInnerDeadZoneRatio
+                    ? Tuning.Pike.InnerDeadZoneRatio
                     : BattleTuning.DefaultPikeInnerDeadZoneRatio;
 
                 float length = Definition != null ? Definition.WeaponLength : 1f;
@@ -115,7 +115,7 @@ namespace SRPG.Gameplay.Weapons
         /// 결국 아무도 막지 않는 구멍이 생깁니다. 굳건히 버티는 것이 창병의 일입니다.
         /// </summary>
         public override float TargetLockSeconds =>
-            Tuning != null ? Tuning.PikeTargetLockSeconds : BattleTuning.DefaultPikeTargetLockSeconds;
+            Tuning != null ? Tuning.Pike.TargetLockSeconds : BattleTuning.DefaultPikeTargetLockSeconds;
 
         /// <summary>
         /// 창병은 공격 대기열을 씁니다.
@@ -140,10 +140,10 @@ namespace SRPG.Gameplay.Weapons
         public override bool PrefersLineFormation => true;
 
         public override float TurnSpringFrequency =>
-            Tuning != null ? Tuning.PikeTurnSpringFrequency : BattleTuning.DefaultPikeTurnSpringFrequency;
+            Tuning != null ? Tuning.Pike.TurnSpringFrequency : BattleTuning.DefaultPikeTurnSpringFrequency;
 
         public override float TurnSpringDamping =>
-            Tuning != null ? Tuning.PikeTurnSpringDamping : BattleTuning.DefaultPikeTurnSpringDamping;
+            Tuning != null ? Tuning.Pike.TurnSpringDamping : BattleTuning.DefaultPikeTurnSpringDamping;
 
         // ====================================================================================================
         // 3. Overrides - Lifecycle
@@ -238,7 +238,7 @@ namespace SRPG.Gameplay.Weapons
 
             _intruderPosition = intruder.Position;
             _breakTimer = Tuning != null
-                ? Tuning.PikeBreakRecoverySeconds
+                ? Tuning.Pike.BreakRecoverySeconds
                 : BattleTuning.DefaultPikeBreakRecoverySeconds;
         }
 
@@ -282,11 +282,11 @@ namespace SRPG.Gameplay.Weapons
             }
 
             float lead = Tuning != null
-                ? Tuning.PikeAimLeadSeconds
+                ? Tuning.Pike.AimLeadSeconds
                 : BattleTuning.DefaultPikeAimLeadSeconds;
 
             float maxLead = Tuning != null
-                ? Tuning.PikeMaxAimLeadSeconds
+                ? Tuning.Pike.MaxAimLeadSeconds
                 : BattleTuning.DefaultPikeMaxAimLeadSeconds;
 
             // 창끝이 닿기 시작하는 거리를 기준으로 도착 시점을 잡습니다.

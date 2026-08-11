@@ -148,6 +148,12 @@ namespace SRPG.Gameplay.Squads
 
             AdvanceAnchor(deltaTime);
             AssignUnitTargets();
+
+            // 자리를 정한 <b>다음에</b> 병사를 돌립니다. 이 순서가 규칙입니다 —
+            // 반대로 돌면 병사가 한 프레임 늦은 자리를 향해 걷습니다.
+            _members.Tick(deltaTime);
+
+            // 상태는 병사가 움직인 결과를 보고 정합니다. 앞에 두면 HUD가 늘 한 프레임 뒤처집니다.
             UpdateState();
         }
 
@@ -185,7 +191,7 @@ namespace SRPG.Gameplay.Squads
             Proficiency = proficiency;
 
             _motor.Teleport(context.Grid.CoordToWorld(spawnCoord), spawnCoord);
-            _anchorSpeed = definition.MoveSpeed * context.Tuning.AnchorSpeedFactor;
+            _anchorSpeed = definition.MoveSpeed * context.Tuning.Squad.AnchorSpeedFactor;
 
             // 초기 배치 칸도 점유해 두어야 다른 분대가 그 위로 명령받지 않습니다.
             context.Occupancy.Claim(spawnCoord, this);
@@ -199,7 +205,7 @@ namespace SRPG.Gameplay.Squads
             _hasFormedUp = true;
 
             int total = Mathf.Max(1, soldierCount) + 1; // 지휘관 1명 포함
-            FormationSolver.SolveRings(_motor.Anchor, total, context.Tuning.FormationSpacing, _slots);
+            FormationSolver.SolveRings(_motor.Anchor, total, context.Tuning.Squad.FormationSpacing, _slots);
 
             for (int i = 0; i < total; i++)
             {
@@ -451,7 +457,7 @@ namespace SRPG.Gameplay.Squads
 
             _members.ReassignSlots(
                 _slots,
-                _context.Tuning.SquadAssignmentInterval,
+                _context.Tuning.Squad.AssignmentInterval,
                 UnityEngine.Time.deltaTime,
                 _motor.Anchor);
 
@@ -474,7 +480,7 @@ namespace SRPG.Gameplay.Squads
         /// </summary>
         private void SolveSlots(int count, Vector3 facing)
         {
-            float spacing = _context.Tuning.FormationSpacing;
+            float spacing = _context.Tuning.Squad.FormationSpacing;
 
             if (PrefersLineFormation())
             {
@@ -521,7 +527,7 @@ namespace SRPG.Gameplay.Squads
         {
             if (_facingScanTimer <= 0f)
             {
-                _facingScanTimer = _context.Tuning.SquadFacingScanInterval;
+                _facingScanTimer = _context.Tuning.Squad.FacingScanInterval;
                 _lineFacing = ComputeFacing();
             }
 
@@ -532,7 +538,7 @@ namespace SRPG.Gameplay.Squads
         {
             Vector3 anchor = _motor.Anchor;
 
-            var enemy = _context.FindNearestEnemy(anchor, Team.Player, _context.Tuning.ShieldThreatRadius);
+            var enemy = _context.FindNearestEnemy(anchor, Team.Player, _context.Tuning.Shield.ThreatRadius);
             if (enemy != null && TryResolveApproachFacing(anchor, enemy, out Vector3 approach))
             {
                 return approach;
@@ -563,7 +569,7 @@ namespace SRPG.Gameplay.Squads
         /// </summary>
         private bool TryResolveApproachFacing(Vector3 anchor, Unit enemy, out Vector3 facing)
         {
-            float contactRange = _context.Grid.CellSize * _context.Tuning.SquadContactRangeTiles;
+            float contactRange = _context.Grid.CellSize * _context.Tuning.Squad.ContactRangeTiles;
 
             Vector3 arrival = AimPredictor.PredictApproachPoint(
                 anchor,
@@ -571,7 +577,7 @@ namespace SRPG.Gameplay.Squads
                 enemy.Velocity,
                 contactRange,
                 extraLeadSeconds: 0f,
-                maxLeadSeconds: _context.Tuning.SquadFacingLeadSeconds);
+                maxLeadSeconds: _context.Tuning.Squad.FacingLeadSeconds);
 
             facing = arrival - anchor;
             facing.y = 0f;

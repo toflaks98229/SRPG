@@ -74,7 +74,7 @@ namespace SRPG.Gameplay.Weapons
         /// 별도의 "복귀" 규칙 없이 이탈 시간이 스스로 제한됩니다.
         /// </summary>
         public override float FormationBreakTiles =>
-            Tuning != null ? Tuning.MeleeBreakFormationTiles : BattleTuning.DefaultMeleeBreakFormationTiles;
+            Tuning != null ? Tuning.Unit.BreakFormationTiles : BattleTuning.DefaultMeleeBreakFormationTiles;
 
         // ====================================================================================================
         // 3. Overrides - Lifecycle
@@ -84,7 +84,7 @@ namespace SRPG.Gameplay.Weapons
         /// 검병은 <b>몸을 던지며</b> 벱니다. 제자리에서 휘두르면 판정이 아무리 정확해도 답답해 보입니다.
         /// </summary>
         public override float LungeForce =>
-            Tuning != null ? Tuning.MeleeLungeForce : BattleTuning.DefaultMeleeLungeForce;
+            Tuning != null ? Tuning.Unit.LungeForce : BattleTuning.DefaultMeleeLungeForce;
 
         protected override void OnAttackBegan(Unit target)
         {
@@ -118,7 +118,7 @@ namespace SRPG.Gameplay.Weapons
 
             float distance = toTarget.magnitude;
             float minimum = Tuning != null
-                ? Tuning.MeleeLungeMinDistance
+                ? Tuning.Unit.LungeMinDistance
                 : BattleTuning.DefaultMeleeLungeMinDistance;
 
             if (distance <= minimum)

@@ -245,7 +245,7 @@ namespace SRPG.Gameplay.Selection
         /// </summary>
         private Squad FindSquadNear(Vector3 worldPoint)
         {
-            float pickRadius = _tuning != null ? _tuning.SquadPickRadius : BattleTuning.DefaultSquadPickRadius;
+            float pickRadius = _tuning != null ? _tuning.Squad.PickRadius : BattleTuning.DefaultSquadPickRadius;
 
             Squad best = null;
             float bestSqr = pickRadius * pickRadius;

@@ -366,6 +366,8 @@ namespace SRPG.Composition
                 return null;
             }
 
+            EnsureListener(camera);
+
             var rig = ResolveCameraRig(camera);
             var grid = _context.Grid;
 
@@ -376,6 +378,30 @@ namespace SRPG.Composition
             rig.FrameArea(Mathf.Max(grid.Width, grid.Depth) * grid.CellSize);
 
             return camera;
+        }
+
+        /// <summary>
+        /// 듣는 귀가 씬에 있는지 확인하고, 없으면 카메라에 붙입니다.
+        ///
+        /// <b>왜 이것이 필요한가</b>
+        ///
+        /// 전투의 소리는 대부분 자리에서 납니다(<c>PlaySfxAt</c>). 그런데 <b>듣는 쪽</b>이 없으면
+        /// 유니티는 그 소리를 아예 내지 않습니다. 오류도 경고도 없습니다.
+        ///
+        /// 그 증상이 "배선을 다 했는데 아무 소리도 안 난다"와 <b>구별되지 않습니다</b>.
+        /// 구운 씬에는 귀가 들어 있지만, 카메라를 런타임에 만드는 경로에는 없었습니다.
+        ///
+        /// 씬 전체를 훑는 것은 <c>FindObjectsByType</c> 한 번이면 되고, 판마다 한 번뿐입니다.
+        /// </summary>
+        /// <param name="camera">귀가 없을 때 붙일 카메라입니다.</param>
+        private static void EnsureListener(Camera camera)
+        {
+            var existing = UnityEngine.Object.FindAnyObjectByType<AudioListener>(FindObjectsInactive.Exclude);
+
+            if (existing == null)
+            {
+                camera.gameObject.AddComponent<AudioListener>();
+            }
         }
 
         /// <summary>

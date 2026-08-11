@@ -93,6 +93,56 @@ namespace SRPG.Gameplay.Visual
             = new System.Collections.Generic.Dictionary<UnitDefinition, Material>();
 
         // ====================================================================================================
+        // 1-1. Domain Reset
+        // ====================================================================================================
+
+        /// <summary>
+        /// 재생을 시작할 때 캐시를 비웁니다.
+        ///
+        /// <b>왜 필요한가</b>
+        ///
+        /// 위의 캐시는 전부 <c>static</c> 이라 <b>도메인(로드된 스크립트 전체)</b>에 붙어 있습니다.
+        /// 평소에는 재생을 멈출 때마다 도메인이 다시 로드되어 자연히 비워지므로 문제가 없습니다.
+        ///
+        /// 그런데 이 프로젝트는 도메인 리로드를 끄고 쓸 만한 조건입니다 —
+        /// 재생 진입이 느려지는 것이 반복 확인의 가장 큰 비용이고, 유니티가 그것을 끄는 선택지를 줍니다.
+        /// 끄는 순간 이 캐시들이 <b>세션을 넘어 살아남습니다</b>.
+        ///
+        /// 그러면 두 가지가 조용히 깨집니다.
+        ///
+        ///   · 캐시가 들고 있는 <c>Mesh</c> 와 <c>Material</c> 은 재생이 끝날 때 유니티가 파괴합니다.
+        ///     다음 재생에서 참조는 남아 있는데 알맹이가 없는 <b>파괴된 객체</b>를 쓰게 되어,
+        ///     "두 번째 재생부터 병사가 안 보인다" 같은 증상이 납니다.
+        ///   · 경고 플래그(<c>s_warned…</c>)가 켜진 채로 남아, 정말 셰이더가 빠졌을 때
+        ///     <b>두 번째 재생부터는 경고가 뜨지 않습니다.</b>
+        ///
+        /// 둘 다 재현 조건이 "재생을 두 번째로 눌렀는가"라 원인을 찾기가 특히 어렵습니다.
+        /// 여기서 한 줄로 막아 두면 도메인 리로드를 켜든 끄든 첫 재생과 같은 상태에서 시작합니다.
+        ///
+        /// <b>사전(dictionary)은 비우기만 합니다.</b> 안에 담긴 머티리얼은 이미 유니티가 파괴했고,
+        /// 파괴된 것을 다시 파괴하려 들면 그 자체가 오류입니다.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStaticCaches()
+        {
+            s_capsuleMesh = null;
+            s_cubeMesh = null;
+            s_groundedQuadMesh = null;
+            s_centeredQuadMesh = null;
+            s_waterGridMesh = null;
+            s_waterGridSegments = 0;
+
+            s_grassSprite = null;
+            s_accentSprite = null;
+            s_contactShadowMaterial = null;
+
+            s_warnedMissingSprite = false;
+            s_warnedMissingShader = false;
+
+            s_billboardMaterials.Clear();
+        }
+
+        // ====================================================================================================
         // 2. Public Methods - Material
         // ====================================================================================================
 

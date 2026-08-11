@@ -194,7 +194,7 @@ namespace SRPG.Gameplay.Units
                 _grid,
                 position,
                 desired,
-                _impulses.IsPushedFasterThan(_tuning.DrownKnockbackThreshold),
+                _impulses.IsPushedFasterThan(_tuning.Unit.DrownKnockbackThreshold),
                 out next);
 
             return step == GroundStep.Moved;
@@ -216,18 +216,18 @@ namespace SRPG.Gameplay.Units
             float radius = _definition.Radius * SeparationRadiusFactor;
 
             Vector3 separation = ComputeSeparation(
-                position, radius, _owner.Team, _owner, _tuning.AllySeparationWeight);
+                position, radius, _owner.Team, _owner, _tuning.Unit.AllySeparationWeight);
 
             var enemyTeam = _owner.Team == Team.Player ? Team.Enemy : Team.Player;
 
             separation += ComputeSeparation(
-                position, radius, enemyTeam, null, _tuning.EnemySeparationWeight);
+                position, radius, enemyTeam, null, _tuning.Unit.EnemySeparationWeight);
 
             // 분리 성분만 따로 부드럽게 따라갑니다.
             // 계산된 값을 그대로 더하면 이웃이 반경에 드나들 때마다 속도가 계단처럼 튀어,
             // 옆 사람이 다가왔을 뿐인데 홱 밀려나는 것처럼 보입니다.
             // 도착 조향은 원래 부드러우므로 여기만 눌러 주면 됩니다.
-            _impulses.FollowSeparation(separation, _tuning.SeparationSmoothing, deltaTime);
+            _impulses.FollowSeparation(separation, _tuning.Unit.SeparationSmoothing, deltaTime);
 
             return _impulses.Separation;
         }

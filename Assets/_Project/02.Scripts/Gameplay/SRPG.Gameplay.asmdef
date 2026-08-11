@@ -4,7 +4,6 @@
     "references": [
         "SRPG.Common",
         "SRPG.Data",
-        "SRPG.Framework",
         "SRPG.Core",
         "SRPG.Systems",
         "Unity.TextMeshPro",

@@ -235,13 +235,16 @@ namespace SRPG.Composition
                 return;
             }
 
-            var time = new TacticalTimeController(tuning.SlowMotionScale, tuning.SlowMotionTransitionSpeed);
+            var time = new TacticalTimeController(tuning.Time.SlowMotionScale, tuning.Time.SlowMotionTransitionSpeed);
             builder.RegisterInstance(time);
+
+            var audio = BuildAudio();
+            builder.RegisterInstance(audio).As<IBattleAudio>();
 
             // 컨텍스트는 역할별 인터페이스로 함께 등록합니다.
             // 소비자는 자기가 실제로 쓰는 역할만 받고, 통째로 드는 것은 진입점뿐입니다.
             // (ISpatialQuery · IUnitContext · ISquadContext<T> · IDeploymentContext 등)
-            builder.RegisterInstance(new BattleContext(plan.Grid, time, tuning))
+            builder.RegisterInstance(new BattleContext(plan.Grid, time, tuning, audio))
                    .AsImplementedInterfaces()
                    .AsSelf();
 
@@ -349,6 +352,35 @@ namespace SRPG.Composition
             }
 
             return Parent.Container.TryResolve<BattleOrders>(out var orders) ? orders.Take() : null;
+        }
+
+        /// <summary>
+        /// 이번 판의 소리 창구를 만듭니다.
+        ///
+        /// <b>왜 컨테이너에 맡기지 않는가</b>
+        ///
+        /// 소리를 실제로 내는 <see cref="IAudioService"/> 는 <b>위층</b>이 등록한 것입니다.
+        /// 전투 컨테이너는 아직 조립되는 중이라 여기서 스스로에게 물을 수 없고,
+        /// 물을 수 있는 것은 이미 조립을 마친 부모뿐입니다.
+        /// 주문서를 꺼내는 <see cref="TakeCampaignOrders"/> 와 같은 자리, 같은 이유입니다.
+        ///
+        /// <b>위층이 없어도 됩니다.</b> 전투 씬만 열어 보는 편집 중의 실행과 자동 검사가 그렇습니다.
+        /// 그때는 창구가 비고, <see cref="BattleAudio"/> 가 아무것도 하지 않습니다 —
+        /// 소리가 안 나는 것은 그 경로에서 결함이 아닙니다.
+        /// </summary>
+        /// <returns>이번 판의 소리 창구입니다. 절대 null이 아닙니다.</returns>
+        private IBattleAudio BuildAudio()
+        {
+            IAudioService service = null;
+
+            if (Parent != null && Parent.Container != null)
+            {
+                Parent.Container.TryResolve(out service);
+            }
+
+            // 뱅크가 없거나 어느 칸이 비어 있으면 합성음이 그 자리를 메웁니다.
+            // 그 판단은 BattleAudio 안에 있습니다 — 여기서 또 하면 규칙이 두 곳으로 갈라집니다.
+            return new BattleAudio(service, _setup != null ? _setup.AudioBank : null);
         }
 
         /// <summary>
