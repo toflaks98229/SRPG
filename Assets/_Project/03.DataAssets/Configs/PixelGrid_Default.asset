@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: PixelGrid_Default
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.PixelGridSettings
   SchemaVersion: 2
-  InternalHeight: 270
+  InternalHeight: 360
   ZoomAdaptive: 1
   ReferenceExtent: 19.62991
-  MinHeight: 140
+  MinHeight: 270
   MaxHeight: 540
