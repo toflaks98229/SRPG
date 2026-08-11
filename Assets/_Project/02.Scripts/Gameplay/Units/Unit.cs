@@ -106,6 +106,13 @@ namespace SRPG.Gameplay.Units
         /// <summary>분대(또는 적 AI)가 배정한 진형 슬롯입니다.</summary>
         private Vector3 _slotTarget;
 
+        /// <summary>
+        /// 이 병사가 속한 분대의 전과 장부입니다. 분대가 세우면서 꽂아 줍니다.
+        ///
+        /// 올려 보내기만 하고 되묻지는 못합니다. 병사가 분대의 사정을 알 이유가 없습니다.
+        /// </summary>
+        private ISquadTally _tally;
+
         // ====================================================================================================
         // 4. Properties
         // ====================================================================================================
@@ -126,16 +133,35 @@ namespace SRPG.Gameplay.Units
         public float Health => _health;
 
         /// <summary>최대 체력 대비 현재 체력 비율입니다.</summary>
-        public float HealthRatio => _definition != null && _definition.MaxHealth > 0f ? _health / _definition.MaxHealth : 0f;
+        public float HealthRatio => Stats.MaxHealth > 0f ? _health / Stats.MaxHealth : 0f;
+
+        /// <summary>
+        /// 이 병사에게 <b>실제로 적용되는</b> 수치입니다.
+        ///
+        /// <b>정의 에셋 대신 이것을 읽으십시오.</b>
+        /// 정의는 기본값이고, 여기에는 랭크와 숙련도가 이미 반영되어 있습니다.
+        /// 정의를 직접 읽으면 그 병사가 얼마나 단련되었든 같은 수치로 싸웁니다.
+        ///
+        /// 몸 크기·무기 길이처럼 성장으로 변하지 않는 값은 여기 없고 정의에 그대로 있습니다.
+        /// </summary>
+        public UnitStats Stats { get; private set; }
 
         /// <summary>이 유닛이 분대 지휘관(깃발병)인지 여부입니다. 지휘관이 죽으면 분대가 영구 소멸합니다.</summary>
         public bool IsCommander { get; private set; }
 
         /// <summary>
-        /// 숙련도 랭크입니다. 궁수의 조준 산포가 이 값에 반비례합니다.
+        /// 숙련도 랭크입니다. 바뀌면 <see cref="Stats"/> 가 다시 계산됩니다.
         /// 분대가 초기화할 때 소속 병사 전원에게 같은 값을 넣습니다.
         /// </summary>
         public int Rank { get; private set; } = CombatConstants.MinRank;
+
+        /// <summary>
+        /// 이 병사가 무기 계열마다 쌓은 숙련도입니다. 바뀌면 <see cref="Stats"/> 가 다시 계산됩니다.
+        ///
+        /// 실제로 걸리는 것은 자기 무기의 동작(<c>Definition.Style</c>) 하나뿐입니다.
+        /// 나머지를 함께 들고 있는 이유는 분대가 무기를 바꿔 들 수 있어야 하기 때문입니다.
+        /// </summary>
+        public WeaponProficiency Proficiency { get; private set; }
 
         /// <summary>현재 교전 중인지 여부입니다. 분대 상태 판정에 사용합니다.</summary>
         public bool IsEngaged => _targeting.HasLivingTarget;
@@ -255,7 +281,11 @@ namespace SRPG.Gameplay.Units
             _context = context;
             IsCommander = isCommander;
 
-            _health = definition.MaxHealth;
+            // 체력을 채우기 전에 계산해야 합니다. 최대 체력 자체가 랭크에 따라 달라지므로,
+            // 순서가 뒤바뀌면 병사가 자기 최대치보다 적은 체력으로 전장에 섭니다.
+            RecalculateStats();
+
+            _health = Stats.MaxHealth;
             IsAlive = true;
             _slotTarget = _transform.position;
             _staggerTimer = 0f;
@@ -289,9 +319,92 @@ namespace SRPG.Gameplay.Units
         /// 숙련도 랭크를 설정합니다.
         /// </summary>
         /// <param name="rank">설정할 랭크입니다. 허용 범위를 벗어나면 잘립니다.</param>
+        /// <summary>
+        /// 전과를 올려 보낼 분대를 꽂습니다. 분대가 병사를 세우면서 부릅니다.
+        /// </summary>
+        /// <param name="tally">이 병사가 속한 분대의 전과 장부입니다.</param>
+        public void AttachTally(ISquadTally tally)
+        {
+            _tally = tally;
+        }
+
+        /// <summary>
+        /// 내가 때린 타격이 상대에게 닿았습니다.
+        ///
+        /// <b>맞은 쪽이 불러 줍니다.</b>
+        /// 때린 쪽에서 세면 무기 종류마다 세는 자리가 따로 생기고, 새 무기를 붙일 때
+        /// 그 한 줄을 빠뜨리면 조용히 집계에서 빠집니다.
+        /// 피격은 <see cref="ReceiveHit"/> 한 곳으로 모이므로 거기서 한 번만 세면 됩니다.
+        /// </summary>
+        public void NotifyLandedHit()
+        {
+            _tally?.ReportHitLanded();
+        }
+
         public void SetRank(int rank)
         {
+            SetTraining(rank, Proficiency);
+        }
+
+        /// <summary>
+        /// 단련도와 숙련도를 함께 설정합니다. 분대가 병사를 세우면서 부릅니다.
+        ///
+        /// <b>둘을 한 번에 받는 이유</b>
+        ///
+        /// 따로 두면 유효 수치를 두 번 계산하게 되고, 그 사이에 최대 체력이 한 번 흔들립니다.
+        /// 체력은 최대치가 바뀔 때마다 비율을 맞춰 옮기므로, 중간 상태를 거치면
+        /// 반올림이 두 번 쌓여 병사가 미묘하게 다친 채로 서게 됩니다.
+        /// </summary>
+        /// <param name="rank">부대 단련도입니다. 허용 범위를 벗어나면 잘립니다.</param>
+        /// <param name="proficiency">무기 계열별 숙련도입니다.</param>
+        public void SetTraining(int rank, in WeaponProficiency proficiency)
+        {
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);
+            Proficiency = proficiency;
+
+            RecalculateStats();
+        }
+
+        /// <summary>
+        /// 유효 수치를 다시 계산합니다. 정의나 랭크가 바뀔 때마다 불립니다.
+        ///
+        /// 성장 요소가 늘어나면 여기서 <see cref="UnitModifiers.Combine"/> 로 곱해 넣습니다.
+        /// 소비자는 이미 <see cref="Stats"/> 를 읽고 있으므로 그때도 손댈 것이 없습니다.
+        ///
+        /// <b>최대 체력이 바뀌면 지금 체력을 같은 비율로 옮깁니다.</b>
+        ///
+        /// 분대는 병사를 다 만든 <b>뒤에</b> 랭크를 넣습니다. 그 사이에 최대 체력이 오르는데
+        /// 지금 체력을 그대로 두면, 3랭크 분대의 병사가 처음부터 다친 채로 전장에 섭니다.
+        /// 반대로 최대치까지 채워 버리면 전투 중 승급이 곧 완전 회복이 됩니다.
+        /// 비율을 지키면 둘 다 아닙니다 — 멀쩡하던 병사는 멀쩡하고, 반쯤 다친 병사는 반쯤 다친 채입니다.
+        ///
+        /// <b>컨텍스트가 없어도 돕니다.</b>
+        /// 유닛만 떼어 검사하는 경로에서는 튜닝이 없으므로 성장 없이 정의 그대로 씁니다.
+        /// </summary>
+        private void RecalculateStats()
+        {
+            float previousMax = Stats.MaxHealth;
+
+            var growth = UnitModifiers.Identity;
+
+            if (_context != null && _context.Tuning != null)
+            {
+                // 단련도와 숙련도는 출처가 다른 성장이라 곱해서 함께 겁니다.
+                // 숙련도는 자기가 실제로 든 무기의 동작에 대한 것만 걸립니다 —
+                // 활을 잘 쏘는 병사가 검을 들었다고 잘 베지는 않습니다.
+                int forThisWeapon = _definition != null ? Proficiency.Get(_definition.Style) : 0;
+
+                growth = _context.Tuning.EvaluateRank(Rank)
+                    .Combine(_context.Tuning.EvaluateProficiency(forThisWeapon));
+            }
+
+            Stats = new UnitStats(_definition, growth);
+
+            // 처음 계산할 때는 이전 최대치가 없습니다. 그때는 부르는 쪽이 체력을 채웁니다.
+            if (previousMax > 0f && Stats.MaxHealth > 0f)
+            {
+                _health = Mathf.Clamp(_health * (Stats.MaxHealth / previousMax), 0f, Stats.MaxHealth);
+            }
         }
 
         /// <summary>
@@ -338,9 +451,16 @@ namespace SRPG.Gameplay.Units
                 return;
             }
 
+            // 닿았다는 사실 자체를 먼저 셉니다. 얼마나 막혔는지는 상대의 사정이고,
+            // 숙련은 '잘 맞히는 것'이라 방패에 막혔어도 맞힌 것은 맞힌 것입니다.
+            (hit.Source as Unit)?.NotifyLandedHit();
+
             float mitigation = ComputeMitigation(hit);
 
-            _health -= hit.Amount * mitigation;
+            // 방패와 갑옷은 따로 곱합니다. 하나로 합치면 넉백까지 갑옷 상성을 타게 되는데,
+            // 갑옷은 피해를 줄일 뿐 충격량을 없애지 못합니다 —
+            // 판금에 막힌 철퇴도 사람을 밀어냅니다. 아래에서 넉백은 방패 감쇠만 봅니다.
+            _health -= hit.Amount * mitigation * ComputeArmorEffectiveness(hit);
 
             if (_health <= 0f)
             {
@@ -378,6 +498,28 @@ namespace SRPG.Gameplay.Units
         /// 조사에서 확인한 "측면에서 쏠 때 가장 잘 밀리고, 고지대에서 쏘면 잘 안 통한다"가
         /// 이 판정 하나에서 나옵니다.
         /// </summary>
+        /// <summary>
+        /// 이 타격의 성질이 내 갑옷에 얼마나 잘 드는지 구합니다.
+        ///
+        /// <b>방패와 축이 다릅니다.</b>
+        /// 방패는 앞에서 오는 화살만 막는 상황 방어라 방향과 각도를 봅니다.
+        /// 갑옷은 어디서 맞든 같은 규칙이고, 대신 무엇으로 맞았는지를 봅니다.
+        /// 그래서 중갑 보병을 뚫는 길이 둘 생깁니다 — 측면으로 돌아가거나, 자돌 무기를 붙이거나.
+        ///
+        /// 튜닝이 없으면 상성이 없는 것으로 봅니다. 유닛만 떼어 검사하는 경로가 그렇습니다.
+        /// </summary>
+        /// <param name="hit">받은 타격입니다.</param>
+        /// <returns>피해량에 곱할 배율입니다.</returns>
+        private float ComputeArmorEffectiveness(in DamageInfo hit)
+        {
+            if (_definition == null || _context == null || _context.Tuning == null)
+            {
+                return 1f;
+            }
+
+            return _context.Tuning.GetArmorEffectiveness(hit.Type, _definition.Armor);
+        }
+
         private float ComputeMitigation(in DamageInfo hit)
         {
             if (hit.Kind != DamageKind.Projectile)
@@ -385,7 +527,7 @@ namespace SRPG.Gameplay.Units
                 return 1f;
             }
 
-            if (_definition == null || _definition.ProjectileResistance <= 0f)
+            if (_definition == null || Stats.ProjectileResistance <= 0f)
             {
                 return 1f;
             }
@@ -397,7 +539,7 @@ namespace SRPG.Gameplay.Units
             // 이동 중에는 방패가 제 몫을 못 합니다.
             // 뛰는 동안 방패가 위아래로 흔들려 물리적인 빈틈이 생기기 때문입니다.
             // 그래서 "궁수 앞에서 뛰어다니지 마라"가 규칙이 아니라 결과로 나옵니다.
-            float resistance = _definition.ProjectileResistance;
+            float resistance = Stats.ProjectileResistance;
 
             if (IsMoving && _context != null)
             {
@@ -690,7 +832,7 @@ namespace SRPG.Gameplay.Units
                 IsMoving,
                 _definition.CanAttackWhileMoving,
                 hasLivingTarget ? Vector3.Distance(Position, target.Position) : float.MaxValue,
-                _definition.AttackRange));
+                Stats.AttackRange));
 
             if (blocked != AttackBlock.None)
             {
@@ -700,7 +842,7 @@ namespace SRPG.Gameplay.Units
             // 공격 대기열: 찌르기 직전에 자리를 예약합니다.
             // 자리가 없으면 이번 공격을 보류합니다.
             if (_weapon.UsesAttackQueue &&
-                !target.TryCommitAttacker(this, _definition.AttackDamage, _context.Tuning.MaxSimultaneousAttackers))
+                !target.TryCommitAttacker(this, Stats.AttackDamage, _context.Tuning.MaxSimultaneousAttackers))
             {
                 _targeting.BreakLock();
                 return;
@@ -708,7 +850,7 @@ namespace SRPG.Gameplay.Units
 
             if (_weapon.TryBeginAttack(target))
             {
-                _attackTimer = _definition.AttackInterval;
+                _attackTimer = Stats.AttackInterval;
                 _rootTimer = _weapon.RootDuration;
             }
         }

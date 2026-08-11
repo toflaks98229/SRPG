@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
@@ -32,7 +32,7 @@ namespace SRPG.Gameplay.Enemies
     /// 플레이어 분대와 정확히 같은 분업입니다.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class EnemySquad : MonoBehaviour
+    public sealed class EnemySquad : MonoBehaviour, ISquadTally
     {
         // ====================================================================================================
         // 1. Constants
@@ -153,13 +153,23 @@ namespace SRPG.Gameplay.Enemies
         /// <param name="soldierCount">병사 수입니다.</param>
         /// <param name="unitFactory">유닛을 만드는 함수입니다.</param>
         /// <param name="rank">분대 숙련도입니다.</param>
+        /// <summary>이 분대가 이번 판에 명중시킨 타격 수입니다.</summary>
+        public int HitsLanded { get; private set; }
+
+        /// <inheritdoc />
+        public void ReportHitLanded()
+        {
+            HitsLanded++;
+        }
+
         public void Initialize(
             IEnemySquadContext context,
             UnitDefinition definition,
             GridCoord deployCoord,
             int soldierCount,
             Func<UnitDefinition, Team, bool, Vector3, Unit> unitFactory,
-            int rank = CombatConstants.MinRank)
+            int rank = CombatConstants.MinRank,
+            WeaponProficiency proficiency = default)
         {
             _context = context;
 
@@ -192,7 +202,8 @@ namespace SRPG.Gameplay.Enemies
                 }
 
                 unit.transform.SetParent(transform, worldPositionStays: true);
-                unit.SetRank(rank);
+                unit.SetTraining(rank, proficiency);
+                unit.AttachTally(this);
 
                 _members.Add(unit);
             }

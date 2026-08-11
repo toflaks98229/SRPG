@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using SRPG.Common;
+using UnityEngine;
 
 namespace SRPG.Data
 {
@@ -366,6 +367,200 @@ namespace SRPG.Data
         [Tooltip("방패병이 몸을 돌릴 위협을 살피는 반경입니다.\n" +
                  "교전 반경보다 넓어야 합니다. 궁수는 사거리 밖에서 쏘기 때문입니다.")]
         public float ShieldThreatRadius = 14f;
+
+        // ====================================================================================================
+        // 7-2. Rank
+        // ====================================================================================================
+
+        [Header("랭크 성장")]
+        [Range(0f, 0.5f)]
+        [Tooltip("랭크 한 단계마다 오르는 최대 체력 비율입니다. 0.1이면 5랭크에서 +40%입니다.")]
+        public float RankHealthGain = 0.10f;
+
+        [Range(0f, 0.5f)]
+        [Tooltip("랭크 한 단계마다 오르는 피해량 비율입니다.")]
+        public float RankDamageGain = 0.08f;
+
+        [Range(0f, 0.5f)]
+        [Tooltip("랭크 한 단계마다 오르는 공격 속도 비율입니다. 공격 간격과 동작 시간이 함께 짧아집니다.")]
+        public float RankAttackSpeedGain = 0.05f;
+
+        [Range(0f, 0.5f)]
+        [Tooltip("랭크 한 단계마다 오르는 이동 속도 비율입니다.\n" +
+                 "다른 것보다 낮게 잡습니다. 이동 속도는 진형 유지와 직결되어 크게 흔들면 대열이 무너집니다.")]
+        public float RankMoveSpeedGain = 0.02f;
+
+        /// <summary>
+        /// 랭크에 해당하는 성장 배율을 구합니다.
+        ///
+        /// <b>명중은 여기 없습니다.</b>
+        /// 궁수의 조준 산포는 이미 랭크로 보간되고 있습니다
+        /// (<c>BallisticSolver.GetSpreadForRank</c> 가 정의의 최저·최고 산포 사이를 랭크로 잇습니다).
+        /// 여기서 명중 배율까지 걸면 같은 성장이 두 번 적용되어,
+        /// 랭크를 조금만 올려도 궁수가 과녁처럼 맞히게 됩니다.
+        ///
+        /// 근접 무기에는 산포 개념이 없으므로 명중이 걸릴 자리도 없습니다.
+        /// 무기별 숙련도가 붙으면 그때 이 축이 생깁니다.
+        /// </summary>
+        /// <param name="rank">병사의 랭크입니다. 허용 범위를 벗어나면 잘립니다.</param>
+        /// <returns>그 랭크의 성장 배율입니다. 최저 랭크에서는 아무것도 바꾸지 않습니다.</returns>
+        public UnitModifiers EvaluateRank(int rank)
+        {
+            // 최저 랭크가 기준선입니다. 1랭크 병사는 정의 에셋의 수치 그대로 싸웁니다.
+            // 그러지 않으면 "정의에 적힌 값"과 "실제로 나오는 값"이 처음부터 어긋나
+            // 밸런스를 잡을 때 기준으로 삼을 수치가 없어집니다.
+            int steps = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank) - CombatConstants.MinRank;
+
+            if (steps <= 0)
+            {
+                return UnitModifiers.Identity;
+            }
+
+            return new UnitModifiers(
+                1f + RankHealthGain * steps,
+                1f + RankDamageGain * steps,
+                1f + RankAttackSpeedGain * steps,
+                1f + RankMoveSpeedGain * steps,
+                1f,
+                1f,
+                1f);
+        }
+
+        // ====================================================================================================
+        // 7-2-1. Proficiency
+        // ====================================================================================================
+
+        [Header("무기 숙련도")]
+        [Range(0f, 2f)]
+        [Tooltip("숙련도가 가득 찼을 때 오르는 명중 비율입니다.\n" +
+                 "숙련도의 주된 몫입니다. 랭크는 명중을 건드리지 않으므로 이 축은 여기가 단독으로 맡습니다.")]
+        public float ProficiencyAccuracyGain = 0.6f;
+
+        [Range(0f, 1f)]
+        [Tooltip("숙련도가 가득 찼을 때 오르는 공격 속도 비율입니다. 손에 익으면 동작이 빨라집니다.")]
+        public float ProficiencyAttackSpeedGain = 0.20f;
+
+        [Range(0f, 1f)]
+        [Tooltip("숙련도가 가득 찼을 때 오르는 피해 비율입니다.\n" +
+                 "낮게 잡습니다. 숙련은 '잘 맞히는 것'이지 '세게 때리는 것'이 아닙니다 — " +
+                 "세기는 랭크가 맡습니다.")]
+        public float ProficiencyDamageGain = 0.15f;
+
+        /// <summary>
+        /// 숙련도에 해당하는 성장 배율을 구합니다.
+        ///
+        /// <b>랭크와 겹치지 않게 나눠 두었습니다.</b>
+        /// 랭크는 체력·피해·공속·이동을, 숙련도는 명중을 중심으로 맡습니다.
+        /// 겹치는 두 축(피해·공속)은 숙련도 쪽 몫을 작게 두어, 어느 쪽을 올렸는지가 체감으로 갈리게 합니다.
+        ///
+        /// <b>궁수의 산포는 두 축이 함께 작용합니다.</b>
+        /// 랭크는 정의에 적힌 최저·최고 산포 <b>사이를 이동</b>시키고
+        /// (<c>BallisticSolver.GetSpreadForRank</c>), 숙련도는 그 <b>두 끝점을 함께 좁힙니다</b>.
+        /// 출처가 다른 두 성장이라 겹쳐도 같은 것이 두 번 걸리는 것은 아닙니다.
+        /// </summary>
+        /// <param name="proficiency">0에서 <see cref="WeaponProficiency.MaxValue"/> 사이의 숙련도입니다.</param>
+        /// <returns>그 숙련도의 성장 배율입니다. 0이면 아무것도 바꾸지 않습니다.</returns>
+        public UnitModifiers EvaluateProficiency(int proficiency)
+        {
+            float t = Mathf.Clamp01(proficiency / (float)WeaponProficiency.MaxValue);
+
+            if (t <= 0f)
+            {
+                return UnitModifiers.Identity;
+            }
+
+            return new UnitModifiers(
+                1f,
+                1f + ProficiencyDamageGain * t,
+                1f + ProficiencyAttackSpeedGain * t,
+                1f,
+                1f + ProficiencyAccuracyGain * t,
+                1f,
+                1f);
+        }
+
+        // ====================================================================================================
+        // 7-3. Armor
+        // ====================================================================================================
+
+        [Header("상성 — 참격")]
+        [Range(0.2f, 2f)]
+        [Tooltip("참격이 무갑에 주는 피해 배율입니다.")]
+        public float SlashVsUnarmored = 1.0f;
+
+        [Range(0.2f, 2f)]
+        [Tooltip("참격이 경갑에 주는 피해 배율입니다. 가죽은 베는 것을 잘 막지 못합니다.")]
+        public float SlashVsLight = 1.1f;
+
+        [Range(0.2f, 2f)]
+        [Tooltip("참격이 중갑에 주는 피해 배율입니다. 판금에서는 칼날이 미끄러집니다.")]
+        public float SlashVsHeavy = 0.7f;
+
+        [Header("상성 — 자돌")]
+        [Range(0.2f, 2f)]
+        [Tooltip("자돌이 무갑에 주는 피해 배율입니다. 벨 면적이 없어 맨몸에는 오히려 덜 듭니다.")]
+        public float PierceVsUnarmored = 0.9f;
+
+        [Range(0.2f, 2f)]
+        [Tooltip("자돌이 경갑에 주는 피해 배율입니다.")]
+        public float PierceVsLight = 1.0f;
+
+        [Range(0.2f, 2f)]
+        [Tooltip("자돌이 중갑에 주는 피해 배율입니다. 갑옷의 틈을 파고듭니다.\n" +
+                 "중갑 보병을 뚫는 두 해법 중 하나입니다. 나머지 하나는 측면을 잡아 방패를 무력화하는 것입니다.")]
+        public float PierceVsHeavy = 1.3f;
+
+        [Header("상성 — 타격")]
+        [Range(0.2f, 2f)]
+        [Tooltip("타격이 무갑에 주는 피해 배율입니다.")]
+        public float BluntVsUnarmored = 0.8f;
+
+        [Range(0.2f, 2f)]
+        [Tooltip("타격이 경갑에 주는 피해 배율입니다.")]
+        public float BluntVsLight = 0.9f;
+
+        [Range(0.2f, 2f)]
+        [Tooltip("타격이 중갑에 주는 피해 배율입니다. 뚫지 않고 충격을 그대로 전달합니다.")]
+        public float BluntVsHeavy = 1.2f;
+
+        /// <summary>
+        /// 이 타격이 저 갑옷에 얼마나 잘 드는지 구합니다.
+        ///
+        /// <b>왜 표를 배열이 아니라 이름 붙은 값으로 두는가</b>
+        ///
+        /// 3×3 배열을 인스펙터에 노출하면 어느 칸이 무엇인지 알 수 없습니다.
+        /// 밸런스를 잡는 사람이 "참격 대 중갑"을 찾으려고 인덱스를 세게 되고,
+        /// 한 칸을 잘못 세면 조용히 엉뚱한 상성이 바뀝니다.
+        /// 축이 셋씩이라 아홉 줄로 끝나므로 이름을 붙이는 편이 낫습니다.
+        /// </summary>
+        /// <param name="damage">때리는 성질입니다.</param>
+        /// <param name="armor">맞는 쪽이 걸친 방어입니다.</param>
+        /// <returns>피해량에 곱할 배율입니다. 1이면 상성이 없습니다.</returns>
+        public float GetArmorEffectiveness(DamageType damage, ArmorType armor)
+        {
+            return damage switch
+            {
+                DamageType.Slash => armor switch
+                {
+                    ArmorType.Light => SlashVsLight,
+                    ArmorType.Heavy => SlashVsHeavy,
+                    _ => SlashVsUnarmored,
+                },
+                DamageType.Pierce => armor switch
+                {
+                    ArmorType.Light => PierceVsLight,
+                    ArmorType.Heavy => PierceVsHeavy,
+                    _ => PierceVsUnarmored,
+                },
+                DamageType.Blunt => armor switch
+                {
+                    ArmorType.Light => BluntVsLight,
+                    ArmorType.Heavy => BluntVsHeavy,
+                    _ => BluntVsUnarmored,
+                },
+                _ => 1f,
+            };
+        }
 
         // ====================================================================================================
         // 8. Factory

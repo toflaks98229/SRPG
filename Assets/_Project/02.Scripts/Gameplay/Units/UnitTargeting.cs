@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
@@ -215,7 +215,7 @@ namespace SRPG.Gameplay.Units
             }
 
             // 히스테리시스를 두어 대상이 매 프레임 바뀌며 떨리는 것을 막습니다.
-            float dropRange = _definition.EngageRadius * DropRangeFactor;
+            float dropRange = _owner.Stats.EngageRadius * DropRangeFactor;
 
             if ((_target.Position - _owner.Position).sqrMagnitude > dropRange * dropRange)
             {
@@ -240,7 +240,7 @@ namespace SRPG.Gameplay.Units
             var current = _target;
 
             bool currentHasRoom = !usesAttackQueue ||
-                                  current.HasRoomForAttacker(_owner, _definition.AttackDamage, maxAttackers);
+                                  current.HasRoomForAttacker(_owner, _owner.Stats.AttackDamage, maxAttackers);
 
             var found = FindCandidate(usesAttackQueue, maxAttackers);
 
@@ -272,7 +272,7 @@ namespace SRPG.Gameplay.Units
         {
             return usesAttackQueue
                 ? FindUnclaimedEnemy(maxAttackers)
-                : _spatial.FindNearestEnemy(_owner.Position, _owner.Team, _definition.EngageRadius);
+                : _spatial.FindNearestEnemy(_owner.Position, _owner.Team, _owner.Stats.EngageRadius);
         }
 
         /// <summary>새 후보가 지금 표적보다 마진을 넘겨 가까운지 봅니다.</summary>
@@ -311,7 +311,7 @@ namespace SRPG.Gameplay.Units
             var enemyTeam = _owner.Team == Team.Player ? Team.Enemy : Team.Player;
 
             int count = _spatial.QueryTeam(
-                _owner.Position, _definition.EngageRadius, enemyTeam, null, _candidateBuffer);
+                _owner.Position, _owner.Stats.EngageRadius, enemyTeam, null, _candidateBuffer);
 
             Unit best = null;
             float bestSqr = float.MaxValue;
@@ -325,7 +325,7 @@ namespace SRPG.Gameplay.Units
                 }
 
                 // 이미 정원이 찬 적은 건너뜁니다. 예약은 실제로 공격을 시작할 때 잡습니다.
-                if (!candidate.HasRoomForAttacker(_owner, _definition.AttackDamage, maxAttackers))
+                if (!candidate.HasRoomForAttacker(_owner, _owner.Stats.AttackDamage, maxAttackers))
                 {
                     continue;
                 }
@@ -339,7 +339,7 @@ namespace SRPG.Gameplay.Units
             }
 
             // 전부 찼으면 평소대로 가장 가까운 적을 봅니다.
-            return best ?? _spatial.FindNearestEnemy(_owner.Position, _owner.Team, _definition.EngageRadius);
+            return best ?? _spatial.FindNearestEnemy(_owner.Position, _owner.Team, _owner.Stats.EngageRadius);
         }
     }
 }

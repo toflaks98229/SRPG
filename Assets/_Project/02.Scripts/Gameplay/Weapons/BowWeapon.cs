@@ -1,4 +1,4 @@
-﻿using SRPG.Common;
+using SRPG.Common;
 using SRPG.Gameplay.Units;
 using SRPG.Systems.Combat;
 using UnityEngine;
@@ -137,8 +137,8 @@ namespace SRPG.Gameplay.Weapons
             float spread = BallisticSolver.GetSpreadForRank(
                 Owner.Rank,
                 CombatConstants.MaxRank,
-                Definition.MaxSpreadDegrees,
-                Definition.MinSpreadDegrees);
+                Owner.Stats.MaxSpreadDegrees,
+                Owner.Stats.MinSpreadDegrees);
 
             launchVelocity = BallisticSolver.ApplySpread(launchVelocity, spread);
 
@@ -173,11 +173,12 @@ namespace SRPG.Gameplay.Weapons
             arrow.Launch(
                 Owner,
                 launchVelocity,
-                Definition.AttackDamage,
-                Definition.KnockbackForce,
-                Definition.KnockbackStagger,
+                Owner.Stats.AttackDamage,
+                Owner.Stats.KnockbackForce,
+                Owner.Stats.KnockbackStagger,
                 Definition.ProjectileGravityScale,
-                Definition.ArcLaunchAngleDegrees);
+                Definition.ArcLaunchAngleDegrees,
+                Definition.Damage);
         }
 
         /// <summary>

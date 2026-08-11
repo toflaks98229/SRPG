@@ -26,7 +26,7 @@ namespace SRPG.Data
         /// 겉으로는 아무 오류도 나지 않아 가장 늦게 발견되는 종류의 고장입니다.
         /// 버전을 비교해 새로 생긴 필드만 채우고, 기존에 조정된 값은 건드리지 않습니다.
         /// </summary>
-        public const int CurrentSchemaVersion = 3;
+        public const int CurrentSchemaVersion = 4;
 
         [HideInInspector]
         [Tooltip("에셋이 마지막으로 갱신된 스키마 버전입니다. 에셋 빌더가 관리합니다.")]
@@ -53,9 +53,14 @@ namespace SRPG.Data
         public float MaxHealth = 30f;
 
         [Min(0f)]
-        [Tooltip("투사체 피해 감소율입니다. 보병의 방패를 표현합니다. 1이면 완전 무효화입니다.")]
+        [Tooltip("투사체 피해 감소율입니다. 보병의 방패를 표현합니다. 1이면 완전 무효화입니다.\n" +
+                 "방패는 '방향이 맞을 때만' 막는 상황 방어입니다. 상시 방어는 아래 방어 타입이 맡습니다.")]
         [Range(0f, 1f)]
         public float ProjectileResistance = 0f;
+
+        [Tooltip("몸에 걸친 상시 방어입니다. 무엇으로 맞았는지에 따라 피해가 달라집니다.\n" +
+                 "방패와 별개로 작동합니다 — 방패는 앞에서 오는 화살만, 갑옷은 모든 방향의 모든 타격에 걸립니다.")]
+        public ArmorType Armor = ArmorType.Unarmored;
 
         // ====================================================================================================
         // 4. Movement
@@ -112,6 +117,10 @@ namespace SRPG.Data
         [Header("무기")]
         [Tooltip("공격 방식입니다. 붙는 무기 컴포넌트가 결정됩니다.")]
         public AttackStyle Style = AttackStyle.MeleeSwing;
+
+        [Tooltip("타격이 들어가는 성질입니다. 상대의 방어 타입과 맞물려 피해가 달라집니다.\n" +
+                 "공격 방식과 별개입니다 — 철퇴는 검과 같이 휘두르지만(MeleeSwing) 성질은 타격입니다.")]
+        public DamageType Damage = DamageType.Slash;
 
         [Min(0.1f)]
         [Tooltip("무기의 물리적 길이입니다. 타격 판정 형상의 길이가 됩니다.\n창은 이 값이 길어 사거리 우위를 갖습니다.")]
@@ -203,6 +212,13 @@ namespace SRPG.Data
             var def = CreateInstance<UnitDefinition>();
             def.Role = role;
             def.SchemaVersion = CurrentSchemaVersion;
+
+            // 상성 축은 스위치보다 먼저 정합니다.
+            // 병과마다 다시 적으면 새 병과를 추가할 때 빠뜨리기 쉽고,
+            // 빠뜨리면 열거형 기본값(참격·무갑)이 조용히 자리를 차지합니다.
+            // 특별한 무기를 든 병과가 생기면 아래 스위치에서 덮으면 됩니다.
+            def.Damage = DefaultDamageFor(role);
+            def.Armor = DefaultArmorFor(role);
 
             switch (role)
             {
@@ -323,6 +339,46 @@ namespace SRPG.Data
         }
 
         /// <summary>
+        /// 병과가 기본으로 드는 무기의 성질입니다.
+        /// </summary>
+        /// <param name="role">병과입니다.</param>
+        /// <returns>그 병과의 기본 피해 성질입니다.</returns>
+        private static DamageType DefaultDamageFor(UnitRole role)
+        {
+            return role switch
+            {
+                // 민병은 손에 잡히는 것을 듭니다. 몽둥이와 도리깨라 성질은 타격입니다.
+                UnitRole.Militia => DamageType.Blunt,
+                UnitRole.Infantry => DamageType.Slash,
+                UnitRole.Archer => DamageType.Pierce,
+                UnitRole.Pike => DamageType.Pierce,
+                _ => DamageType.Slash,
+            };
+        }
+
+        /// <summary>
+        /// 병과가 기본으로 걸치는 방어입니다.
+        /// </summary>
+        /// <param name="role">병과입니다.</param>
+        /// <returns>그 병과의 기본 방어 타입입니다.</returns>
+        private static ArmorType DefaultArmorFor(UnitRole role)
+        {
+            return role switch
+            {
+                UnitRole.Militia => ArmorType.Unarmored,
+
+                // 보병만 중갑입니다. 방패까지 들고 있어 정면에서는 거의 뚫리지 않습니다.
+                // 그래서 측면을 잡거나(방패를 무력화) 자돌 무기를 붙이는(갑옷 상성) 두 갈래 해법이 생깁니다.
+                // 둘 다 막히면 벽이 되므로, 이 조합을 다른 병과에 더 주지 않습니다.
+                UnitRole.Infantry => ArmorType.Heavy,
+
+                UnitRole.Archer => ArmorType.Light,
+                UnitRole.Pike => ArmorType.Light,
+                _ => ArmorType.Unarmored,
+            };
+        }
+
+        /// <summary>
         /// 스키마가 낡은 에셋에 새로 생긴 필드를 채웁니다.
         ///
         /// <b>기존에 있던 필드는 절대 건드리지 않습니다.</b> 기획자가 조정한 밸런스를 되돌리면 안 됩니다.
@@ -364,6 +420,18 @@ namespace SRPG.Data
             if (SchemaVersion < 3)
             {
                 ArcLaunchAngleDegrees = template.ArcLaunchAngleDegrees;
+            }
+
+            // 버전 4에서 상성 축(피해 성질·방어 타입)이 추가되었습니다.
+            //
+            // 이 둘은 열거형이라 채우지 않으면 전부 0으로 로드됩니다 —
+            // 모든 병과가 참격을 쓰고 아무도 갑옷을 입지 않은 상태가 됩니다.
+            // 궁수가 활을 들고 '베는' 피해를 넣게 되고, 오류는 하나도 나지 않습니다.
+            // 무기 필드를 추가했을 때와 똑같은 종류의 고장입니다.
+            if (SchemaVersion < 4)
+            {
+                Damage = template.Damage;
+                Armor = template.Armor;
             }
 
             DestroyImmediate(template);

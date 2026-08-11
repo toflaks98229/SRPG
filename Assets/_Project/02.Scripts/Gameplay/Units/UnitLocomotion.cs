@@ -145,7 +145,7 @@ namespace SRPG.Gameplay.Units
 
                 if (away.sqrMagnitude > 0.0001f)
                 {
-                    return away.normalized * _definition.MoveSpeed;
+                    return away.normalized * _owner.Stats.MoveSpeed;
                 }
             }
 
@@ -154,16 +154,16 @@ namespace SRPG.Gameplay.Units
                 order.SlotTarget,
                 order.HasTarget,
                 order.TargetPosition,
-                _definition.AttackRange,
+                _owner.Stats.AttackRange,
                 order.LeashDistance));
 
             Vector3 velocity = SteeringSolver.Arrive(
-                position, plan.Destination, _definition.MoveSpeed, ApproachSolver.ArriveSlowRadius);
+                position, plan.Destination, _owner.Stats.MoveSpeed, ApproachSolver.ArriveSlowRadius);
 
             velocity += SolveSeparation(position, deltaTime);
 
             // 최대 속도를 넘지 않게 제한합니다.
-            float maxSpeed = _definition.MoveSpeed;
+            float maxSpeed = _owner.Stats.MoveSpeed;
             if (velocity.sqrMagnitude > maxSpeed * maxSpeed)
             {
                 velocity = velocity.normalized * maxSpeed;
@@ -254,7 +254,7 @@ namespace SRPG.Gameplay.Units
                 separation += SteeringSolver.SeparationFrom(position, _neighborBuffer[i].Position, radius);
             }
 
-            return separation * (_definition.MoveSpeed * weight);
+            return separation * (_owner.Stats.MoveSpeed * weight);
         }
     }
 

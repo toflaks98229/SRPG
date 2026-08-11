@@ -12,20 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 72b3644fddaca9b41a82a01a3f8a1c86, type: 3}
   m_Name: EnemyDef_Archer
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.UnitDefinition
-  SchemaVersion: 3
+  SchemaVersion: 4
   Role: 2
   DisplayName: "\uCE68\uB7B5\uC790 \uAD81\uC218"
   MaxHealth: 20.800001
   ProjectileResistance: 0
+  Armor: 1
   MoveSpeed: 3.4
   Radius: 0.35
   AttackRange: 9
   AttackDamage: 5.9500003
   AttackInterval: 1.4
-  IsRangedAttack: 1
   CanAttackWhileMoving: 1
   EngageRadius: 10
   Style: 2
+  Damage: 1
   WeaponLength: 0.6
   WeaponThickness: 0.18
   AttackDuration: 0.3

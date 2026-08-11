@@ -38,8 +38,17 @@ namespace SRPG.Common
         /// <summary>감쇠 이전의 피해량입니다.</summary>
         public readonly float Amount;
 
-        /// <summary>피해의 종류입니다.</summary>
+        /// <summary>피해의 종류입니다. 방패가 걸리는지를 가릅니다.</summary>
         public readonly DamageKind Kind;
+
+        /// <summary>
+        /// 타격이 들어가는 성질입니다. 맞는 쪽의 갑옷과 맞물려 피해가 달라집니다.
+        ///
+        /// <see cref="Kind"/> 와 축이 다릅니다 — 저쪽은 <b>어떤 경로로</b> 왔는지(근접·투사체)라
+        /// 방패가 걸리는지를 정하고, 이쪽은 <b>무엇으로</b> 때렸는지라 갑옷이 걸리는 방식을 정합니다.
+        /// 화살은 경로가 투사체이면서 성질은 자돌이고, 둘 다 필요합니다.
+        /// </summary>
+        public readonly DamageType Type;
 
         /// <summary>
         /// 타격이 진행한 방향입니다. 정규화되지 않아도 됩니다.
@@ -78,6 +87,7 @@ namespace SRPG.Common
         private DamageInfo(
             float amount,
             DamageKind kind,
+            DamageType type,
             Vector3 direction,
             float knockbackForce,
             float staggerSeconds,
@@ -86,6 +96,7 @@ namespace SRPG.Common
         {
             Amount = amount;
             Kind = kind;
+            Type = type;
             Direction = direction;
             KnockbackForce = knockbackForce;
             StaggerSeconds = staggerSeconds;
@@ -105,17 +116,20 @@ namespace SRPG.Common
         /// <param name="knockbackForce">넉백 세기입니다.</param>
         /// <param name="staggerSeconds">경직 시간입니다.</param>
         /// <param name="source">공격자입니다.</param>
+        /// <param name="type">타격이 들어가는 성질입니다. 갑옷 상성의 입력입니다.</param>
         /// <returns>근접 종류로 표시된 타격 정보입니다.</returns>
         public static DamageInfo Melee(
             float amount,
             Vector3 direction,
             float knockbackForce,
             float staggerSeconds,
-            object source)
+            object source,
+            DamageType type = DamageType.Slash)
         {
             return new DamageInfo(
                 amount,
                 DamageKind.Melee,
+                type,
                 direction,
                 knockbackForce,
                 staggerSeconds,
@@ -132,6 +146,7 @@ namespace SRPG.Common
         /// <param name="staggerSeconds">경직 시간입니다.</param>
         /// <param name="arcAngleDegrees">평지 기준 하강각(도)입니다. 곡사의 발사각과 같습니다.</param>
         /// <param name="source">공격자입니다.</param>
+        /// <param name="type">타격이 들어가는 성질입니다. 화살은 자돌입니다.</param>
         /// <returns>투사체 종류로 표시된 타격 정보입니다. 방패 판정이 여기에만 걸립니다.</returns>
         public static DamageInfo Projectile(
             float amount,
@@ -139,11 +154,13 @@ namespace SRPG.Common
             float knockbackForce,
             float staggerSeconds,
             float arcAngleDegrees,
-            object source)
+            object source,
+            DamageType type = DamageType.Pierce)
         {
             return new DamageInfo(
                 amount,
                 DamageKind.Projectile,
+                type,
                 direction,
                 knockbackForce,
                 staggerSeconds,

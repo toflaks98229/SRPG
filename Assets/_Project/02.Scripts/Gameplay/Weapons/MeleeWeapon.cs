@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Units;
@@ -254,11 +254,12 @@ namespace SRPG.Gameplay.Weapons
             }
 
             victim.ReceiveHit(DamageInfo.Melee(
-                Definition.AttackDamage,
+                Owner.Stats.AttackDamage,
                 push,
-                Definition.KnockbackForce,
-                Definition.KnockbackStagger,
-                Owner));
+                Owner.Stats.KnockbackForce,
+                Owner.Stats.KnockbackStagger,
+                Owner,
+                Definition.Damage));
         }
 
         // ====================================================================================================

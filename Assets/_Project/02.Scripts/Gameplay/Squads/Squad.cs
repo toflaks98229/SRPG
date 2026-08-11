@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
@@ -27,7 +27,7 @@ namespace SRPG.Gameplay.Squads
     /// 실제로 병력이 대열을 갖추는 것은 자리를 잡고 난 다음입니다.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class Squad : MonoBehaviour, ISquadStatus
+    public sealed class Squad : MonoBehaviour, ISquadStatus, ISquadTally
     {
         // ====================================================================================================
         // 1. Fields
@@ -98,6 +98,12 @@ namespace SRPG.Gameplay.Squads
         /// </summary>
         public int Rank { get; private set; } = CombatConstants.MinRank;
 
+        /// <summary>이 분대가 무기 계열마다 쌓은 숙련도입니다. 소속 병사 전원이 공유합니다.</summary>
+        public WeaponProficiency Proficiency { get; private set; }
+
+        /// <summary>이 분대가 이번 판에 명중시킨 타격 수입니다.</summary>
+        public int HitsLanded { get; private set; }
+
         /// <summary>생존한 병사 수입니다.</summary>
         public int AliveCount => _members.Count;
 
@@ -161,7 +167,8 @@ namespace SRPG.Gameplay.Squads
         /// <param name="soldierCount">지휘관을 제외한 병사 수입니다.</param>
         /// <param name="displayName">HUD에 표시할 이름입니다.</param>
         /// <param name="unitFactory">유닛 GameObject를 만드는 함수입니다.</param>
-        /// <param name="rank">분대 숙련도 랭크입니다.</param>
+        /// <param name="rank">분대 단련도 랭크입니다.</param>
+        /// <param name="proficiency">무기 계열별 숙련도입니다. 비우면 미숙 상태로 섭니다.</param>
         public void Initialize(
             ISquadContext<Squad> context,
             UnitDefinition definition,
@@ -169,11 +176,13 @@ namespace SRPG.Gameplay.Squads
             int soldierCount,
             string displayName,
             Func<UnitDefinition, Team, bool, Vector3, Unit> unitFactory,
-            int rank = CombatConstants.MinRank)
+            int rank = CombatConstants.MinRank,
+            WeaponProficiency proficiency = default)
         {
             _context = context;
             DisplayName = displayName;
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);
+            Proficiency = proficiency;
 
             _motor.Teleport(context.Grid.CoordToWorld(spawnCoord), spawnCoord);
             _anchorSpeed = definition.MoveSpeed * context.Tuning.AnchorSpeedFactor;
@@ -204,7 +213,8 @@ namespace SRPG.Gameplay.Squads
                 }
 
                 unit.transform.SetParent(transform, true);
-                unit.SetRank(Rank);
+                unit.SetTraining(Rank, Proficiency);
+                unit.AttachTally(this);
                 unit.Died += OnUnitDied;
                 _members.Add(unit);
 
@@ -291,17 +301,34 @@ namespace SRPG.Gameplay.Squads
             _context.Occupancy.Claim(here, this);
         }
 
+        /// <inheritdoc />
+        public void ReportHitLanded()
+        {
+            HitsLanded++;
+        }
+
         /// <summary>
         /// 분대 랭크를 올립니다. 소속 병사 전원에게 즉시 반영됩니다.
         /// </summary>
         /// <param name="rank">올릴 숙련도입니다. 허용 범위를 벗어나면 잘립니다.</param>
         public void PromoteTo(int rank)
         {
+            Retrain(rank, Proficiency);
+        }
+
+        /// <summary>
+        /// 단련도와 숙련도를 함께 갱신하고 소속 병사 전원에게 반영합니다.
+        /// </summary>
+        /// <param name="rank">새 단련도입니다. 허용 범위를 벗어나면 잘립니다.</param>
+        /// <param name="proficiency">새 무기 숙련도입니다.</param>
+        public void Retrain(int rank, in WeaponProficiency proficiency)
+        {
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);
+            Proficiency = proficiency;
 
             for (int i = 0; i < _members.Count; i++)
             {
-                _members[i]?.SetRank(Rank);
+                _members[i]?.SetTraining(Rank, Proficiency);
             }
         }
 

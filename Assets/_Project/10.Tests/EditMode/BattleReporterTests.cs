@@ -29,6 +29,8 @@ namespace SRPG.Tests
             public bool IsDestroyed { get; set; }
 
             public int AliveCount { get; set; }
+
+            public int HitsLanded { get; set; }
         }
 
         private const float Step = 0.1f;

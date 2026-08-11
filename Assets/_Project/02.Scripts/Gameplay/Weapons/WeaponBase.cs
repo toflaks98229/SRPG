@@ -1,4 +1,4 @@
-﻿using SRPG.Data;
+using SRPG.Data;
 using SRPG.Gameplay.Units;
 using UnityEngine;
 
@@ -58,13 +58,13 @@ namespace SRPG.Gameplay.Weapons
         {
             get
             {
-                float duration = Definition != null ? Definition.AttackDuration : 0.4f;
+                float duration = Owner != null ? Owner.Stats.AttackDuration : 0.4f;
                 return duration <= 0.0001f ? 1f : 1f - Mathf.Clamp01(_actionTimer / duration);
             }
         }
 
         /// <summary>공격을 시작할 때 소유자를 제자리에 붙잡는 시간입니다.</summary>
-        public virtual float RootDuration => Definition != null ? Definition.AttackRootDuration : 0f;
+        public virtual float RootDuration => Definition != null ? Owner.Stats.AttackRootDuration : 0f;
 
         /// <summary>
         /// 대열을 풀고 적에게 다가갈 수 있는 최대 <b>격자 거리</b>입니다. 0이면 자리를 지킵니다.
@@ -207,7 +207,7 @@ namespace SRPG.Gameplay.Weapons
                 return false;
             }
 
-            _actionTimer = Mathf.Max(0.05f, Definition.AttackDuration);
+            _actionTimer = Mathf.Max(0.05f, Owner.Stats.AttackDuration);
             OnAttackBegan(target);
             return true;
         }

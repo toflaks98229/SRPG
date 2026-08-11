@@ -12,20 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 72b3644fddaca9b41a82a01a3f8a1c86, type: 3}
   m_Name: EnemyDef_Militia
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.UnitDefinition
-  SchemaVersion: 3
+  SchemaVersion: 4
   Role: 0
   DisplayName: "\uCE68\uB7B5\uC790 \uBBFC\uBCD1"
   MaxHealth: 24
   ProjectileResistance: 0
+  Armor: 0
   MoveSpeed: 3.5
   Radius: 0.35
   AttackRange: 1.2
   AttackDamage: 6.8
   AttackInterval: 1.1
-  IsRangedAttack: 0
   CanAttackWhileMoving: 1
   EngageRadius: 2.5
   Style: 0
+  Damage: 2
   WeaponLength: 0.8
   WeaponThickness: 0.18
   AttackDuration: 0.44

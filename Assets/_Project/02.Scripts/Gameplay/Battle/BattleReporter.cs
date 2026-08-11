@@ -28,6 +28,30 @@ namespace SRPG.Gameplay.Battle
 
         /// <summary>살아 있는 병사 수입니다.</summary>
         int AliveCount { get; }
+
+        /// <summary>
+        /// 이 분대가 이번 판에 명중시킨 타격 수입니다. 숙련도 성장의 근거가 됩니다.
+        ///
+        /// <b>병사가 아니라 분대가 셉니다.</b>
+        /// 이 게임에서 병사는 이름도 이력도 없는 인원 수이고, 성장의 주체는 분대입니다.
+        /// 누가 몇 번 때렸는지를 따로 적기 시작하면 전투마다 수십 명의 장부가 생깁니다.
+        /// </summary>
+        int HitsLanded { get; }
+    }
+
+    /// <summary>
+    /// 병사가 자기 전과를 분대에 올려 보내는 창구입니다.
+    ///
+    /// <b>왜 <see cref="ISquadStatus"/> 와 나누는가</b>
+    ///
+    /// 병사가 드는 것은 이 하나뿐이어야 합니다. 분대 상태를 함께 넘기면
+    /// 병사가 "우리 분대가 무너졌는가"를 물을 수 있게 되고, 그런 코드는 곧 생깁니다.
+    /// 올려 보내기만 하고 되묻지 못하게 하면 그 방향이 컴파일러로 강제됩니다.
+    /// </summary>
+    public interface ISquadTally
+    {
+        /// <summary>타격 하나가 상대에게 닿았음을 알립니다.</summary>
+        void ReportHitLanded();
     }
 
     /// <summary>
@@ -226,6 +250,11 @@ namespace SRPG.Gameplay.Battle
                     // 지휘관을 잃은 분대는 흩어지므로 생존자로 세지 않습니다.
                     Survivors = entry.IsAlive ? entry.Squad.AliveCount : 0,
                     Destroyed = !entry.IsAlive,
+
+                    // 무너진 분대의 전과도 함께 보고합니다.
+                    // 분대는 사라지지만 그 전투가 있었다는 사실까지 지울 이유는 없고,
+                    // 캠페인이 "얼마나 싸우다 무너졌는가"를 알아야 할 수도 있습니다.
+                    HitsLanded = entry.Squad != null ? entry.Squad.HitsLanded : 0,
                 });
             }
 

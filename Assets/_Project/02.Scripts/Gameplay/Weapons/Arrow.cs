@@ -1,4 +1,4 @@
-﻿using SRPG.Common;
+using SRPG.Common;
 using SRPG.Gameplay.Units;
 using UnityEngine;
 
@@ -52,6 +52,9 @@ namespace SRPG.Gameplay.Weapons
         private float _stagger;
         /// <summary>발사각입니다. 방패의 상방 판정 기준선이 여기서 파생됩니다.</summary>
         private float _arcAngleDegrees;
+
+        /// <summary>이 화살이 들어가는 성질입니다. 발사 시점에 정해집니다.</summary>
+        private DamageType _damageType = DamageType.Pierce;
         /// <summary>날아다닌 시간입니다. 너무 오래되면 스스로 회수됩니다.</summary>
         private float _lifetime;
         /// <summary>이미 어딘가에 박혔는지 여부입니다. 박힌 뒤에는 판정하지 않습니다.</summary>
@@ -130,7 +133,8 @@ namespace SRPG.Gameplay.Weapons
             float knockback,
             float stagger,
             float gravityScale,
-            float arcAngleDegrees)
+            float arcAngleDegrees,
+            DamageType damageType = DamageType.Pierce)
         {
             _shooter = shooter;
             _shooterTeam = shooter != null ? shooter.Team : Team.Player;
@@ -140,6 +144,11 @@ namespace SRPG.Gameplay.Weapons
             _stagger = stagger;
             _gravityScale = gravityScale;
             _arcAngleDegrees = arcAngleDegrees;
+
+            // 성질도 발사 시점에 붙잡아 둡니다. 피해·넉백과 같은 이유입니다 —
+            // 화살이 날아가는 동안 쏜 사람이 쓰러질 수 있고, 그때 정의를 다시 물으면
+            // 파괴된 오브젝트를 건드리게 됩니다.
+            _damageType = damageType;
             _lifetime = MaxLifetime;
             _isStuck = false;
 
@@ -246,7 +255,8 @@ namespace SRPG.Gameplay.Weapons
                 _knockback,
                 _stagger,
                 _arcAngleDegrees,
-                _shooter));
+                _shooter,
+                _damageType));
         }
 
         /// <summary>

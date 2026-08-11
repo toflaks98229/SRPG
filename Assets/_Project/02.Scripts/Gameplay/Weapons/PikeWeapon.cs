@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Units;
@@ -290,7 +290,7 @@ namespace SRPG.Gameplay.Weapons
                 : BattleTuning.DefaultPikeMaxAimLeadSeconds;
 
             // 창끝이 닿기 시작하는 거리를 기준으로 도착 시점을 잡습니다.
-            float effectiveRange = Definition != null ? Definition.AttackRange : 2f;
+            float effectiveRange = Owner != null ? Owner.Stats.AttackRange : 2f;
 
             aimPoint = AimPredictor.PredictApproachPoint(
                 Owner.Position,
@@ -426,11 +426,12 @@ namespace SRPG.Gameplay.Weapons
             }
 
             victim.ReceiveHit(DamageInfo.Melee(
-                Definition.AttackDamage,
+                Owner.Stats.AttackDamage,
                 push,
-                Definition.KnockbackForce,
-                Definition.KnockbackStagger,
-                Owner));
+                Owner.Stats.KnockbackForce,
+                Owner.Stats.KnockbackStagger,
+                Owner,
+                Definition.Damage));
         }
 
         // ====================================================================================================

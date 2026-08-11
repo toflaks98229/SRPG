@@ -196,7 +196,7 @@ namespace SRPG.Gameplay.Units
         {
             threatPosition = Vector3.zero;
 
-            if (_definition == null || _definition.ProjectileResistance <= 0f || _spatial == null)
+            if (_definition == null || _owner.Stats.ProjectileResistance <= 0f || _spatial == null)
             {
                 return false;
             }
