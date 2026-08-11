@@ -108,6 +108,8 @@ namespace SRPG.Gameplay.Island
         private static readonly int AccentChanceId = Shader.PropertyToID("_AccentChance");
         private static readonly int ViewAlignId = Shader.PropertyToID("_ViewAlign");
         private static readonly int FacingNoiseId = Shader.PropertyToID("_FacingNoise");
+        /// <summary>잎의 세로축을 카메라 쪽으로 눕히는 정도입니다.</summary>
+        private static readonly int PitchAlignId = Shader.PropertyToID("_PitchAlign");
         private static readonly int ClusterScaleId = Shader.PropertyToID("_ClusterScale");
         private static readonly int ClusterJitterId = Shader.PropertyToID("_ClusterJitter");
         private static readonly int HueSpreadId = Shader.PropertyToID("_HueSpread");
@@ -379,6 +381,7 @@ namespace SRPG.Gameplay.Island
             material.SetFloat(AccentChanceId, profile.AccentChance);
             material.SetFloat(ViewAlignId, profile.ViewAlign);
             material.SetFloat(FacingNoiseId, profile.FacingNoise);
+            material.SetFloat(PitchAlignId, profile.PitchAlign);
             material.SetFloat(ClusterScaleId, profile.ClusterScale);
             material.SetFloat(ClusterJitterId, profile.ClusterJitter);
             material.SetFloat(HueSpreadId, profile.HueSpread);

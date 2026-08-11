@@ -124,6 +124,7 @@ Shader "SRPG/Grass"
         // 카메라를 옮기면 들판이 소용돌이처럼 돌아갑니다.
         // 1 이면 카메라가 <b>보는 방향</b>에 나란히 섭니다. 화면 어디에 있든 같은 각입니다.
         _ViewAlign ("View Aligned", Range(0, 1)) = 1
+        _PitchAlign ("Pitch Aligned", Range(0, 1)) = 1
 
         // 나란히 선 잎을 포기마다 좌우로 비트는 한계 각도입니다.
         // 0 이면 전부 같은 각이라 판때기로 보이고, 크면 제각각이라 덤불처럼 보입니다.
@@ -250,6 +251,7 @@ Shader "SRPG/Grass"
 
         CBUFFER_START(UnityPerMaterial)
             float  _ViewAlign;
+            float  _PitchAlign;
             float  _FacingNoise;
 
             float  _ClusterScale;
@@ -329,6 +331,7 @@ Shader "SRPG/Grass"
         {
             float3 rootWS;      // 뿌리의 월드 좌표
             float3 right;       // 화면 가로 방향. 잎의 폭이 놓이는 축
+            float3 up;          // 잎의 세로축. 월드 위쪽과 카메라 위쪽 사이입니다
             float3 bendAxis;    // 잎이 눕는 수평 방향
             float  bendSin;     // 눕는 각도의 사인
             float  bendCos;     // 눕는 각도의 코사인
@@ -409,6 +412,37 @@ Shader "SRPG/Grass"
             right = normalize(cross(float3(0, 1, 0), toCamera));
         }
 
+        // 잎의 세로축입니다.
+        //
+        // <b>왜 필요한가</b>
+        //
+        // 지금까지 세로축은 언제나 월드의 위쪽이었습니다. 잎이 곧게 서 있으니 맞는 말 같지만,
+        // 내려다보는 각도만큼 화면에서 <b>짧아 보입니다</b> — 피치 47도에서 키의 68%만 남습니다.
+        // 카메라를 더 눕힐수록 납작해지고, 결국 들판이 바닥에 깔린 무늬처럼 읽힙니다.
+        //
+        // 세로축을 카메라의 위쪽으로 눕히면 잎이 카메라를 정면으로 마주해
+        // 각도와 무관하게 온전한 키로 읽힙니다. 뿌리를 축으로 도는 것이라 밑동은 땅에 붙어 있고
+        // 끝만 관객 쪽으로 기웁니다.
+        //
+        // <c>UNITY_MATRIX_V</c> 의 두 번째 행이 카메라의 위쪽 축입니다.
+        // 세 번째 행(뒤쪽 축)을 좌우에 쓰는 것과 짝을 이룹니다.
+        //
+        // <b>둘이 나란해지면 물러납니다.</b> 카메라가 수직으로 내려다보면
+        // 카메라의 위쪽이 수평이 되어 가로축과 겹칩니다. 그때는 폭이 0인 잎이 되므로
+        // 월드 위쪽으로 되돌립니다.
+        float3 BladeUp(float3 toCamera)
+        {
+            float3 worldUp = float3(0, 1, 0);
+            float3 viewUp  = UNITY_MATRIX_V._m10_m11_m12;
+
+            float3 up = normalize(lerp(worldUp, viewUp, saturate(_PitchAlign)));
+
+            // 가로축과 얼마나 어긋나 있는지입니다. 1에 가까울수록 온전한 평면이 나옵니다.
+            float3 side = cross(up, toCamera);
+
+            return dot(side, side) > 1e-4 ? up : worldUp;
+        }
+
         // 흔들림이 갱신되는 시각입니다.
         //
         // <b>왜 포기마다 박자를 어긋내는가</b>
@@ -482,7 +516,12 @@ Shader "SRPG/Grass"
             BladeBasis(rootWS, right, toCamera);
 
             blade.rootWS = rootWS;
-            blade.right = right;
+            // 세로축을 먼저 정하고, 가로축을 그것에 직교하도록 다시 세웁니다.
+            // 그러지 않으면 두 축이 비스듬해져 잎이 평행사변형으로 일그러집니다.
+            float3 up = BladeUp(toCamera);
+
+            blade.up = up;
+            blade.right = normalize(cross(up, toCamera));
 
             // 자리에서 뽑은 씨앗입니다. 같은 자리는 언제나 같은 값이라 깜빡이지 않습니다.
             float seed = Hash21(rootWS.xz) * 10.0;
@@ -573,7 +612,7 @@ Shader "SRPG/Grass"
             // 강체 회전입니다. 키를 눕는 각도만큼 앞으로 내주고 그만큼 낮아집니다.
             return blade.rootWS
                  + blade.right * local.x
-                 + float3(0, local.y * blade.bendCos, 0)
+                 + blade.up * (local.y * blade.bendCos)
                  + blade.bendAxis * (local.y * blade.bendSin);
         }
 

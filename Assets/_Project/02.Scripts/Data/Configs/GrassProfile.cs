@@ -124,6 +124,14 @@ namespace SRPG.Data
                  "0이면 전부 같은 각이라 판때기로 보이고, 크면 제각각이라 덤불처럼 보입니다.")]
         public float FacingNoise;
 
+        [Range(0f, 1f)]
+        [Tooltip("잎의 세로축을 카메라 쪽으로 얼마나 눕힐지입니다.\n" +
+                 "0이면 잎이 언제나 월드 기준으로 곧게 섭니다. 내려다보는 각만큼 화면에서 짧아 보이고, " +
+                 "카메라를 더 눕힐수록 납작해집니다.\n" +
+                 "1이면 카메라를 정면으로 마주해 각도와 무관하게 온전한 키로 읽힙니다.\n\n" +
+                 "위의 ViewAlign 이 좌우를 정한다면 이것은 상하입니다. 둘이 함께 1이면 완전히 카메라를 향합니다.")]
+        public float PitchAlign;
+
         [Header("거동")]
         [Range(0f, 90f)]
         [Tooltip("바람에 눕는 각도입니다. 갈대는 크게, 마른 잡초는 거의 흔들리지 않아야 합니다.")]
@@ -172,7 +180,7 @@ namespace SRPG.Data
         ///
         /// <c>UnitDefinition</c> 이 같은 이유로 같은 장치를 들고 있습니다.
         /// </summary>
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 3;
 
         [HideInInspector]
         [Tooltip("이 에셋이 마지막으로 갱신된 스키마 버전입니다. 배선 도구가 관리합니다.")]
@@ -290,6 +298,7 @@ namespace SRPG.Data
                 TranslucencyPower = 4f,
                 TranslucencyRoot = 0.15f,
                 ViewAlign = 1f,
+                PitchAlign = 1f,
                 FacingNoise = 18f,
                 WindSwayAngle = 28f,
                 AccentChance = 0.06f,
@@ -327,6 +336,7 @@ namespace SRPG.Data
                 TranslucencyRoot = 0.10f,
 
                 ViewAlign = 1f,
+                PitchAlign = 1f,
 
                 // 갈대는 곧게 뻗는 것이 물가의 신호라 덜 비틉니다.
                 FacingNoise = 10f,
@@ -367,6 +377,7 @@ namespace SRPG.Data
                 TranslucencyRoot = 0.20f,
 
                 ViewAlign = 1f,
+                PitchAlign = 1f,
 
                 // 마른 잡초는 제멋대로 자랍니다. 가장 크게 비틉니다.
                 FacingNoise = 32f,
@@ -438,6 +449,7 @@ namespace SRPG.Data
             // 이 값들이 0이면 잎이 예전처럼 카메라 자리를 향하고 색 묶기가 꺼진 상태입니다.
             species.ViewAlign = template.ViewAlign;
             species.FacingNoise = template.FacingNoise;
+            species.PitchAlign = template.PitchAlign;
             species.ClusterScale = template.ClusterScale;
             species.ClusterJitter = template.ClusterJitter;
             species.HueSpread = template.HueSpread;

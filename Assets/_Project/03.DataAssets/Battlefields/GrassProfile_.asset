@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b3be5823dced03944b20437e71e304a0, type: 3}
   m_Name: GrassProfile_
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.GrassProfile
-  SchemaVersion: 2
+  SchemaVersion: 3
   Density: 19.1
   ReedBand: 0.35
   ReedChance: 0.7
@@ -47,6 +47,7 @@ MonoBehaviour:
     TranslucencyRoot: 0.15
     ViewAlign: 1
     FacingNoise: 18
+    PitchAlign: 1
     WindSwayAngle: 37
     AccentChance: 0.229
   Reed:
@@ -74,6 +75,7 @@ MonoBehaviour:
     TranslucencyRoot: 0.1
     ViewAlign: 1
     FacingNoise: 10
+    PitchAlign: 1
     WindSwayAngle: 46
     AccentChance: 0
   Weed:
@@ -101,5 +103,6 @@ MonoBehaviour:
     TranslucencyRoot: 0.2
     ViewAlign: 1
     FacingNoise: 32
+    PitchAlign: 1
     WindSwayAngle: 14
     AccentChance: 0
