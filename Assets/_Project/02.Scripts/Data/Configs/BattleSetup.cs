@@ -33,6 +33,10 @@ namespace SRPG.Data
                  "비우면 코드 기본값을 씁니다.")]
         public GrassProfile GrassProfile;
 
+        [Tooltip("전장 위의 하늘입니다. 지금은 지나가는 구름의 그늘이 여기서 옵니다.\n" +
+                 "비우면 코드 기본값을 씁니다.")]
+        public SkyProfile SkyProfile;
+
         [Tooltip("전투가 내는 소리입니다. 비우면 코드가 파형을 합성해 임시로 채웁니다.\n" +
                  "합성음은 좋은 소리는 아니지만, 배선이 실제로 도는지 귀로 확인할 수 있습니다.")]
         public BattleAudioBank AudioBank;

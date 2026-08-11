@@ -207,7 +207,8 @@ namespace SRPG.Composition
             _view.Build(
                 _plan.Battlefield,
                 _settings.Setup != null ? _settings.Setup.TerrainMaterials : default,
-                _settings.Setup != null ? _settings.Setup.GrassProfile : null);
+                _settings.Setup != null ? _settings.Setup.GrassProfile : null,
+                _settings.Setup != null ? _settings.Setup.SkyProfile : null);
         }
 
         /// <summary>플레이어의 조작 창구를 세웁니다.</summary>

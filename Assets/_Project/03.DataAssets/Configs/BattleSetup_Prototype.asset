@@ -19,6 +19,7 @@ MonoBehaviour:
   Tuning: {fileID: 11400000, guid: 143e1a8289c7f584fa9488227cb5278e, type: 2}
   TerrainProfile: {fileID: 11400000, guid: e41035570d80ebf4aad18a528a00ace7, type: 2}
   GrassProfile: {fileID: 11400000, guid: 87a4c03c4b7852645aa8fbbd9e5bcde2, type: 2}
+  SkyProfile: {fileID: 11400000, guid: c43255aaf33ddbe448595738f409d30b, type: 2}
   AudioBank: {fileID: 11400000, guid: fe3cd3740bca5764ebff701391659bf4, type: 2}
   PlayerRoster:
   - {fileID: 11400000, guid: 49b1a6f1c2f2b594cbe6c7da2a251163, type: 2}

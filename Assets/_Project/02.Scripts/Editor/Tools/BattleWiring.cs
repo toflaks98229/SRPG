@@ -52,6 +52,9 @@ namespace SRPG.Editor.Tools
         /// <summary>전투 사운드 뱅크 에셋의 경로입니다.</summary>
         private const string AudioBankPath = ConfigDirectory + "/BattleAudio_Default.asset";
 
+        /// <summary>하늘 프로필 에셋의 경로입니다. 구름 그늘이 여기서 옵니다.</summary>
+        private const string SkyProfilePath = ConfigDirectory + "/SkyProfile_Default.asset";
+
         /// <summary>빌드에 반드시 들어가야 하는 셰이더입니다.</summary>
         private static readonly string[] RequiredShaders =
         {
@@ -735,6 +738,12 @@ namespace SRPG.Editor.Tools
                 wiredBank = true;
             }
 
+            if (setup != null && setup.SkyProfile == null)
+            {
+                setup.SkyProfile = EnsureSkyProfile();
+                EditorUtility.SetDirty(setup);
+            }
+
             AssetDatabase.SaveAssets();
 
             Debug.Log(
@@ -771,6 +780,33 @@ namespace SRPG.Editor.Tools
 
             EditorUtility.SetDirty(snap);
             return true;
+        }
+
+        /// <summary>
+        /// 하늘 프로필을 확보합니다. 없으면 코드 기본값으로 하나 굽습니다.
+        ///
+        /// <b>왜 에셋으로 꺼냈는가</b>
+        ///
+        /// 구름 값이 <c>BattlefieldView</c> 의 직렬화 필드였습니다. 그 컴포넌트는 런타임에
+        /// <c>AddComponent</c> 되므로 인스펙터에 뜰 기회가 없어, 구름을 짙게 해 보려면
+        /// 코드를 고치고 컴파일해야 했습니다. 들판 프로필과 같은 함정, 같은 해법입니다.
+        /// </summary>
+        /// <returns>프로젝트에 저장된 하늘 프로필입니다.</returns>
+        private static SkyProfile EnsureSkyProfile()
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<SkyProfile>(SkyProfilePath);
+
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            EnsureFolder(ConfigDirectory);
+
+            var created = SkyProfile.CreateDefault();
+            AssetDatabase.CreateAsset(created, SkyProfilePath);
+
+            return created;
         }
 
         /// <summary>격자 에셋을 확보합니다. 없으면 코드 기본값으로 하나 굽습니다.</summary>

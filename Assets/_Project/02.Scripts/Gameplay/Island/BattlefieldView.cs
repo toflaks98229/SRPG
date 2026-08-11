@@ -64,41 +64,16 @@ namespace SRPG.Gameplay.Island
         // 1-3. Clouds
         // ====================================================================================================
 
-        [Header("구름 그림자")]
-        [SerializeField]
-        [Range(0f, 0.8f)]
-        [Tooltip("구름 그늘의 깊이입니다.\n" +
-                 "0이면 꺼집니다. 깊게 하면 연출은 살지만, 지형이 색으로 말하던\n" +
-                 "'갈 수 있는 곳'이 지나가는 그늘에 묻힙니다.")]
-        private float _cloudDepth = 0.28f;
-
-        [SerializeField]
-        [Range(0.002f, 0.1f)]
-        [Tooltip("구름 덩어리의 크기입니다. 작을수록 큰 구름입니다.")]
-        private float _cloudScale = 0.012f;
-
-        [SerializeField]
-        [Range(0f, 2f)]
-        [Tooltip("구름이 흘러가는 속도입니다.")]
-        private float _cloudSpeed = 0.35f;
-
-        [SerializeField]
-        [Tooltip("구름이 흘러가는 방향입니다. 바람과 같은 쪽이어야 자연스럽습니다.")]
-        private Vector2 _cloudDirection = new Vector2(1f, 0.35f);
-
-        [SerializeField]
-        [Range(0f, 1f)]
-        [Tooltip("하늘을 덮는 정도입니다. 높이면 맑고, 낮추면 흐립니다.")]
-        private float _cloudCoverage = 0.52f;
-
-        [SerializeField]
-        [Range(0.01f, 0.5f)]
-        [Tooltip("구름 가장자리의 부드러움입니다.")]
-        private float _cloudSoftness = 0.16f;
-
-        [SerializeField]
-        [Tooltip("구름이 떠 있는 높이입니다. 지형보다 충분히 위여야 그림자가 옆으로 길게 눕습니다.")]
-        private float _cloudHeight = 60f;
+        /// <summary>
+        /// 이번 전장의 하늘입니다. 절대 null 이 아닙니다.
+        ///
+        /// <b>왜 인스펙터 필드가 아닌가</b>
+        ///
+        /// 이 컴포넌트는 런타임에 <c>AddComponent</c> 됩니다. 여기 붙인 직렬화 필드는
+        /// 인스펙터에 뜰 기회가 없어, 구름을 짙게 해 보려면 코드를 고쳐야 했습니다.
+        /// 들판 프로필이 먼저 같은 이유로 에셋이 되었고, 구름도 같은 길을 갑니다.
+        /// </summary>
+        private SkyProfile _sky;
 
         /// <summary>구름의 배율·속도·깊이·높이 식별자입니다.</summary>
         private static readonly int CloudParamsId = Shader.PropertyToID("_CloudParams");
@@ -116,8 +91,13 @@ namespace SRPG.Gameplay.Island
         /// <param name="materials">지형·물 머티리얼 묶음입니다. 비어 있으면 코드로 만듭니다.</param>
         /// <param name="grass">들판의 생김새입니다. 비우면 코드 기본값을 씁니다.</param>
         public void Build(
-            Battlefield battlefield, TerrainMaterialSet materials = default, GrassProfile grass = null)
+            Battlefield battlefield,
+            TerrainMaterialSet materials = default,
+            GrassProfile grass = null,
+            SkyProfile sky = null)
         {
+            _sky = sky;
+
             ClearChildren();
 
             if (battlefield == null)
@@ -149,21 +129,23 @@ namespace SRPG.Gameplay.Island
         /// </summary>
         private void PublishCloudSettings()
         {
-            Shader.SetGlobalVector(CloudParamsId, new Vector4(
-                _cloudScale,
-                _cloudSpeed,
-                _cloudDepth,
-                _cloudHeight));
+            var sky = _sky != null ? _sky : SkyProfile.CreateDefault();
 
-            var direction = _cloudDirection.sqrMagnitude > 1e-6f
-                ? _cloudDirection.normalized
+            Shader.SetGlobalVector(CloudParamsId, new Vector4(
+                sky.Scale,
+                sky.Speed,
+                sky.Depth,
+                sky.Height));
+
+            var direction = sky.Direction.sqrMagnitude > 1e-6f
+                ? sky.Direction.normalized
                 : Vector2.right;
 
             Shader.SetGlobalVector(CloudFlowId, new Vector4(
                 direction.x,
                 direction.y,
-                _cloudCoverage,
-                _cloudSoftness));
+                sky.Coverage,
+                sky.Softness));
         }
 
         // ====================================================================================================
