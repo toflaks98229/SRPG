@@ -141,3 +141,22 @@ SOFTWARE.
 > MIT 는 저작권 표시와 위 전문을 <b>함께 배포할 것</b>을 요구합니다.
 > 저작권 연도와 표기는 저장소의 `LICENSE` 파일을 확인해 실제 문구로 맞추십시오 —
 > 위 전문은 MIT 표준형이며, 연도·이름이 다르면 그쪽을 따릅니다.
+
+---
+
+## 참고한 셰이더 — 값과 기법
+
+파일을 가져오지 않았고 텍스처도 쓰지 않았습니다. **수치와 기법만 참고**했으며,
+어느 값이 어디서 왔는지 남겨 두기 위해 적습니다. 셋 다 상업적 사용이 가능한 라이선스입니다.
+
+| 저장소 | 라이선스 | 참고한 것 |
+| --- | --- | --- |
+| [danielshervheim/unity-stylized-water](https://github.com/danielshervheim/unity-stylized-water) | BSD-3-Clause | 물가 거품의 **세기를 폭과 따로 두는 구조**(`_FoamContribution` ≈ 0.55). 우리 `_ShoreStrength` 의 기본값이 여기서 왔습니다 |
+| [MatrixRex/Uber-Stylized-Water](https://github.com/MatrixRex/Uber-Stylized-Water) | MIT | 프리셋을 성격별로 나누는 구성 방식 |
+| [bababuyyy/unity-isometric-pixel-pipeline](https://github.com/bababuyyy/unity-isometric-pixel-pipeline) | MIT | 위의 항목 참조 |
+
+> 텍스처를 가져오지 않은 이유를 함께 적어 둡니다.
+> 저 저장소들이 함께 배포하는 물 노멀맵·거품 텍스처는 사실적 표현을 전제로 만들어졌습니다.
+> 이 프로젝트는 내부 해상도 270~540 에 툰 밴딩을 걸므로 그 결이 화면에 남지 않습니다.
+> 그리고 텍스처는 그 자체의 출처가 저장소 문서에 밝혀져 있지 않아, 라이선스가 코드와 같다고
+> 단정할 수 없습니다. **확인되지 않은 자산은 들이지 않습니다.**

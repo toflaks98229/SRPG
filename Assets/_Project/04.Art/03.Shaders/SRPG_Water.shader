@@ -52,6 +52,7 @@ Shader "SRPG/Water"
         [Header(Shore)]
         _ShoreColor         ("Shore Color", Color)              = (0.82, 0.93, 0.95, 1)
         _ShoreWidth         ("Shore Width", Range(0, 4))        = 0.9
+        _ShoreStrength      ("Shore Strength", Range(0, 1))      = 0.55
         _ShorePower         ("Shore Sharpness", Range(1, 8))    = 2.0
         _ShoreNoiseScale    ("Shore Noise Scale", Range(0.05, 3))  = 0.55
         _ShoreNoiseStrength ("Shore Noise Strength", Range(0, 1))  = 0.55
@@ -151,6 +152,7 @@ Shader "SRPG/Water"
 
                 float4 _ShoreColor;
                 float  _ShoreWidth;
+                float  _ShoreStrength;
                 float  _ShorePower;
                 float  _ShoreNoiseScale;
                 float  _ShoreNoiseStrength;
@@ -448,7 +450,18 @@ Shader "SRPG/Water"
                 float3 color = water.rgb;
 
                 color = lerp(color, _CrestColor.rgb, crest);
-                color = lerp(color, _ShoreColor.rgb, shore);
+
+                // <b>거품이 물빛을 통째로 덮지 않게 합니다.</b>
+                //
+                // 예전에는 shore 가 1이면 물이 거품 색 하나로 칠해졌습니다. 세기를 줄일 방법이
+                // 폭(_ShoreWidth)밖에 없어서, 띠를 좁히면 거품이 사라지고 넓히면 하얗게 타올랐습니다 —
+                // "물가 표현이 과하다"의 실제 원인이 그것입니다.
+                //
+                // 세기를 따로 두면 <b>넓게 깔면서도 옅게</b> 둘 수 있습니다.
+                // 기본값은 참고한 구현들이 공통으로 절반 언저리에 두고 있는 값을 따랐습니다.
+                float foam = shore * _ShoreStrength;
+
+                color = lerp(color, _ShoreColor.rgb, foam);
 
                 // 하늘빛은 더하지 않고 섞습니다. 더하면 먼바다가 통째로 바래
                 // 수심으로 애써 만든 색 차이가 사라집니다.
@@ -465,7 +478,7 @@ Shader "SRPG/Water"
                 color += glitter * mainLight.color * clouds;
 
                 // 물가는 불투명에 가깝게 두어 경계가 흐려지지 않게 합니다.
-                float alpha = lerp(water.a, 1.0, max(shore, crest * 0.5));
+                float alpha = lerp(water.a, 1.0, max(foam, crest * 0.5));
 
                 return half4(color, saturate(alpha));
             }
