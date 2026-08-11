@@ -231,6 +231,7 @@ Shader "SRPG/Grass"
 
         // 물·지형과 <b>같은</b> 노이즈이고 <b>같은</b> 명암입니다.
         #include "SRPG_Noise.hlsl"
+            #include "SRPG_Depth.hlsl"
         #include "SRPG_Toon.hlsl"
 
         // 풀을 눕히는 지점의 최대 개수입니다.
@@ -870,7 +871,8 @@ Shader "SRPG/Grass"
                 // 플라스틱이나 금속처럼 보이게 하는 가장 큰 이유입니다.
                 //
                 // 보는 방향이 빛의 진행 방향과 가까울수록, 즉 해를 등지고 볼수록 세게 빛납니다.
-                float3 viewDir = normalize(_WorldSpaceCameraPos - input.positionWS);
+                // 투영을 가려 읽습니다. 직교에서는 화면 전체가 같은 방향으로 보입니다.
+                float3 viewDir = SrpgViewDirection(input.positionWS);
 
                 float backlight = saturate(dot(viewDir, -mainLight.direction));
                 float transmission = pow(backlight, _TranslucencyPower) * _Translucency;

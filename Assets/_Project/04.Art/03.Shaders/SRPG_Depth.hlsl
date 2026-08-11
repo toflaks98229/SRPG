@@ -2,7 +2,12 @@
 #define SRPG_DEPTH_INCLUDED
 
 // ====================================================================================================
-// 깊이를 시점 공간 거리로 푸는 자리입니다.
+// <b>투영에 따라 답이 갈리는 것들</b>을 모아 둔 자리입니다.
+//
+// 깊이와 시선 방향이 여기 함께 있는 이유는 <b>같은 함정</b>이기 때문입니다 —
+// 원근에서 맞던 식이 직교에서 조용히 틀립니다. 오류는 나지 않고 화면만 이상해집니다.
+// 실제로 세 번 겪었습니다: 물의 수심, 외곽선의 실루엣, 그리고 수면의 금속성 반사.
+// 한곳에 모아 두면 네 번째를 찾을 때 여기부터 보게 됩니다.
 //
 // <b>왜 공용으로 떼어 냈는가</b>
 //
@@ -52,6 +57,25 @@ float SrpgLinearEyeDepth(float rawDepth)
 float SrpgEyeDepthFromWorld(float3 positionWS)
 {
     return -TransformWorldToView(positionWS).z;
+}
+
+// 이 자리에서 <b>관객을 향하는</b> 방향입니다.
+//
+// <b>직교에서는 화면 전체가 같은 방향으로 보입니다.</b>
+// 그런데 <c>normalize(_WorldSpaceCameraPos - positionWS)</c> 는 카메라 <b>점</b>에서
+// 부챗살처럼 퍼지는 방향을 줍니다 — 원근의 거동입니다.
+//
+// 그것을 직교에서 쓰면 카메라 발밑을 중심으로 한 <b>둥근 얼룩</b>이 생깁니다.
+// 수면에서는 그것이 하늘빛과 반짝임의 세기를 자리마다 바꿔,
+// 카메라를 옮길 때마다 얼룩이 따라 미끄러집니다. <b>물이 아니라 닦아 놓은 금속</b>처럼 보입니다.
+//
+// <c>UNITY_MATRIX_V</c> 의 세 번째 행이 카메라의 뒤쪽 축, 곧 관객을 향하는 방향입니다.
+float3 SrpgViewDirection(float3 positionWS)
+{
+    float3 persp = normalize(_WorldSpaceCameraPos - positionWS);
+    float3 ortho = UNITY_MATRIX_V._m20_m21_m22;
+
+    return normalize(lerp(persp, ortho, unity_OrthoParams.w));
 }
 
 #endif // SRPG_DEPTH_INCLUDED

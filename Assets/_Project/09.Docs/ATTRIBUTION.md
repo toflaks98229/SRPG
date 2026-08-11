@@ -160,3 +160,45 @@ SOFTWARE.
 > 이 프로젝트는 내부 해상도 270~540 에 툰 밴딩을 걸므로 그 결이 화면에 남지 않습니다.
 > 그리고 텍스처는 그 자체의 출처가 저장소 문서에 밝혀져 있지 않아, 라이선스가 코드와 같다고
 > 단정할 수 없습니다. **확인되지 않은 자산은 들이지 않습니다.**
+
+---
+
+## Toon Water Shader (Roystan)
+
+- 출처: <https://github.com/IronWarrior/ToonWaterShader>
+- 원저작자: Erik Roystan Ross
+- 라이선스: **Unlicense** (퍼블릭 도메인 헌정)
+
+Unlicense 는 표기 의무조차 없습니다. 그래도 적어 두는 이유는 의무가 아니라
+**어느 판단이 어디서 왔는지 나중에 되짚을 수 있게** 하기 위해서입니다.
+
+### 가져온 기법
+
+물가 거품을 <b>문턱</b>으로 만드는 방식입니다.
+
+```
+surfaceNoiseCutoff = foamDepthDifference01 * _SurfaceNoiseCutoff;
+surfaceNoise = smoothstep(cutoff - AA, cutoff + AA, noiseSample);
+```
+
+얕을수록 문턱을 낮추고, 노이즈가 그 문턱을 넘었는지만 봅니다.
+우리 `SRPG_Water.shader` 의 `_ShoreCutoff` · `_ShoreCutoffAA` 가 여기서 왔습니다.
+
+예전에는 노이즈를 깊이에 더한 뒤 `pow` 로 떨어뜨렸는데, 그러면 값이 매끄럽게 이어져
+에어브러시 자국처럼 보입니다. **만화적인 결은 텍스처가 아니라 이 이분법에서 나옵니다.**
+
+### 가져오지 않은 것 — 텍스처
+
+저장소에는 `PerlinNoise.png` · `WaterDistortion.png` · `Shoreline.png` 이 있습니다.
+셋 다 저자 자신의 자산이고 퍼블릭 도메인이지만 들이지 않았습니다.
+
+- **`Shoreline.png`** 은 이름과 달리 거품이 아니라 **데모 씬의 모래톱 오브젝트**가 쓰는 지형 그림입니다.
+- **`PerlinNoise.png`** 은 우리 절차적 `Fbm` 을 대신할 수 있지만, 지금 거품 규모(`_ShoreNoiseScale` 0.55)에서는
+  텍스처가 약 1.8 월드 단위마다 반복됩니다. 물가를 따라 같은 무늬가 줄줄이 늘어서 오히려 인공적으로 보입니다.
+  쓰려면 규모를 함께 다시 잡아야 합니다.
+- **`WaterDistortion.png`** 은 가장자리를 흔드는 용도인데, 우리 파도가 이미 도메인 워프
+  (`_WaveWarpScale` · `_WaveWarpStrength`)를 갖고 있어 겹칩니다.
+
+> 같은 저장소의 `Wood17_col/disp/nrm/rgh.jpg` (풀 셰이더 저장소 쪽)는 <b>의도적으로 제외</b>했습니다.
+> 이름 형식이 PBR 텍스처 배포 사이트의 규칙이고 README 에 출처 표기가 없습니다.
+> 저장소가 Unlicense 라도 저자가 <b>자기 것이 아닌 파일까지</b> 퍼블릭 도메인으로 내놓을 권한은 없습니다.

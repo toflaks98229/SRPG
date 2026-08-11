@@ -54,6 +54,8 @@ Shader "SRPG/Water"
         _ShoreWidth         ("Shore Width", Range(0, 4))        = 0.9
         _ShoreStrength      ("Shore Strength", Range(0, 1))      = 0.55
         _ShorePower         ("Shore Sharpness", Range(1, 8))    = 2.0
+        _ShoreCutoff        ("Shore Cutoff (toon)", Range(0, 1))   = 0.62
+        _ShoreCutoffAA      ("Shore Cutoff Softness", Range(0.001, 0.3)) = 0.05
         _ShoreNoiseScale    ("Shore Noise Scale", Range(0.05, 3))  = 0.55
         _ShoreNoiseStrength ("Shore Noise Strength", Range(0, 1))  = 0.55
         _ShoreSpeed         ("Shore Speed", Range(0, 2))           = 0.35
@@ -154,6 +156,8 @@ Shader "SRPG/Water"
                 float  _ShoreWidth;
                 float  _ShoreStrength;
                 float  _ShorePower;
+                float  _ShoreCutoff;
+                float  _ShoreCutoffAA;
                 float  _ShoreNoiseScale;
                 float  _ShoreNoiseStrength;
                 float  _ShoreSpeed;
@@ -394,13 +398,34 @@ Shader "SRPG/Water"
                 // 3. 물가 거품선 — 깊이가 거의 0인 띠입니다.
                 // 강이 지형에 파고든 것처럼 보이게 하는 것이 이 대목입니다.
                 // ---------------------------------------------------------------------------
-                float shore = 1.0 - saturate(waterDepth / max(_ShoreWidth, 1e-3));
+                float shallow = 1.0 - saturate(waterDepth / max(_ShoreWidth, 1e-3));
 
                 // 깔끔한 등고선은 물가처럼 보이지 않습니다. 가장자리를 노이즈로 흩뜨립니다.
                 float foamNoise = Fbm(input.positionWS.xz * _ShoreNoiseScale
                                     + float2(0, _TimeParameters.x * _ShoreSpeed));
 
-                shore = saturate(shore - (foamNoise - 0.5) * _ShoreNoiseStrength);
+                // <b>만화적인 거품은 문턱에서 나옵니다.</b>
+                //
+                // 예전에는 노이즈를 깊이에 <b>더한 뒤 pow 로 떨어뜨렸습니다</b>.
+                // 그러면 값이 0에서 1까지 매끄럽게 이어져, 아무리 세게 눌러도
+                // 에어브러시로 문지른 자국처럼 보입니다. 손으로 그은 결이 나오지 않습니다.
+                //
+                // 얕을수록 문턱을 낮추고, 노이즈가 그 문턱을 <b>넘었는가</b>만 봅니다.
+                // 넘으면 거품, 아니면 물 — 중간이 거의 없습니다.
+                // 그 이분법이 곧 물가를 따라 흐르는 <b>덩어리진 흰 무늬</b>가 됩니다.
+                //
+                // <c>_ShoreCutoffAA</c> 는 계단을 지우려는 것이 아니라 <b>가장자리만</b> 다듬는 폭입니다.
+                // 크게 열면 예전의 그라디언트로 돌아가므로, 두 방식 사이를 이 값 하나로 오갈 수 있습니다.
+                float cutoff = (1.0 - shallow) * _ShoreCutoff;
+
+                float shore = smoothstep(
+                    cutoff - _ShoreCutoffAA,
+                    cutoff + _ShoreCutoffAA,
+                    foamNoise * _ShoreNoiseStrength + (1.0 - _ShoreNoiseStrength));
+
+                // 물 밖으로는 거품이 번지지 않습니다. 얕은 띠 안에서만 살아 있어야
+                // 물가를 따라 흐르는 선으로 읽힙니다.
+                shore *= step(0.001, shallow);
                 shore = pow(shore, _ShorePower);
 
                 // ---------------------------------------------------------------------------
@@ -435,14 +460,26 @@ Shader "SRPG/Water"
                 // 물은 그림자를 받지 않으므로 감쇠는 1, 깊이는 0 입니다.
                 float shading = ToonLight(lambert, 1.0, clouds, _AmbientBoost, 0.0);
 
-                float3 viewDir = normalize(_WorldSpaceCameraPos - input.positionWS);
+                // 투영을 가려 읽습니다. 카메라 <b>점</b>에서 뺀 방향은 원근의 거동이라,
+                // 직교에서 쓰면 카메라 발밑에 둥근 얼룩이 생기고 그것이 화면을 따라 미끄러집니다.
+                float3 viewDir = SrpgViewDirection(input.positionWS);
 
                 // 마루에서 튀는 햇빛입니다. 수면이 살아 있다는 인상의 대부분이 여기서 나옵니다.
                 float3 halfDir = normalize(mainLight.direction + viewDir);
                 float  glitter = pow(saturate(dot(normal, halfDir)), _SpecSharpness) * _SpecStrength;
 
-                // 비스듬히 볼수록 하늘빛을 더 받습니다. 평평한 판이 판으로 보이지 않게 합니다.
-                float glint = pow(1.0 - saturate(viewDir.y), 4.0) * _Fresnel;
+                // 비스듬히 스치는 면일수록 하늘빛을 더 받습니다.
+                //
+                // <b>시선의 높이가 아니라 면과 시선의 각으로 잽니다.</b>
+                //
+                // 예전에는 <c>1 - viewDir.y</c> 였습니다. 시선이 부챗살로 퍼지던 원근에서는
+                // 그것이 자리마다 달라져 그럭저럭 보였지만, 직교에서는 시선이 화면 전체에서 하나라
+                // <b>수면 전체가 같은 값</b>이 됩니다 — 하늘빛이 고르게 덮인 금속판이 됩니다.
+                //
+                // 면의 각으로 재면 파도의 기울기마다 달라지므로, 직교에서도
+                // <b>마루와 골이 다른 하늘빛</b>을 받아 수면이 판으로 보이지 않습니다.
+                // 이쪽이 프레넬의 원래 정의이기도 합니다.
+                float glint = pow(1.0 - saturate(dot(normal, viewDir)), 5.0) * _Fresnel;
 
                 // ---------------------------------------------------------------------------
                 // 6. 합성
