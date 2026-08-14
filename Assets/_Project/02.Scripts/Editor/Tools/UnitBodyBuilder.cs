@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using SRPG.Gameplay.Visual;
 using UnityEditor;
@@ -184,7 +184,7 @@ namespace SRPG.Editor.Tools
         /// <summary>
         /// 방향 판독기를 붙이고 렌더러를 물려 줍니다.
         ///
-        /// 렌더러를 비워 두면 <see cref="Component.GetComponentInChildren{T}"/>가
+        /// 렌더러를 비워 두면 <c>GetComponentInChildren</c> 가
         /// 무기나 깃발의 렌더러를 집을 수 있습니다.
         /// </summary>
         private static void AttachDirectionReader(GameObject root, Renderer renderer)

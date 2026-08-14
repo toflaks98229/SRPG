@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using SRPG.Composition;
 using SRPG.Core.Managers;
 using SRPG.Data;

@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Campaign;
@@ -131,17 +131,31 @@ namespace SRPG.Tests
         // 3. 단련도 성장
         // ====================================================================================================
 
+        /// <summary>
+        /// 쌓인 공적이 문턱을 넘으면 단련도가 오릅니다.
+        ///
+        /// 문턱을 <c>MeritPerRank</c> 에서 읽으므로, 값을 조정해도 이 검사는 그대로 유효합니다.
+        /// </summary>
         [Test]
-        public void 살아남은_전투_수로_단련도가_오른다()
+        public void 공적이_문턱을_넘으면_단련도가_오른다()
         {
             var squad = new CampaignSquad { Definition = _archer };
 
-            for (int i = 0; i < _progression.BattlesPerRank; i++)
+            Assert.AreEqual(CombatConstants.MinRank, squad.Rank, "시작 단련도가 최소가 아닙니다.");
+
+            // 한 판의 공적을 재어, 문턱을 넘길 만큼만 돌립니다.
+            float perBattle = _progression.ScoreMerit(_archer, Report(1, 0));
+            int battles = Mathf.CeilToInt(_progression.MeritPerRank / Mathf.Max(0.01f, perBattle));
+
+            for (int i = 0; i < battles; i++)
             {
                 _progression.Apply(squad, Report(1, 0));
             }
 
-            Assert.AreEqual(CombatConstants.MinRank + 1, squad.Rank);
+            Assert.GreaterOrEqual(
+                squad.Rank,
+                CombatConstants.MinRank + 1,
+                $"공적 {squad.Merit:F1} 이 문턱 {_progression.MeritPerRank} 를 넘었는데 승급하지 않았습니다.");
         }
 
         [Test]
@@ -149,7 +163,7 @@ namespace SRPG.Tests
         {
             var squad = new CampaignSquad { Definition = _archer };
 
-            for (int i = 0; i < _progression.BattlesPerRank * (CombatConstants.MaxRank + 5); i++)
+            for (int i = 0; i < 500; i++)
             {
                 _progression.Apply(squad, Report(1, 0));
             }
@@ -157,20 +171,35 @@ namespace SRPG.Tests
             Assert.AreEqual(CombatConstants.MaxRank, squad.Rank);
         }
 
+        /// <summary>
+        /// 단련도와 숙련도가 <b>둘 다</b> 전과를 봅니다. 다만 재는 것이 다릅니다.
+        ///
+        /// <b>이 검사는 2026-08-13에 뒤집혔습니다.</b>
+        ///
+        /// 예전에는 <c>단련도는_전과를_보지_않는다</c> 였습니다. 단련은 "얼마나 겪었는가"이고
+        /// 잘 싸웠는가는 숙련도가 잰다는 판단이었습니다. 그런데 그러면 승급이
+        /// <b>시간이 지나면 오는 것</b>이라, 판마다의 결과가 성장에 닿지 않습니다.
+        /// 승급에 특전 선택이 붙으면서 그 문제가 분명해졌습니다 —
+        /// 고르는 순간이 몇 판마다 오는 배급이 되어 버립니다.
+        ///
+        /// 지금은 둘 다 전과를 보되, <b>숙련도는 무기를 얼마나 다뤘는가</b>를,
+        /// <b>단련도는 부대로서 얼마나 해냈는가</b>를 잽니다.
+        /// 후자에는 온전함(생존율)이 함께 걸립니다 — 자세한 것은 <c>PromotionTests</c> 에 있습니다.
+        /// </summary>
         [Test]
-        public void 단련도는_전과를_보지_않는다()
+        public void 단련도와_숙련도가_모두_전과를_본다()
         {
             var lazy = new CampaignSquad { Definition = _archer };
             var busy = new CampaignSquad { Definition = _archer };
 
-            for (int i = 0; i < _progression.BattlesPerRank; i++)
+            for (int i = 0; i < 3; i++)
             {
                 _progression.Apply(lazy, Report(1, 0));
                 _progression.Apply(busy, Report(2, 300));
             }
 
-            // 단련은 '얼마나 겪었는가'입니다. 잘 싸웠는가는 숙련도가 잽니다.
-            Assert.AreEqual(lazy.Rank, busy.Rank);
+            Assert.Greater(busy.Rank, lazy.Rank, "전과가 단련도에 닿지 않습니다.");
+
             Assert.Greater(
                 busy.Proficiency.Get(AttackStyle.Projectile),
                 lazy.Proficiency.Get(AttackStyle.Projectile));

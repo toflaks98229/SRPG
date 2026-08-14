@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Composition;
+using SRPG.Core.Managers;
 using SRPG.Data;
 using SRPG.Gameplay.CameraControl;
 using SRPG.Gameplay.Enemies;
@@ -324,6 +325,57 @@ namespace SRPG.Tests.PlayMode
         }
 
         /// <summary>
+        /// <b>적을 전멸시키면 승리 보고가 나옵니다.</b>
+        ///
+        /// 패배 쪽은 아래에서 보지만, 실제로 사람이 겪는 끝은 이쪽입니다.
+        /// 그리고 승리는 조건이 하나 더 붙습니다 — <b>더 올라올 적이 없어야</b> 합니다.
+        /// 전장을 비우는 것만으로는 부족하고, 대기 중인 지원군이 남아 있으면
+        /// 아무리 죽여도 끝나지 않습니다. 그 두 조건이 실제 전투에서 함께 성립하는지는
+        /// 보고기 단위 검사로는 알 수 없습니다 — 대기열을 비우는 것은 전개기의 몫입니다.
+        ///
+        /// 여기서 확인하는 것은 그 이음매입니다. <b>"모든 적이 죽었는데 끝나지 않는다"</b>가
+        /// 성립할 수 있는지를 봅니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 적을_모두_잃으면_승리_보고가_발행된다()
+        {
+            var bootstrap = CreateBootstrap();
+            yield return null;
+
+            BattleResult received = null;
+            bootstrap.BattleConcluded += result => received = result;
+
+            var context = bootstrap.Context;
+            Assert.IsNotNull(context, "전투 맥락이 없습니다.");
+
+            // 지원군이 대기열에 남아 있으면 전장을 비워도 끝나지 않습니다.
+            // 그래서 한 번에 다 죽이지 않고, 올라오는 족족 죽이며 대기열이 마르기를 기다립니다.
+            for (int frame = 0; frame < 600; frame++)
+            {
+                var enemies = context.EnemyUnits;
+
+                for (int i = enemies.Count - 1; i >= 0; i--)
+                {
+                    enemies[i].Kill();
+                }
+
+                yield return null;
+
+                if (received != null)
+                {
+                    break;
+                }
+            }
+
+            Assert.IsNotNull(
+                received,
+                "적을 계속 전멸시켰는데도 전투가 끝나지 않았습니다. " +
+                "지원군 대기열이 마르지 않으면 승리 조건이 영영 서지 않습니다.");
+
+            Assert.AreEqual(BattleOutcome.Victory, received.Outcome);
+        }
+
+        /// <summary>
         /// <b>전투에 끝이 있어야 캠페인에 돌려줄 것이 생깁니다.</b>
         ///
         /// 지금까지 이 게임에는 끝이 없었습니다. 분대를 다 잃어도 그대로 계속 돌았습니다.
@@ -390,6 +442,29 @@ namespace SRPG.Tests.PlayMode
             }
 
             Assert.AreEqual(1, received, "보고가 여러 번 발행되었습니다.");
+        }
+
+        /// <summary>
+        /// <b>위층 스코프가 없어도 소리 낼 창구가 생깁니다.</b>
+        ///
+        /// 이 검사가 서 있는 이유가 곧 이 프로젝트가 겪은 일입니다.
+        /// 위층이 <c>IAudioService</c> 를 주지 않으면 전투는 조용히 무음이 되었고,
+        /// 그 무음은 "전투 씬만 열었다"는 정상 경로와 구별되지 않았습니다.
+        /// 로그도 예외도 없어서, 원인을 찾는 데 여러 층을 헛짚었습니다.
+        ///
+        /// 이 스모크 픽스처에는 위층이 없습니다 — 실패했던 상황과 같은 조건입니다.
+        /// 그런데도 창구는 있어야 합니다.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator 위층이_없어도_소리_창구가_생긴다()
+        {
+            CreateBootstrap();
+            yield return null;
+
+            var manager = Object.FindAnyObjectByType<AudioManager>(FindObjectsInactive.Include);
+
+            Assert.IsNotNull(manager, "소리를 낼 매니저가 없습니다. 이번 판은 통째로 무음입니다.");
+            Assert.IsTrue(manager.isActiveAndEnabled, "매니저가 꺼져 있어 소리가 나지 않습니다.");
         }
 
         // ====================================================================================================

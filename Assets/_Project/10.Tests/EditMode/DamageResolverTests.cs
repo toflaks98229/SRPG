@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Systems.Combat;

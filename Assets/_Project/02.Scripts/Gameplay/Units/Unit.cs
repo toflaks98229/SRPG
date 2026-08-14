@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Battle;
 using SRPG.Gameplay.Weapons;
 using SRPG.Systems.Combat;
+using SRPG.Systems.Grid;
 using UnityEngine;
 
 namespace SRPG.Gameplay.Units
@@ -107,6 +108,23 @@ namespace SRPG.Gameplay.Units
         private Vector3 _slotTarget;
 
         /// <summary>
+        /// 특전이 거는 배율입니다. 분대가 꽂아 줍니다.
+        ///
+        /// <b>초기값이 Identity 여야 합니다.</b> 구조체의 기본값은 전부 0이고,
+        /// 그대로 곱하면 체력도 피해도 0이 되어 병사가 태어나자마자 쓰러집니다.
+        /// </summary>
+        private UnitModifiers _perks = UnitModifiers.Identity;
+
+        /// <summary>지금까지 견딘 부상 수입니다. 지휘관에게만 쌓입니다.</summary>
+        private int _woundsTaken;
+
+        /// <summary>아직 서 있는 호위 수입니다. 분대가 밀어 넣습니다.</summary>
+        private int _escortsAlive;
+
+        /// <summary>처음 데리고 나온 호위 수입니다. 분대가 밀어 넣습니다.</summary>
+        private int _escortsDeployed;
+
+        /// <summary>
         /// 이 병사가 속한 분대의 전과 장부입니다. 분대가 세우면서 꽂아 줍니다.
         ///
         /// 올려 보내기만 하고 되묻지는 못합니다. 병사가 분대의 사정을 알 이유가 없습니다.
@@ -199,6 +217,15 @@ namespace SRPG.Gameplay.Units
 
         /// <summary>사망했을 때 발생합니다. 분대가 지휘관 사망을 감지하는 경로입니다.</summary>
         public event Action<Unit> Died;
+
+        /// <summary>
+        /// 지휘관이 쓰러질 뻔했다가 부상으로 버텼을 때 발생합니다.
+        ///
+        /// <b>연출이 이것을 듣습니다.</b> 규칙은 아무 소리도 내지 않고 지나가므로,
+        /// 플레이어에게는 "체력이 좀 깎였다"와 <b>구별되지 않습니다</b>.
+        /// 영구 손실을 눈앞에서 면한 순간이 그렇게 지나가면 규칙이 없는 것과 같습니다.
+        /// </summary>
+        public event Action<Unit> Wounded;
 
         // ====================================================================================================
         // 6. Unity Lifecycle
@@ -333,10 +360,6 @@ namespace SRPG.Gameplay.Units
         }
 
         /// <summary>
-        /// 숙련도 랭크를 설정합니다.
-        /// </summary>
-        /// <param name="rank">설정할 랭크입니다. 허용 범위를 벗어나면 잘립니다.</param>
-        /// <summary>
         /// 전과를 올려 보낼 분대를 꽂습니다. 분대가 병사를 세우면서 부릅니다.
         /// </summary>
         /// <param name="tally">이 병사가 속한 분대의 전과 장부입니다.</param>
@@ -358,6 +381,10 @@ namespace SRPG.Gameplay.Units
             _tally?.ReportHitLanded();
         }
 
+        /// <summary>
+        /// 단련도만 설정합니다. 무기 숙련도는 지금 값을 그대로 둡니다.
+        /// </summary>
+        /// <param name="rank">설정할 랭크입니다. 허용 범위를 벗어나면 잘립니다.</param>
         public void SetRank(int rank)
         {
             SetTraining(rank, Proficiency);
@@ -376,8 +403,28 @@ namespace SRPG.Gameplay.Units
         /// <param name="proficiency">무기 계열별 숙련도입니다.</param>
         public void SetTraining(int rank, in WeaponProficiency proficiency)
         {
+            SetTraining(rank, proficiency, UnitModifiers.Identity);
+        }
+
+        /// <summary>
+        /// 단련도·숙련도·특전을 <b>한 번에</b> 설정합니다.
+        ///
+        /// 셋을 따로 넣으면 유효 수치를 세 번 계산하게 되고, 그 사이에 최대 체력이 두 번 흔들립니다.
+        /// 체력은 최대치가 바뀔 때마다 비율을 맞춰 옮기므로 반올림이 쌓여
+        /// 병사가 미묘하게 다친 채로 서게 됩니다. <see cref="SetTraining(int, in WeaponProficiency)"/> 와
+        /// 같은 이유이고, 특전이 늘어난 지금은 이유가 하나 더 늘었을 뿐입니다.
+        /// </summary>
+        /// <param name="rank">부대 단련도입니다. 허용 범위를 벗어나면 잘립니다.</param>
+        /// <param name="proficiency">무기 계열별 숙련도입니다.</param>
+        /// <param name="perks">
+        /// 특전이 거는 배율입니다. <b>어떤 특전인지는 받지 않습니다</b> —
+        /// 병사가 특전의 종류를 알면 여기에 특전별 분기가 생깁니다.
+        /// </param>
+        public void SetTraining(int rank, in WeaponProficiency proficiency, in UnitModifiers perks)
+        {
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);
             Proficiency = proficiency;
+            _perks = perks;
 
             RecalculateStats();
         }
@@ -414,6 +461,10 @@ namespace SRPG.Gameplay.Units
                 growth = _context.Tuning.EvaluateRank(Rank)
                     .Combine(_context.Tuning.EvaluateProficiency(forThisWeapon));
             }
+
+            // 특전은 튜닝이 없어도 걸립니다. 단련도와 숙련도는 곡선이 튜닝에 있지만
+            // 특전의 배율은 특전 자신이 들고 오므로, 에셋 없이 여는 경로에서도 그대로 유효합니다.
+            growth = growth.Combine(_perks);
 
             Stats = new UnitStats(_definition, growth);
 
@@ -492,6 +543,13 @@ namespace SRPG.Gameplay.Units
 
             if (_health <= 0f)
             {
+                // 지휘관은 여기서 곧바로 쓰러지지 않습니다.
+                // 호위가 남아 있으면 버티고, 그마저 무너진 뒤에야 확률이 개입합니다.
+                if (IsCommander && TryEndureAsCommander())
+                {
+                    return;
+                }
+
                 Kill();
                 return;
             }
@@ -500,6 +558,67 @@ namespace SRPG.Gameplay.Units
             {
                 ApplyKnockback(outcome.Impulse, outcome.StaggerSeconds);
             }
+        }
+
+        /// <summary>
+        /// 지휘관이 치명상을 견뎌 내는지 봅니다.
+        ///
+        /// <b>호위 수는 분대가 밀어 넣어 줍니다</b>(<see cref="SetEscortStrength"/>).
+        /// 병사가 분대에 되묻는 길은 이 프로젝트에 없습니다 — 그 길을 열면
+        /// "우리 분대가 무너졌는가"를 묻는 코드가 곧 생깁니다.
+        /// 지휘관에게 필요한 것은 <b>숫자 둘</b>뿐이라 밀어 넣는 편이 좁습니다.
+        ///
+        /// 판정 자체는 <see cref="CommanderFate"/> 가 합니다. 씬 없이 검증되어야 하는 규칙이고,
+        /// 무엇보다 "언제 죽는가"는 이 게임에서 가장 중요한 규칙이라 한곳에 있어야 합니다.
+        /// </summary>
+        /// <returns>버텨 냈으면 true입니다. false면 부르는 쪽이 쓰러뜨립니다.</returns>
+        private bool TryEndureAsCommander()
+        {
+            var rules = _context?.Tuning?.Commander;
+
+            var guard = new CommanderGuard(_escortsAlive, _escortsDeployed, _woundsTaken);
+
+            var fate = CommanderFate.Resolve(guard, rules, UnityEngine.Random.value);
+
+            if (fate == CommanderFateOutcome.Fallen)
+            {
+                return false;
+            }
+
+            // 이번 부상을 세기 <b>전</b>의 수로 회복량을 정합니다.
+            // 먼저 세면 첫 부상부터 이미 깎인 몫을 받아 규칙이 한 칸씩 밀립니다.
+            _health = CommanderFate.ResolveRecoveredHealth(Stats.MaxHealth, _woundsTaken, rules);
+            _woundsTaken++;
+
+            // 쓰러졌다 일어나는 틈입니다. 그대로 계속 싸우면 부상으로 보이지 않습니다.
+            float stagger = rules != null ? rules.WoundStaggerSeconds : 0.8f;
+
+            _staggerTimer = Mathf.Max(_staggerTimer, stagger);
+            _weapon?.CancelAttack();
+
+            _context?.Audio.PlayDeath(Position);
+
+            Wounded?.Invoke(this);
+
+            return true;
+        }
+
+        /// <summary>
+        /// 이 지휘관을 지키고 있는 호위의 수를 알려 줍니다. 분대가 매 프레임 밀어 넣습니다.
+        ///
+        /// <b>왜 밀어 넣는가</b>
+        ///
+        /// 병사는 분대의 사정을 되물을 수 없습니다(<see cref="ISquadTally"/> 가 한 방향인 이유).
+        /// 그런데 지휘관의 생사만은 분대의 상태가 정해야 합니다 —
+        /// 호위가 멀쩡한데 지휘관만 사라지면 그것은 판단이 아니라 사고입니다.
+        /// 필요한 것이 숫자 둘뿐이므로, 창을 여는 대신 그 둘만 밀어 넣습니다.
+        /// </summary>
+        /// <param name="alive">지휘관을 뺀, 아직 서 있는 병사 수입니다.</param>
+        /// <param name="deployed">지휘관을 뺀, 처음 데리고 나온 병사 수입니다.</param>
+        public void SetEscortStrength(int alive, int deployed)
+        {
+            _escortsAlive = alive;
+            _escortsDeployed = deployed;
         }
 
         /// <summary>
@@ -582,6 +701,8 @@ namespace SRPG.Gameplay.Units
             _health = 0f;
 
             _weapon?.CancelAttack();
+
+            DropFlag();
 
             // 오브젝트가 사라지기 전에 냅니다. 소리는 자리에 놓이는 것이지
             // 이 오브젝트에 붙는 것이 아니라, 시체가 없어져도 소리는 남습니다.
@@ -849,6 +970,36 @@ namespace SRPG.Gameplay.Units
 
             _transform.position = next;
             _facing.Apply(next, steering, IsMoving, _targeting.Target, _weapon, deltaTime);
+        }
+
+        /// <summary>
+        /// 지휘관의 깃발을 그 자리에 남깁니다.
+        ///
+        /// <b>왜 남기는가</b>
+        ///
+        /// 지휘관을 잃으면 분대가 통째로 사라집니다. 그런데 화면에서는 병사 몇이
+        /// 동시에 없어질 뿐이라, <b>무엇을 잃었는지가 그 자리에 남지 않습니다.</b>
+        /// 이 게임에서 가장 중요한 사건이 가장 조용하게 지나가는 셈입니다.
+        ///
+        /// 깃발이 남으면 전투가 끝날 때까지 그 자리가 <b>여기서 분대를 잃었다</b>고 말합니다.
+        /// 목록에서 줄 하나가 사라지는 것과는 다른 종류의 신호입니다.
+        ///
+        /// <b>씬 루트로 올립니다.</b> 깃발은 지금 지휘관의 자식이고, 지휘관은 곧 파괴됩니다.
+        /// 분대에 매달면 분대도 함께 사라지므로 더 위로 올려야 하는데,
+        /// 전투 루트를 알고 있는 것은 여기가 아닙니다. 루트로 올리면 씬이 바뀔 때 함께 사라집니다.
+        /// </summary>
+        private void DropFlag()
+        {
+            if (!IsCommander || _commanderFlag == null || !_commanderFlag.activeSelf)
+            {
+                return;
+            }
+
+            _commanderFlag.transform.SetParent(null, worldPositionStays: true);
+            _commanderFlag.name = "FallenCommanderFlag";
+
+            // 더 이상 이 병사의 것이 아닙니다. 다시 켜고 끄는 쪽이 없도록 참조를 놓습니다.
+            _commanderFlag = null;
         }
 
         /// <summary>

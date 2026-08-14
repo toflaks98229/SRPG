@@ -8,6 +8,8 @@
         "SRPG.Core",
         "SRPG.Systems",
         "SRPG.Gameplay",
+        "SRPG.Composition",
+        "VContainer",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

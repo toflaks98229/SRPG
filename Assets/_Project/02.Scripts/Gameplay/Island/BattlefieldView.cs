@@ -1,4 +1,4 @@
-using SRPG.Common;
+﻿using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Visual;
 using SRPG.Systems.Battlefield;
@@ -90,6 +90,10 @@ namespace SRPG.Gameplay.Island
         /// <param name="battlefield">화면에 세울 전장입니다. 지형과 물이 여기서 나옵니다.</param>
         /// <param name="materials">지형·물 머티리얼 묶음입니다. 비어 있으면 코드로 만듭니다.</param>
         /// <param name="grass">들판의 생김새입니다. 비우면 코드 기본값을 씁니다.</param>
+        /// <param name="sky">
+        /// 하늘의 생김새입니다. 구름 그늘이 여기서 옵니다.
+        /// 비우면 지형에 그늘을 드리우지 않습니다 — 없는 것이 잘못된 것보다 낫습니다.
+        /// </param>
         public void Build(
             Battlefield battlefield,
             TerrainMaterialSet materials = default,
@@ -114,6 +118,12 @@ namespace SRPG.Gameplay.Island
             BuildTerrain(battlefield);
             BuildWater(battlefield);
             BuildObstacles(battlefield);
+
+            // 길은 지형과 바위가 다 선 뒤에 굽습니다. 하나라도 늦게 서면 그것이 빠진 길이 됩니다.
+            // 풀보다 앞입니다 — 풀은 길에 영향을 주지 않고, 굽는 데 시간이 드는 만큼
+            // 화면에 필요한 것부터 세우는 편이 낫습니다.
+            BattlefieldNavMesh.Bake(transform, battlefield);
+
             BuildGrass(battlefield, grass);
         }
 
@@ -206,8 +216,15 @@ namespace SRPG.Gameplay.Island
             var water = new GameObject("Water");
             water.transform.SetParent(transform, false);
 
-            // 카메라가 전장 밖을 비출 때 빈 공간이 보이지 않도록 넉넉하게 키웁니다.
-            float size = battlefield.WorldSize * 3f;
+            // <b>지형과 정확히 같은 넓이로 깝니다.</b>
+            //
+            // 예전에는 전장의 세 배로 깔았습니다. 카메라가 밖을 비출 때 빈 공간이 보이지 않게
+            // 하려던 것인데, 그 바깥에는 물 뒤에 아무것도 없어서 화면 깊이가 무한대로 튀고
+            // <b>지형이 끝나는 자리에 선이 그어졌습니다</b>.
+            //
+            // 이제 지형이 앞바다 바닥까지 덮으므로, 물을 거기에 맞추면 물판 어디에서나
+            // 뒤에 바닥이 있습니다. 더 넓히면 그만큼 다시 바닥 없는 물이 생깁니다.
+            float size = battlefield.WorldSize;
 
             water.transform.position = new Vector3(
                 battlefield.Origin.x + battlefield.WorldSize * 0.5f,
@@ -421,8 +438,24 @@ namespace SRPG.Gameplay.Island
 
             maxDepth = 0f;
 
+            // <b>가장 깊은 곳은 놀이터 안에서만 셉니다.</b>
+            //
+            // 지도에는 앞바다 바닥이 붙어 있고 그쪽이 언제나 훨씬 깊습니다.
+            // 그 값으로 파도 감쇠 폭을 잡으면 <b>놀이터의 물이 통째로 얕은 것으로 판정</b>되어
+            // 강에 파도가 서지 않고, 색을 정하는 폭도 여울을 드러내지 못할 만큼 넓어집니다.
+            //
+            // 이 값이 답해야 하는 질문은 "이 전장에서 <b>싸우는 물</b>이 얼마나 깊은가"입니다.
+            // 앞바다는 그 질문의 대상이 아닙니다 — <see cref="MeasureShorelineSlope"/> 가
+            // 같은 이유로 최대 수심을 쓰지 않기로 한 것과 같은 판단입니다.
+            float playRatio = heightmap.PlayWorldSize / Mathf.Max(heightmap.WorldSize, 1e-4f);
+
+            int playFirst = Mathf.RoundToInt((1f - playRatio) * 0.5f * (resolution - 1));
+            int playLast  = resolution - 1 - playFirst;
+
             for (int z = 0; z < resolution; z++)
             {
+                bool insidePlayZ = z >= playFirst && z <= playLast;
+
                 for (int x = 0; x < resolution; x++)
                 {
                     // 터레인 높이 배열은 [z, x] 순서입니다. 뒤집으면 지도가 대각으로 어긋납니다.
@@ -432,7 +465,7 @@ namespace SRPG.Gameplay.Island
                     depths[z, x] = depth;
                     pixels[z * resolution + x] = new Color(depth, 0f, 0f, 0f);
 
-                    if (depth > maxDepth)
+                    if (depth > maxDepth && insidePlayZ && x >= playFirst && x <= playLast)
                     {
                         maxDepth = depth;
                     }

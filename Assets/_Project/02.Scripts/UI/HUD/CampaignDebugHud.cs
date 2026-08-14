@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Campaign;
@@ -21,7 +21,35 @@ namespace SRPG.UI.HUD
     public sealed class CampaignDebugHud : MonoBehaviour
     {
         // ====================================================================================================
-        // 1. Fields
+        // 1. Constants
+        // ====================================================================================================
+
+        /// <summary>승급 패널이 놓이는 자리입니다.</summary>
+        private const float PanelX = 372f;
+
+        /// <summary>패널이 밀려 들어오는 거리입니다.</summary>
+        private const float PanelSlideDistance = 90f;
+
+        /// <summary>패널이 다 들어오기까지의 시간입니다.</summary>
+        private const float PanelRevealSeconds = 0.35f;
+
+        /// <summary>단련도 숫자가 새 값으로 넘어가는 시각입니다.</summary>
+        private const float RankFlipSeconds = 0.55f;
+
+        /// <summary>첫 선택지가 놓이기까지 기다리는 시간입니다.</summary>
+        private const float ChoiceDelaySeconds = 0.45f;
+
+        /// <summary>선택지 하나씩의 간격입니다.</summary>
+        private const float ChoiceStaggerSeconds = 0.14f;
+
+        /// <summary>선택지 버튼의 높이입니다.</summary>
+        private const float ChoiceHeight = 34f;
+
+        /// <summary>고른 특전을 보여 주는 시간입니다.</summary>
+        private const float ConfirmSeconds = 1.6f;
+
+        // ====================================================================================================
+        // 1-1. Fields
         // ====================================================================================================
 
         /// <summary>표시 문자열을 조립하는 재사용 버퍼입니다. OnGUI 는 한 프레임에 여러 번 돕니다.</summary>
@@ -48,6 +76,31 @@ namespace SRPG.UI.HUD
         /// <summary>패널 배경 텍스처입니다. 파괴할 때 함께 정리합니다.</summary>
         private Texture2D _panelTexture;
 
+        // ---------------------------------------------------------------------------------------
+        // 승급 연출
+        //
+        // <b>왜 연출이 필요한가</b>
+        //
+        // 규칙만 있으면 패널이 <b>그냥 나타납니다.</b> 그러면 승급이 사건이 아니라 상태로 읽히고,
+        // 무엇보다 직전까지 지도를 누르던 손이 <b>의도치 않게 특전을 골라 버립니다</b> —
+        // 이 단계에서 유일한 선택이 그렇게 소모되면 없느니만 못합니다.
+        //
+        // 그래서 셋을 둡니다. 패널이 밀려 들어오고, 선택지가 하나씩 놓이고,
+        // <b>다 놓이기 전에는 눌리지 않습니다.</b>
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>지금 연출 중인 승급입니다. 바뀌면 연출을 처음부터 다시 돌립니다.</summary>
+        private PendingPromotion _revealing;
+
+        /// <summary>이 승급이 나타난 뒤 흐른 시간입니다.</summary>
+        private float _revealTime;
+
+        /// <summary>방금 고른 특전입니다. 잠깐 보여 주고 사라집니다.</summary>
+        private SquadPerkKind _confirmedPerk;
+
+        /// <summary>확정 표시가 남은 시간입니다.</summary>
+        private float _confirmTime;
+
         // ====================================================================================================
         // 2. Public Methods
         // ====================================================================================================
@@ -72,6 +125,49 @@ namespace SRPG.UI.HUD
         // 3. Unity Lifecycle
         // ====================================================================================================
 
+        /// <summary>
+        /// 연출 시각만 흘립니다.
+        ///
+        /// <b>왜 OnGUI 가 아닌가</b>
+        /// <c>OnGUI</c> 는 한 프레임에 레이아웃과 리페인트로 여러 번 돕니다.
+        /// 거기서 시간을 더하면 연출이 프레임마다 두세 배 빨리 흐릅니다.
+        ///
+        /// <b>왜 진입점이 부르지 않는가</b>
+        /// 전투에서는 분대·전개기·선택이 <b>서로를 관측하기</b> 때문에 순서를 진입점이 쥐었습니다.
+        /// 여기는 자기 패널의 등장 시각만 세고 아무것도 관측하지 않습니다 —
+        /// 숨은 순서 조건이 생길 자리가 없으므로 유니티에 맡겨 둡니다.
+        ///
+        /// <b>스케일되지 않은 시간</b>을 씁니다. 월드맵은 배율이 1이지만,
+        /// 전투에서 돌아오는 길에 배율이 아직 되돌아오지 않았을 수 있습니다.
+        /// </summary>
+        private void Update()
+        {
+            if (_director == null)
+            {
+                return;
+            }
+
+            float delta = Time.unscaledDeltaTime;
+
+            var current = _director.Promotions.Current;
+
+            // 물어야 할 승급이 바뀌었으면 연출을 처음부터 다시 돌립니다.
+            if (!ReferenceEquals(current, _revealing))
+            {
+                _revealing = current;
+                _revealTime = 0f;
+            }
+            else if (current != null)
+            {
+                _revealTime += delta;
+            }
+
+            if (_confirmTime > 0f)
+            {
+                _confirmTime -= delta;
+            }
+        }
+
         private void OnGUI()
         {
             if (!_visible || _director == null)
@@ -88,6 +184,11 @@ namespace SRPG.UI.HUD
             DrawDestinations();
 
             GUILayout.EndArea();
+
+            // <b>승급은 다른 것 위에 그립니다.</b>
+            // 목록 사이에 끼워 넣으면 스크롤 아래로 밀려 못 보고 지나칩니다 —
+            // 이 단계에서 플레이어가 하는 유일한 선택인데 그러면 있으나 마나 합니다.
+            DrawPromotion();
         }
 
         private void OnDestroy()
@@ -101,6 +202,158 @@ namespace SRPG.UI.HUD
         // ====================================================================================================
         // 4. Private Methods
         // ====================================================================================================
+
+        /// <summary>
+        /// 승급한 분대의 특전을 고르게 합니다.
+        ///
+        /// <b>답하기 전에는 이동이 막힙니다</b>(<see cref="CampaignDirector.MoveTo"/>).
+        /// 그래서 이 화면은 "닫기"를 주지 않습니다 — 닫을 수 있으면 답하지 않고 넘어가게 되고,
+        /// 그러면 특전이 한 판을 통째로 놓칩니다.
+        ///
+        /// 여럿이 한꺼번에 승급하면 하나씩 묻습니다. 한 화면에 다 펼치면
+        /// 어느 분대의 선택인지가 흐려집니다.
+        /// </summary>
+        private void DrawPromotion()
+        {
+            DrawConfirmation();
+
+            var pending = _director.Promotions.Current;
+
+            if (pending == null)
+            {
+                return;
+            }
+
+            // 패널이 밀려 들어옵니다. 끝에서 감속하는 곡선이라 "놓인다"는 느낌이 납니다.
+            float slide = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_revealTime / PanelRevealSeconds));
+
+            float x = Mathf.Lerp(PanelX + PanelSlideDistance, PanelX, slide);
+
+            var previousColor = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, slide);
+
+            GUILayout.BeginArea(new Rect(x, 16f, 360f, 320f), _panelStyle);
+
+            DrawPromotionHeader(pending);
+            DrawPromotionChoices(pending);
+
+            GUILayout.EndArea();
+
+            GUI.color = previousColor;
+        }
+
+        /// <summary>승급한 분대와 오른 단련도를 적습니다.</summary>
+        /// <param name="pending">지금 묻고 있는 승급입니다.</param>
+        private void DrawPromotionHeader(PendingPromotion pending)
+        {
+            var squad = _director.Roster.Find(pending.SquadId);
+
+            _builder.Clear();
+            _builder.Append("<b>▲ 승급</b>  —  ")
+                    .AppendLine(squad != null ? squad.ResolveName() : $"{pending.SquadId}번 분대");
+
+            // 단련도가 <b>올라가는 것을 보여 줍니다.</b> 결과만 적으면 숫자가 하나 바뀐 것으로 보입니다.
+            int shown = _revealTime < RankFlipSeconds ? pending.FromRank : pending.ToRank;
+
+            _builder.Append("단련도 ").Append(pending.FromRank).Append(" → <b>").Append(shown).Append("</b>");
+
+            if (_director.Promotions.PendingCount > 1)
+            {
+                _builder.Append("    (남은 승급 ").Append(_director.Promotions.PendingCount - 1).Append(')');
+            }
+
+            GUILayout.Label(_builder.ToString(), _labelStyle);
+            GUILayout.Space(6f);
+        }
+
+        /// <summary>
+        /// 특전 세 개를 하나씩 놓고, <b>다 놓인 뒤에야</b> 누를 수 있게 합니다.
+        ///
+        /// 곧바로 누를 수 있으면 지도를 누르던 손이 그대로 특전을 골라 버립니다.
+        /// 이 단계에서 유일한 선택이라 그렇게 소모되면 없느니만 못합니다.
+        /// </summary>
+        /// <param name="pending">지금 묻고 있는 승급입니다.</param>
+        private void DrawPromotionChoices(PendingPromotion pending)
+        {
+            GUILayout.Label("특전 하나를 고르십시오.", _labelStyle);
+            GUILayout.Space(4f);
+
+            bool armed = _revealTime >= ChoiceDelaySeconds + pending.Offer.Count * ChoiceStaggerSeconds;
+
+            for (int i = 0; i < pending.Offer.Count; i++)
+            {
+                // 아직 놓일 차례가 아니면 자리만 비워 둡니다.
+                // 목록이 아래에서 밀려 올라오면 누르려던 버튼이 손 밑에서 움직입니다.
+                if (_revealTime < ChoiceDelaySeconds + i * ChoiceStaggerSeconds)
+                {
+                    GUILayout.Space(ChoiceHeight + 2f);
+                    continue;
+                }
+
+                if (!SquadPerks.TryGet(pending.Offer[i], out var perk))
+                {
+                    continue;
+                }
+
+                _builder.Clear();
+                _builder.Append("<b>").Append(perk.DisplayName).Append("</b>  —  ").Append(perk.Description);
+
+                using (new EditorDisabledScope(!armed))
+                {
+                    if (GUILayout.Button(_builder.ToString(), GUILayout.Height(ChoiceHeight)))
+                    {
+                        Choose(perk.Kind);
+                    }
+                }
+            }
+
+            GUILayout.Space(6f);
+            GUILayout.Label("장비는 여기서 주지 않습니다. 무기와 방패는 사서 듭니다.", _labelStyle);
+        }
+
+        /// <summary>
+        /// 특전을 고르고, 무엇을 골랐는지 잠깐 남깁니다.
+        ///
+        /// <b>고른 것이 곧바로 사라지면 안 됩니다.</b> 패널이 닫히고 다음 승급이 밀려 들어오면
+        /// 방금 무엇을 골랐는지가 화면에서 즉시 없어집니다. 짧게 남겨 두면 선택이 확정된 것으로 읽힙니다.
+        /// </summary>
+        /// <param name="perk">고른 특전입니다.</param>
+        private void Choose(SquadPerkKind perk)
+        {
+            if (!_director.ChoosePerk(perk))
+            {
+                return;
+            }
+
+            _confirmedPerk = perk;
+            _confirmTime = ConfirmSeconds;
+        }
+
+        /// <summary>방금 고른 특전을 잠깐 보여 주고 흐려집니다.</summary>
+        private void DrawConfirmation()
+        {
+            if (_confirmTime <= 0f || !SquadPerks.TryGet(_confirmedPerk, out var perk))
+            {
+                return;
+            }
+
+            // 마지막 구간에서만 흐려집니다. 처음부터 흐려지면 읽기 전에 사라집니다.
+            float alpha = Mathf.Clamp01(_confirmTime / (ConfirmSeconds * 0.4f));
+
+            var previousColor = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+
+            GUILayout.BeginArea(new Rect(PanelX, 348f, 360f, 44f), _panelStyle);
+
+            _builder.Clear();
+            _builder.Append("익혔습니다 — <b>").Append(perk.DisplayName).Append("</b>");
+
+            GUILayout.Label(_builder.ToString(), _labelStyle);
+
+            GUILayout.EndArea();
+
+            GUI.color = previousColor;
+        }
 
         /// <summary>지금 어디에 며칠째 있는지를 적습니다.</summary>
         private void DrawSummary()
@@ -151,6 +404,14 @@ namespace SRPG.UI.HUD
                 bool selected = plan.IsSelected(squad.Id);
 
                 _builder.Clear();
+
+                // 승급을 기다리는 분대를 목록에서도 짚어 줍니다.
+                // 패널이 이름을 적어 주더라도 <b>어느 줄인지</b>가 보여야 그 부대의 일로 읽힙니다.
+                if (_director.Promotions.IsPending(squad.Id))
+                {
+                    _builder.Append("<b>▲</b> ");
+                }
+
                 _builder
                     .Append(squad.Id)
                     .Append("번 ")

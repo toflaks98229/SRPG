@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Audio;
@@ -220,6 +220,29 @@ namespace SRPG.Core.Managers
         // ====================================================================================================
         // 7. Public Methods - Volume
         // ====================================================================================================
+
+        /// <inheritdoc />
+        public void SetSfxDistances(float minDistance, float maxDistance)
+        {
+            _sfxMinDistance = Mathf.Max(0.1f, minDistance);
+
+            // 최소보다 크게 유지합니다. 뒤집히면 유니티가 거리를 무시해
+            // 어디서 나든 같은 크기로 들립니다 — 자리에서 내는 의미가 사라집니다.
+            _sfxMaxDistance = Mathf.Max(_sfxMinDistance * 1.5f, maxDistance);
+
+            // <b>이미 울리고 있는 소리에도 겁니다.</b> 다음 소리부터 적용하면
+            // 전투가 열린 직후의 몇 초가 옛 범위로 나고, 그때가 하필 첫인상입니다.
+            for (int i = 0; i < _voices.Count; i++)
+            {
+                var source = _voices[i].Source;
+
+                if (source != null && source.spatialBlend > 0f)
+                {
+                    source.minDistance = _sfxMinDistance;
+                    source.maxDistance = _sfxMaxDistance;
+                }
+            }
+        }
 
         /// <inheritdoc />
         public void SetMasterVolume(float volume)

@@ -1,0 +1,144 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e1cec1959a730f044a0058cc1c808610, type: 3}
+  m_Name: WorldMap_Campaign
+  m_EditorClassIdentifier: SRPG.Data::SRPG.Data.WorldMapDefinition
+  _nodes:
+  - DisplayName: "\uBCF8\uC9C4"
+    Position: {x: 0, y: 0}
+    Battlefield:
+      Seed: 20260901
+      Terrain: 0
+      Width: 32
+      Depth: 32
+    Links: 0100000002000000
+    EnemyRoster: []
+    EnemySquadCount: 0
+    SoldiersPerEnemySquad: 0
+  - DisplayName: "\uC5EC\uC6B8\uBAA9"
+    Position: {x: 3, y: 1.6}
+    Battlefield:
+      Seed: 20260902
+      Terrain: 4
+      Width: 32
+      Depth: 32
+    Links: 0300000004000000
+    EnemyRoster:
+    - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
+    EnemySquadCount: 2
+    SoldiersPerEnemySquad: 4
+  - DisplayName: "\uB0AE\uC740 \uC232"
+    Position: {x: 3, y: -1.6}
+    Battlefield:
+      Seed: 20260903
+      Terrain: 1
+      Width: 32
+      Depth: 32
+    Links: 0400000005000000
+    EnemyRoster:
+    - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
+    EnemySquadCount: 2
+    SoldiersPerEnemySquad: 5
+  - DisplayName: "\uB3CC\uBC2D \uACE0\uAC1C"
+    Position: {x: 6, y: 2.8}
+    Battlefield:
+      Seed: 20260904
+      Terrain: 3
+      Width: 32
+      Depth: 32
+    Links: 06000000
+    EnemyRoster:
+    - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
+    - {fileID: 11400000, guid: 7d1a1d210dfbd65418af3b3b93ff4af2, type: 2}
+    EnemySquadCount: 3
+    SoldiersPerEnemySquad: 4
+  - DisplayName: "\uBC14\uB78C \uC5B8\uB355"
+    Position: {x: 6, y: 0}
+    Battlefield:
+      Seed: 20260905
+      Terrain: 2
+      Width: 32
+      Depth: 32
+    Links: 0600000007000000
+    EnemyRoster:
+    - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
+    - {fileID: 11400000, guid: 7d1a1d210dfbd65418af3b3b93ff4af2, type: 2}
+    EnemySquadCount: 3
+    SoldiersPerEnemySquad: 5
+  - DisplayName: "\uBB3C\uC548\uAC1C \uB2AA"
+    Position: {x: 6, y: -2.8}
+    Battlefield:
+      Seed: 20260906
+      Terrain: 4
+      Width: 32
+      Depth: 32
+    Links: 07000000
+    EnemyRoster:
+    - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
+    - {fileID: 11400000, guid: 7d1a1d210dfbd65418af3b3b93ff4af2, type: 2}
+    EnemySquadCount: 3
+    SoldiersPerEnemySquad: 5
+  - DisplayName: "\uBB34\uB108\uC9C4 \uB2E4\uB9AC"
+    Position: {x: 9, y: 1.6}
+    Battlefield:
+      Seed: 20260907
+      Terrain: 4
+      Width: 32
+      Depth: 32
+    Links: 08000000
+    EnemyRoster:
+    - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
+    - {fileID: 11400000, guid: 7d1a1d210dfbd65418af3b3b93ff4af2, type: 2}
+    - {fileID: 11400000, guid: f6cf42cbf5d81cd45a9bae64885a98b8, type: 2}
+    EnemySquadCount: 4
+    SoldiersPerEnemySquad: 5
+  - DisplayName: "\uAC80\uC740 \uC232"
+    Position: {x: 9, y: -1.6}
+    Battlefield:
+      Seed: 20260908
+      Terrain: 1
+      Width: 32
+      Depth: 32
+    Links: 08000000
+    EnemyRoster:
+    - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
+    - {fileID: 11400000, guid: 7d1a1d210dfbd65418af3b3b93ff4af2, type: 2}
+    - {fileID: 11400000, guid: f6cf42cbf5d81cd45a9bae64885a98b8, type: 2}
+    EnemySquadCount: 4
+    SoldiersPerEnemySquad: 5
+  - DisplayName: "\uC131\uBB38 \uC55E \uBC8C\uD310"
+    Position: {x: 12, y: 0}
+    Battlefield:
+      Seed: 20260909
+      Terrain: 0
+      Width: 32
+      Depth: 32
+    Links: 09000000
+    EnemyRoster:
+    - {fileID: 11400000, guid: 05a3b17764f5bf74e917d1e48a4cf5db, type: 2}
+    - {fileID: 11400000, guid: 7d1a1d210dfbd65418af3b3b93ff4af2, type: 2}
+    - {fileID: 11400000, guid: f6cf42cbf5d81cd45a9bae64885a98b8, type: 2}
+    EnemySquadCount: 5
+    SoldiersPerEnemySquad: 5
+  - DisplayName: "\uC655\uC88C\uC758 \uC5B8\uB355"
+    Position: {x: 15, y: 0}
+    Battlefield:
+      Seed: 20260910
+      Terrain: 2
+      Width: 32
+      Depth: 32
+    Links: 
+    EnemyRoster:
+    - {fileID: 11400000, guid: 7d1a1d210dfbd65418af3b3b93ff4af2, type: 2}
+    - {fileID: 11400000, guid: f6cf42cbf5d81cd45a9bae64885a98b8, type: 2}
+    EnemySquadCount: 5
+    SoldiersPerEnemySquad: 6

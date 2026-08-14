@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using SRPG.Data;
 using SRPG.Gameplay.Visual;
 using UnityEngine;

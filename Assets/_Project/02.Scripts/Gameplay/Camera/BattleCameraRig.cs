@@ -1,4 +1,4 @@
-using SRPG.Data;
+﻿using SRPG.Data;
 using SRPG.Systems.Grid;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -112,6 +112,9 @@ namespace SRPG.Gameplay.CameraControl
 
         /// <summary>줌을 실제로 적용할 카메라입니다. 트랜스폼만으로는 직교 크기를 만질 수 없습니다.</summary>
         private Camera _camera;
+
+        /// <summary>듣는 귀입니다. 카메라가 아니라 초점에 섭니다 — 이유는 <see cref="PlaceListener"/> 에 적었습니다.</summary>
+        private Transform _listenerTransform;
 
         /// <summary>확대·축소가 수렴할 목표 줌입니다.</summary>
         private float _targetZoom;
@@ -402,10 +405,82 @@ namespace SRPG.Gameplay.CameraControl
                 -(rotation * Vector3.forward) * CameraStandoff,
                 rotation);
 
+            PlaceListener(rotation);
+
             if (CacheCamera())
             {
                 _camera.orthographicSize = _zoom;
             }
+        }
+
+        /// <summary>
+        /// 듣는 귀를 초점에 세웁니다. <b>카메라와 같은 자리에 두면 안 됩니다.</b>
+        ///
+        /// <b>왜 귀만 따로 두는가</b>
+        ///
+        /// 직교 투영에서 카메라를 얼마나 물리든 화면은 달라지지 않습니다. 그래서 이 리그는
+        /// 카메라를 초점에서 <see cref="CameraStandoff"/> 만큼 <b>고정으로</b> 물려 둡니다 —
+        /// 잘려 나가는 것을 막기 위한 값이고, 보이는 그림과는 무관합니다.
+        ///
+        /// 그런데 <c>AudioListener</c> 가 카메라에 붙어 있으면 그 60미터가 <b>소리에는 그대로 남습니다.</b>
+        /// 화면 한복판에서 벌어지는 싸움이 귀에서는 60미터 밖입니다. 실제로 그래서
+        /// 아무 소리도 들리지 않았습니다 — 감쇠가 약해서가 아니라 <b>전장 전체가 무음 반경 밖</b>이었습니다.
+        /// 눈에 보이는 거리와 귀가 재는 거리가 어긋나 있었고, 그 어긋남은 화면에 드러나지 않습니다.
+        ///
+        /// 귀를 초점에 세우면 소리의 거리가 <b>전장에서의 실제 거리</b>가 됩니다.
+        /// 뱅크의 감쇠 비율도 그 전제 위에서 정한 값입니다.
+        ///
+        /// <b>회전은 카메라의 것을 씁니다.</b> 좌우 정위는 귀가 어디를 향하는지로 정해집니다.
+        /// 회전을 두지 않으면 궤도를 돌려도 정위가 월드 축에 묶여, 화면 왼쪽의 싸움이
+        /// 오른쪽에서 들리는 일이 생깁니다.
+        /// </summary>
+        /// <param name="rotation">카메라가 바라보는 자세입니다. 좌우 정위가 여기서 나옵니다.</param>
+        private void PlaceListener(Quaternion rotation)
+        {
+            if (!CacheListener())
+            {
+                return;
+            }
+
+            _listenerTransform.SetPositionAndRotation(transform.position, rotation);
+        }
+
+        /// <summary>
+        /// 듣는 귀를 리그 아래에 세웁니다. <b>씬을 손보지 않아도 고쳐져 있어야 합니다.</b>
+        ///
+        /// 씬에서는 귀가 보통 카메라에 붙어 있습니다. 그대로 두면 위에서 말한 어긋남이 남지만,
+        /// <b>그 트랜스폼을 끌어오면 안 됩니다.</b> 귀와 카메라가 같은 오브젝트를 쓰고 있어서
+        /// 트랜스폼을 옮기면 카메라가 딸려 옵니다 — 물러난 거리가 사라져 화면이 무너집니다.
+        ///
+        /// 그래서 옮기는 것은 트랜스폼이 아니라 <b>컴포넌트</b>입니다.
+        /// 전용 오브젝트를 하나 세우고, 다른 데 붙어 있던 귀는 떼어 냅니다.
+        /// 어차피 유니티는 씬에 귀가 둘 이상이면 경고하고 하나만 씁니다 —
+        /// 어느 쪽이 쓰일지는 정해져 있지 않으므로, 남겨 두면 고친 것이 무작위로 되돌아갑니다.
+        /// </summary>
+        /// <returns>귀를 쓸 수 있으면 true 입니다.</returns>
+        private bool CacheListener()
+        {
+            if (_listenerTransform != null)
+            {
+                return true;
+            }
+
+            var host = new GameObject("BattleAudioListener");
+            host.transform.SetParent(transform, worldPositionStays: false);
+
+            // 세우기 전에 걷어 냅니다. 순서가 바뀌면 방금 만든 것까지 걷어 냅니다.
+            var existing = FindObjectsByType<AudioListener>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+            for (int i = 0; i < existing.Length; i++)
+            {
+                Destroy(existing[i]);
+            }
+
+            host.AddComponent<AudioListener>();
+
+            _listenerTransform = host.transform;
+
+            return true;
         }
 
         /// <summary>

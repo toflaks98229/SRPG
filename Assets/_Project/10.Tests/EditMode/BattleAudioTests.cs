@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Core;
@@ -79,6 +79,19 @@ namespace SRPG.Tests
             public void PlaySfxAt(AudioClip clip, Vector3 position, float volume = 1f, float pitch = 1f)
             {
                 Calls.Add(new Call(clip, position, volume, pitch));
+            }
+
+            /// <summary>
+            /// 마지막으로 알려받은 감쇠 범위입니다. 아직 알려받지 않았으면 음수입니다.
+            ///
+            /// 기록만 해 둡니다 — 이 가짜는 소리를 내지 않으므로 범위가 결과를 바꾸지 않지만,
+            /// <b>부르는 쪽이 알려 주기는 하는가</b>는 여기서 확인할 수 있어야 합니다.
+            /// </summary>
+            public Vector2 SfxDistances { get; private set; } = new Vector2(-1f, -1f);
+
+            public void SetSfxDistances(float minDistance, float maxDistance)
+            {
+                SfxDistances = new Vector2(minDistance, maxDistance);
             }
 
             public void SetMasterVolume(float volume)

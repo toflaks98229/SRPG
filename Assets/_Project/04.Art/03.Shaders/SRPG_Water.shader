@@ -1,4 +1,4 @@
-// 전장의 물입니다. 강과 물가, 그리고 먼바다를 표현합니다.
+﻿// 전장의 물입니다. 강과 물가, 그리고 먼바다를 표현합니다.
 //
 // <b>왜 단색 평면으로는 부족한가</b>
 //
@@ -75,7 +75,11 @@ Shader "SRPG/Water"
         _WaveWarpStrength ("Wave Warp Strength", Range(0, 12))   = 5.5
 
         [Header(Detail)]
-        _DetailScale        ("Detail Scale", Range(0.02, 2))     = 0.42
+        // <b>무늬 하나의 크기입니다. 작을수록 커집니다.</b>
+        // 0.42 는 대략 2.4m 마다 무늬가 하나였습니다 — 카메라가 반사각에 들어와
+        // 바다 전체가 켜지는 순간, 그 촘촘함이 그대로 타일로 읽혔습니다.
+        // 0.16 이면 6m 남짓이라 마루의 크기(파장 5~17m)와 결이 맞습니다.
+        _DetailScale        ("Detail Scale", Range(0.02, 2))     = 0.16
         _DetailSpeed        ("Detail Speed", Range(0, 2))        = 0.22
         _DetailStrength     ("Detail Strength", Range(0, 1))     = 0.35
         _DetailFadeDistance ("Detail Fade Distance", Range(5, 300)) = 90
@@ -91,6 +95,9 @@ Shader "SRPG/Water"
         _AmbientBoost ("Ambient Boost", Range(0, 1)) = 0.35
         _SpecStrength ("Sun Glitter", Range(0, 3))   = 0.45
         _SpecSharpness("Sun Glitter Sharpness", Range(8, 512)) = 220
+        _SpecCutoff   ("Sun Glitter Cutoff (toon)", Range(0, 1)) = 0.5
+        _SpecCutoffAA ("Sun Glitter Softness", Range(0.001, 0.5)) = 0.08
+        _SpecCrestBias("Sun Glitter On Crests", Range(0, 1)) = 0.7
 
         // 비스듬히 볼수록 하늘빛을 받습니다. 흰색을 더하면 먼바다가 통째로 바래므로
         // 하늘색 쪽으로 <b>섞습니다</b>.
@@ -183,6 +190,9 @@ Shader "SRPG/Water"
                 float  _AmbientBoost;
                 float  _SpecStrength;
                 float  _SpecSharpness;
+                float  _SpecCutoff;
+                float  _SpecCutoffAA;
+                float  _SpecCrestBias;
                 float4 _SkyColor;
                 float  _Fresnel;
 
@@ -364,6 +374,12 @@ Shader "SRPG/Water"
                 float surfaceDepth = SrpgEyeDepthFromWorld(input.positionWS);
 
                 // 물이 지형보다 앞에 있을 때만 의미가 있습니다.
+                //
+                // <b>화면 깊이를 씁니다.</b> 물 뒤에 실제로 무엇이 있는지를 그대로 읽으므로,
+                // 강바닥이든 먼바다 바닥이든 <b>지형이 깔려 있기만 하면</b> 수심이 이어집니다.
+                // 지형이 끝나는 자리에서 색이 튀던 것은 이 식의 문제가 아니라
+                // <b>거기서부터 지형이 없었기 때문</b>입니다. 그래서 지형 쪽을 고쳤습니다 —
+                // 물판이 덮는 범위까지 해저를 함께 굽습니다(<c>BattlefieldHeightmap</c> 의 여백).
                 float waterDepth = max(0.0, sceneDepth - surfaceDepth);
 
                 // 얕을수록 0, 깊을수록 1.
@@ -380,11 +396,26 @@ Shader "SRPG/Water"
                 float  detailTime = _TimeParameters.x * _DetailSpeed;
 
                 // 두 겹을 서로 다른 방향으로 흘립니다. 한 겹만 쓰면 흐르는 방향이 눈에 띕니다.
-                float n1 = Fbm(detailUV + float2(detailTime, detailTime * 0.6));
-                float n2 = Fbm(detailUV * 1.9 - float2(detailTime * 0.7, -detailTime));
+                float3 n1 = FbmD(detailUV + float2(detailTime, detailTime * 0.6));
+                float3 n2 = FbmD(detailUV * 1.9 - float2(detailTime * 0.7, -detailTime));
 
-                // 유한 차분 대신, 두 겹의 차이를 기울기처럼 씁니다. 값싸고 이 추상화 수준에 충분합니다.
-                float2 slope = float2(n1 - n2, n2 - n1);
+                // <b>진짜 기울기를 씁니다.</b>
+                //
+                // 예전에는 두 겹의 <b>차이</b>를 기울기로 삼았습니다.
+                //
+                //     float2 slope = float2(n1 - n2, n2 - n1);
+                //
+                // x 와 z 가 언제나 서로의 부호만 뒤집은 값이라, 기울기가 <b>늘 같은 대각선</b> 위에
+                // 놓입니다. 방향은 하나이고 크기만 변하는 셈입니다.
+                // 그것을 날카로운 반사광에 통과시키면 대각으로 줄지어 반복되는 무늬가 되고,
+                // 카메라가 반사각에 들어와 바다 전체가 켜지는 순간 <b>타일처럼</b> 보입니다.
+                //
+                // 값 노이즈의 도함수는 이미 손에 든 값에서 거의 공짜로 나옵니다(<c>FbmD</c>).
+                // 방향이 자리마다 제대로 흩어지므로 같은 세기에서도 무늬가 남지 않습니다.
+                //
+                // 두 번째 겹은 좌표를 1.9배 해서 뽑았으므로 기울기도 그만큼 커져 있습니다.
+                // 배율을 곱해 되돌려야 두 겹이 <b>같은 무게</b>로 섞입니다.
+                float2 slope = (n1.yz + n2.yz * 1.9) * _DetailScale;
 
                 // 멀리서는 잔결이 지글거리기만 합니다. 거리로 죽입니다.
                 float distanceFade = saturate(1.0 - length(input.positionWS - _WorldSpaceCameraPos) / _DetailFadeDistance);
@@ -392,7 +423,9 @@ Shader "SRPG/Water"
                 // 물가에서는 파도와 함께 잔결도 잦아듭니다.
                 float calm = smoothstep(0.0, max(_WaveShoreFade, 1e-3), input.surface.y);
 
-                normal = normalize(normal + float3(slope.x, 0, slope.y) * _DetailStrength * distanceFade * calm);
+                // 높이장의 노멀은 기울기의 <b>반대</b>로 기웁니다 — (-dh/dx, 1, -dh/dz).
+                // 예전 부호는 무늬가 대각선 하나뿐이라 뒤집혀 있어도 티가 나지 않았습니다.
+                normal = normalize(normal - float3(slope.x, 0, slope.y) * _DetailStrength * distanceFade * calm);
 
                 // ---------------------------------------------------------------------------
                 // 3. 물가 거품선 — 깊이가 거의 0인 띠입니다.
@@ -465,8 +498,38 @@ Shader "SRPG/Water"
                 float3 viewDir = SrpgViewDirection(input.positionWS);
 
                 // 마루에서 튀는 햇빛입니다. 수면이 살아 있다는 인상의 대부분이 여기서 나옵니다.
+                //
+                // <b>직교에서는 반사광이 화면 전체에서 동시에 켜집니다.</b>
+                //
+                // 시선이 화면 어디서나 같으므로 halfDir 도 하나입니다. 수면의 노멀은 대부분
+                // 위를 향해 몰려 있어서, 카메라를 돌리다 그 각에 닿는 순간
+                // <b>바다 전체가 한꺼번에</b> 로브 안에 들어옵니다.
+                // 원근에서는 시선이 자리마다 달라 띠 하나만 켜졌는데, 직교에는 그 완충이 없습니다.
+                //
+                // 그래서 매끄러운 로브를 그대로 쓰면 각도에 따라 빛이 과해집니다.
+                // 게다가 이 항은 <b>가산</b>이라 물빛에 얹히고, 밝은 수면에서는 블룸 문턱을 넘습니다.
+                //
+                // 두 가지로 막습니다.
                 float3 halfDir = normalize(mainLight.direction + viewDir);
-                float  glitter = pow(saturate(dot(normal, halfDir)), _SpecSharpness) * _SpecStrength;
+
+                float rawSpec = pow(saturate(dot(normal, halfDir)), _SpecSharpness);
+
+                // <b>하나 — 잘라 냅니다.</b>
+                // 이 셰이더의 다른 모든 것은 툰 계단으로 끊겨 있는데 반사광만 매끄러웠습니다.
+                // 혼자 물리 기반으로 남아 있으니 주변과 어긋나 금속처럼 읽힙니다.
+                // 문턱으로 자르면 <b>납작한 흰 모양</b>이 되어 나머지와 같은 화법이 됩니다.
+                float toonSpec = smoothstep(
+                    _SpecCutoff - _SpecCutoffAA,
+                    _SpecCutoff + _SpecCutoffAA,
+                    rawSpec);
+
+                // <b>둘 — 마루에 매답니다.</b>
+                // 각도에만 걸려 있으면 전면이 동시에 켜지는 것을 막을 방법이 없습니다.
+                // 파도의 높이는 자리마다 다르므로, 거기 매달면 켜지더라도
+                // <b>마루를 따라 흩어진 조각</b>으로만 켜집니다. 물에서 빛이 튀는 자리도 원래 마루입니다.
+                float crestLit = lerp(1.0, input.surface.x, _SpecCrestBias);
+
+                float glitter = toonSpec * crestLit * _SpecStrength;
 
                 // 비스듬히 스치는 면일수록 하늘빛을 더 받습니다.
                 //
@@ -512,7 +575,15 @@ Shader "SRPG/Water"
                 color *= shading * mainLight.color;
 
                 // 반짝임도 그늘에서는 죽습니다. 구름 아래에서 햇빛이 튈 리가 없습니다.
-                color += glitter * mainLight.color * clouds;
+                //
+                // <b>더한 뒤 눌러 둡니다.</b> 반짝임은 빛이 튀는 것이라 가산이어야 읽히는데,
+                // 가산은 상한이 없어서 밝은 수면에서는 값이 1을 넘습니다.
+                // 후처리의 블룸 문턱이 1.1 이라 그때부터 번지기 시작하고,
+                // 직교에서 전면이 동시에 켜지면 <b>바다 전체가 타오릅니다</b>.
+                //
+                // 눌러 두면 반짝임은 그대로 밝은데 블룸을 먹이지는 않습니다.
+                // 정말로 번지게 하고 싶으면 그때는 블룸 문턱을 내리는 것이 맞는 손잡이입니다.
+                color = min(color + glitter * mainLight.color * clouds, 1.0);
 
                 // 물가는 불투명에 가깝게 두어 경계가 흐려지지 않게 합니다.
                 float alpha = lerp(water.a, 1.0, max(foam, crest * 0.5));

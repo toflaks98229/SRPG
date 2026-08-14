@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace SRPG.Core.Managers
 {
@@ -36,6 +36,11 @@ namespace SRPG.Core.Managers
 
         /// <inheritdoc />
         public void PlaySfxAt(AudioClip clip, Vector3 position, float volume = 1f, float pitch = 1f)
+        {
+        }
+
+        /// <inheritdoc />
+        public void SetSfxDistances(float minDistance, float maxDistance)
         {
         }
 

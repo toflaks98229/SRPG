@@ -1,4 +1,4 @@
-#ifndef SRPG_TOON_INCLUDED
+﻿#ifndef SRPG_TOON_INCLUDED
 #define SRPG_TOON_INCLUDED
 
 // 지형·물·풀·유닛이 함께 쓰는 계단식 명암입니다.

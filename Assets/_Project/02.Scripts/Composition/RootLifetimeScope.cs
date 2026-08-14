@@ -1,4 +1,4 @@
-using SRPG.Common;
+﻿using SRPG.Common;
 using SRPG.Core;
 using SRPG.Core.Events;
 using SRPG.Core.Managers;
@@ -26,7 +26,19 @@ namespace SRPG.Composition
     /// 넣는 순간 살아남는 것은 전역 상태가 아니라 죽은 씬 참조가 됩니다.
     /// 씬 전용 스코프는 각 씬에 따로 놓고, 이 스코프를 부모로 삼게 하십시오.
     /// </summary>
-    [DefaultExecutionOrder(-1000)]
+    // 이 숫자는 VContainer 의 LifetimeScope 가 달고 있는 -5000 보다 작아야 합니다.
+    //
+    // <b>왜 그런가</b>
+    //
+    // DefaultExecutionOrder 는 상속됩니다. 자기 표기가 없는 스코프
+    // (BattleBootstrap 이 그렇습니다)는 LifetimeScope 의 -5000 을 그대로 물려받습니다.
+    // 그래서 여기에 -1000 처럼 <b>더 큰</b> 값을 적으면, 위층을 앞당기려던 표기가
+    // 도리어 아래층보다 4000 늦게 깨우는 결과가 됩니다.
+    //
+    // 실제로 그랬습니다. 전투가 먼저 깨어나 Live 가 아직 null 인 상태로 부모를 찾았고,
+    // IAudioService 해석이 실패해 전장 전체가 무음이 되었습니다.
+    // 예외도 로그도 나지 않아 원인이 오디오 쪽에 있는 것처럼 보였습니다.
+    [DefaultExecutionOrder(-6000)]
     [DisallowMultipleComponent]
     public sealed class RootLifetimeScope : LifetimeScope
     {

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
 using UnityEngine;
@@ -48,6 +48,9 @@ namespace SRPG.Gameplay.Campaign
         /// </summary>
         private readonly HashSet<int> _clearedNodes = new HashSet<int>();
 
+        /// <summary>아직 특전을 고르지 않은 승급입니다.</summary>
+        private readonly PromotionBoard _promotions = new PromotionBoard();
+
         // ====================================================================================================
         // 2. Properties
         // ====================================================================================================
@@ -66,6 +69,22 @@ namespace SRPG.Gameplay.Campaign
 
         /// <summary>다음 전투에 데리고 나갈 부대입니다. 월드맵 화면이 이것을 고칩니다.</summary>
         public DeploymentPlan Deployment => _deployment;
+
+        /// <summary>아직 특전을 고르지 않은 승급입니다. 월드맵 화면이 이것을 비웁니다.</summary>
+        public PromotionBoard Promotions => _promotions;
+
+        /// <summary>
+        /// 승급한 분대의 특전을 고릅니다.
+        ///
+        /// <b>규칙이 창구를 겸합니다.</b> 화면이 장부를 직접 만지면 "제안에 없던 특전"이나
+        /// "이미 사라진 분대"를 넣을 길이 열립니다. 여기로 모으면 그 검사가 한 곳에만 있습니다.
+        /// </summary>
+        /// <param name="perk">고른 특전입니다.</param>
+        /// <returns>반영했으면 true입니다.</returns>
+        public bool ChoosePerk(SquadPerkKind perk)
+        {
+            return _promotions.Choose(_roster, perk);
+        }
 
         /// <summary>부대가 지금 있는 지점입니다.</summary>
         public WorldNode CurrentLocation => _map.GetNode(CurrentNode);
@@ -140,6 +159,17 @@ namespace SRPG.Gameplay.Campaign
         /// </returns>
         public bool MoveTo(int node)
         {
+            // <b>승급에 답하기 전에는 움직이지 않습니다.</b>
+            //
+            // 특전을 고르지 않은 채 다음 전장에 들어서면 그 특전은 한 판을 통째로 놓칩니다.
+            // 무엇보다 "고르는 것"이 이 단계에서 유일하게 플레이어가 하는 선택이라,
+            // 건너뛸 수 있게 두면 있으나 마나 한 장치가 됩니다.
+            if (_promotions.HasPending)
+            {
+                Debug.LogWarning("[Campaign] 승급한 분대의 특전을 먼저 고르십시오.");
+                return false;
+            }
+
             if (!CanMoveTo(node))
             {
                 Debug.LogWarning($"[Campaign] {CurrentNode}번에서 {node}번으로는 갈 수 없습니다.");
@@ -198,7 +228,9 @@ namespace SRPG.Gameplay.Campaign
                 return;
             }
 
-            _roster.ApplyResult(result);
+            // 승급 씨앗은 날짜로 고정합니다. 같은 판을 다시 열면 같은 선택지가 나오고,
+            // 판이 바뀌면 달라집니다 — 지형 시드를 날짜로 채우는 것과 같은 판단입니다.
+            _roster.ApplyResult(result, _promotions, Day);
 
             // 무너진 분대는 장부에서 사라집니다. 편성에 그 식별자가 남아 있으면
             // 다음 출진에서 그 자리가 채워진 것으로 세어져, 실제보다 적은 부대를 데리고 나갑니다.

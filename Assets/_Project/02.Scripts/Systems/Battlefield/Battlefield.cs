@@ -1,4 +1,4 @@
-using SRPG.Data;
+﻿using SRPG.Data;
 using SRPG.Systems.Grid;
 using UnityEngine;
 
@@ -56,6 +56,21 @@ namespace SRPG.Systems.Battlefield
 
         /// <summary>전장의 한 변 길이입니다.</summary>
         public float WorldSize => Heightmap.WorldSize;
+
+        /// <summary>
+        /// <b>싸울 수 있는 땅</b>의 구석입니다. 격자의 원점과 같습니다.
+        ///
+        /// <see cref="Origin"/> 은 앞바다 바닥까지 포함한 <b>지형</b>의 구석이라 이보다 바깥입니다.
+        /// 뭍 위에만 놓을 것(풀·소품)은 이쪽을 기준으로 삼아야 합니다 —
+        /// 지형 전체를 훑으면 넉 배를 돌면서 그 대부분을 물속이라고 버리게 됩니다.
+        /// </summary>
+        public Vector3 PlayOrigin => new Vector3(
+            Origin.x + Heightmap.PlayOffset,
+            Origin.y,
+            Origin.z + Heightmap.PlayOffset);
+
+        /// <summary>싸울 수 있는 땅의 월드 크기입니다.</summary>
+        public float PlayWorldSize => Heightmap.PlayWorldSize;
 
         // ====================================================================================================
         // 2. Constructor

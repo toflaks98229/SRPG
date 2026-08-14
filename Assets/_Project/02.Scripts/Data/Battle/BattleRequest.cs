@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using UnityEngine;
 
@@ -244,6 +244,30 @@ namespace SRPG.Data
         /// 랭크와 같은 취급입니다. 어떻게 쌓였는지는 캠페인의 사정입니다.
         /// </summary>
         public WeaponProficiency Proficiency;
+
+        /// <summary>
+        /// 특전이 거는 배율입니다. 캠페인 장부가 <b>합쳐서</b> 채웁니다.
+        ///
+        /// <b>어떤 특전인지는 넘기지 않습니다.</b> 넘기면 전투 코드에 특전별 분기가 생기고,
+        /// 특전을 하나 늘릴 때마다 전장을 고치게 됩니다. 배율로 눌러 보내면
+        /// 전투는 랭크·숙련도와 똑같이 <b>해석 없이</b> 병사에게 넘기기만 하면 됩니다.
+        ///
+        /// <b>기본값이 0인 것에 주의하십시오.</b> 구조체라 아무것도 넣지 않으면 전부 0이 되고,
+        /// 그건 "능력이 0배"라는 뜻입니다. <see cref="ResolvePerks"/> 로 꺼내십시오.
+        /// </summary>
+        public UnitModifiers Perks;
+
+        /// <summary>
+        /// 이 분대에 걸린 특전 배율입니다. 채워지지 않았으면 <see cref="UnitModifiers.Identity"/> 입니다.
+        ///
+        /// 구조체의 기본값(전부 0)이 그대로 쓰이면 병사의 체력과 피해가 0이 됩니다.
+        /// 주문서를 손으로 만드는 검사 경로가 그것을 밟기 쉬우므로 여기서 한 번 걸러 냅니다.
+        /// </summary>
+        /// <returns>쓸 수 있는 특전 배율입니다.</returns>
+        public UnitModifiers ResolvePerks()
+        {
+            return Perks.Health <= 0f ? UnitModifiers.Identity : Perks;
+        }
 
         /// <summary>HUD에 표시할 이름입니다. 비우면 병과 이름을 씁니다.</summary>
         public string DisplayName;

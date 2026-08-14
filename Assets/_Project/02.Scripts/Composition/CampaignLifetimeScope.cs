@@ -1,4 +1,4 @@
-using SRPG.Common;
+﻿using SRPG.Common;
 using SRPG.Data;
 using SRPG.Gameplay.Campaign;
 using UnityEngine;
@@ -24,7 +24,10 @@ namespace SRPG.Composition
     /// "무엇을 데리고 나가는가"를 알아냅니다. 정적 필드도, 씬 간 전달 트릭도 필요 없습니다.
     /// 연결은 <see cref="BattleBootstrap.FindParent"/> 가 <see cref="Live"/> 를 보고 맺습니다.
     /// </summary>
-    [DefaultExecutionOrder(-950)]
+    // 루트보다 뒤, 전투보다 앞이어야 합니다. 이유는 RootLifetimeScope 의 표기에 적었습니다 —
+    // 요약하면 VContainer 의 LifetimeScope 가 -5000 을 달고 있고 그것이 상속되므로,
+    // 위층은 전부 그보다 <b>작은</b> 값이어야 합니다.
+    [DefaultExecutionOrder(-5500)]
     [DisallowMultipleComponent]
     public sealed class CampaignLifetimeScope : LifetimeScope
     {

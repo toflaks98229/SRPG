@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using SRPG.Systems.Battlefield;
 using UnityEngine;
 
@@ -272,6 +272,91 @@ namespace SRPG.Tests
             RiverCarver.Carve(heights, Vector3.zero, SeaLevel, Width, Depth, 2);
 
             Assert.Greater(CountWater(heights), 0, "흐름 방향이 비어 강이 사라졌습니다.");
+        }
+
+        // ====================================================================================================
+        // 여울은 <b>부대</b>가 건널 만해야 한다
+        // ====================================================================================================
+
+        /// <summary>
+        /// 마른 여울이 타일 여러 칸만큼 넓습니다.
+        ///
+        /// <b>앵커가 건너는 것과 부대가 건너는 것은 다릅니다.</b>
+        ///
+        /// 앵커는 점이라 한 줄만 말라 있어도 지나갑니다. 그런데 병사들은 그 둘레에 퍼져 있어서,
+        /// 여울이 한 칸이면 바깥쪽 병사가 강에 발을 들입니다. 거기서 걸음이 막히고
+        /// 분대는 떠나가므로, 화면에는 "다리를 건너다 멈춘 병사"로만 보입니다.
+        ///
+        /// 예전에는 여울 마루가 뾰족해서 마른 폭이 여울 폭의 20%뿐이었습니다 —
+        /// 타일 크기 2미터 기준으로 <b>2.5미터, 사실상 한 줄</b>이었습니다.
+        /// 이 검사는 그 상태로 되돌아가면 즉시 빨간불을 켭니다.
+        /// </summary>
+        [Test]
+        public void 마른_여울이_한_줄보다_넓다()
+        {
+            // 강이 +Z 로 흐르므로 여울은 Z 축을 따라 늘어섭니다.
+            var heights = Carved(Vector3.forward);
+
+            // 강 한복판의 X 열을 고릅니다. 거기서 Z 방향으로 마른 구간의 길이를 셉니다.
+            int midX = Resolution / 2;
+
+            int longest = 0;
+            int run = 0;
+
+            for (int y = 0; y < Resolution; y++)
+            {
+                if (heights[y, midX] >= SeaLevel)
+                {
+                    run++;
+                    longest = Mathf.Max(longest, run);
+                }
+                else
+                {
+                    run = 0;
+                }
+            }
+
+            // 표본 간격은 놀이터 한 변을 Resolution-1 로 나눈 것입니다.
+            // 타일 한 칸(2m)이 몇 표본인지는 전장 크기에 따라 다르므로, 표본 수로 견줍니다.
+            // 여울 폭 FordSpan(0.10) 은 t 단위이고, t 1.0 이 표본 전체이므로
+            // 여울 하나의 전체 폭은 대략 Resolution * 0.2 표본입니다.
+            int fordSpanSamples = Mathf.RoundToInt(Resolution * 0.2f);
+
+            Assert.Greater(
+                longest,
+                fordSpanSamples / 3,
+                $"마른 여울이 {longest} 표본뿐입니다. 여울 폭 {fordSpanSamples} 표본의 3분의 1도 되지 않습니다 — " +
+                "앵커는 건너지만 부대는 건너지 못합니다.");
+        }
+
+        /// <summary>
+        /// 여울 가운데가 <b>평평합니다.</b>
+        ///
+        /// 뾰족한 마루는 꼭대기 한 점만 해수면 위로 올라옵니다.
+        /// 등마루가 평평해야 그 구간이 통째로 마른 땅이 됩니다.
+        /// </summary>
+        [Test]
+        public void 여울_가운데가_평평하다()
+        {
+            var heights = Carved(Vector3.forward, fordCount: 1);
+
+            int midX = Resolution / 2;
+
+            // 여울 하나이므로 중심은 흐름 방향의 한가운데입니다.
+            int center = (Resolution - 1) / 2;
+
+            float atCenter = heights[center, midX];
+
+            // 등마루 안쪽이면 중심과 높이가 같아야 합니다.
+            int inside = center + Mathf.RoundToInt(Resolution * 0.02f);
+
+            Assert.AreEqual(
+                atCenter,
+                heights[inside, midX],
+                1e-4f,
+                "여울 등마루가 평평하지 않습니다. 가운데만 솟아 있으면 마른 폭이 한 줄로 좁아집니다.");
+
+            Assert.GreaterOrEqual(atCenter, SeaLevel, "여울 마루가 물에 잠겨 있습니다.");
         }
     }
 }

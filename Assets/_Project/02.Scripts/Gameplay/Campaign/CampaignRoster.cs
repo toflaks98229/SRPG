@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Data;
 using UnityEngine;
 
@@ -192,7 +192,15 @@ namespace SRPG.Gameplay.Campaign
         /// 이번 전투에 나가지 않은 부대가 있을 수 있고, 그들이 손실을 볼 이유는 없습니다.
         /// </summary>
         /// <param name="result">전투가 남긴 보고서입니다. null이면 아무것도 하지 않습니다.</param>
-        public void ApplyResult(BattleResult result)
+        /// <param name="board">
+        /// 승급을 올려 둘 게시판입니다. null이면 승급은 그대로 일어나되 특전을 묻지 않습니다 —
+        /// 진행 규칙만 확인하는 검사가 그 경로로 옵니다.
+        /// </param>
+        /// <param name="seed">
+        /// 특전 선택지를 뽑을 씨앗입니다. 같은 전투는 같은 선택지를 냅니다.
+        /// 분대 식별자와 승급 후 단련도를 함께 섞으므로, 같은 판에서 둘이 승급해도 서로 다른 목록이 나옵니다.
+        /// </param>
+        public void ApplyResult(BattleResult result, PromotionBoard board = null, int seed = 0)
         {
             if (result == null)
             {
@@ -214,9 +222,19 @@ namespace SRPG.Gameplay.Campaign
 
                 squad.ApplyReport(report);
 
+                // 승급을 알아보려면 <b>올리기 전의</b> 단련도를 들고 있어야 합니다.
+                int rankBefore = squad.Rank;
+
                 // 손실을 반영한 <b>뒤에</b> 성장을 얹습니다.
                 // 순서가 뒤바뀌면 무너진 분대가 한 번 성장하고 사라집니다.
                 _progression.Apply(squad, report);
+
+                // 무너진 분대는 승급하지 않습니다 — 위에서 성장 자체가 걸러지므로
+                // 여기 오는 것은 살아 돌아온 분대뿐이지만, 사라질 분대에게 특전을 묻지 않도록 한 번 더 봅니다.
+                if (board != null && squad.IsAlive && squad.Rank > rankBefore)
+                {
+                    board.Enqueue(squad, rankBefore, seed * 7919 + squad.Id * 31 + squad.Rank);
+                }
             }
 
             _squads.RemoveAll(squad => !squad.IsAlive);

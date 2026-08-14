@@ -1,4 +1,4 @@
-namespace SRPG.Data
+﻿namespace SRPG.Data
 {
     /// <summary>
     /// 이 전투가 <b>어디서</b> 벌어지는지에 대한 지시입니다.

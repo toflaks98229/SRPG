@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace SRPG.Systems.Battlefield
 {
@@ -42,6 +42,15 @@ namespace SRPG.Systems.Battlefield
 
         /// <summary>여울 하나가 강을 따라 차지하는 길이의 비율입니다.</summary>
         private const float FordSpan = 0.10f;
+
+        /// <summary>
+        /// 여울 폭 가운데 <b>평평한 등마루</b>가 차지하는 비율입니다.
+        ///
+        /// 이 안쪽은 높이가 여울 마루 그대로라 통째로 마른 땅이 됩니다.
+        /// 부대가 대열을 크게 흐트러뜨리지 않고 건널 만한 폭이어야 하므로,
+        /// 타일 몇 칸은 나와야 합니다 — 자세한 이유는 <see cref="FordLift"/> 에 적어 두었습니다.
+        /// </summary>
+        private const float FordCoreRatio = 0.55f;
 
         /// <summary>물길이 굽이치는 폭입니다. 전장 크기에 대한 비율입니다.</summary>
         private const float MeanderAmplitude = 0.06f;
@@ -140,11 +149,30 @@ namespace SRPG.Systems.Battlefield
         ///
         /// 여울을 흐름 방향으로 고르게 나눠 둡니다. 한쪽에 몰리면
         /// 그 반대편 부대가 전장을 가로질러 돌아와야 합니다.
+        ///
+        /// <b>가운데를 평평하게 둡니다</b>
+        ///
+        /// 예전에는 중심에서 <see cref="FordSpan"/> 까지 곧장 내려오는 뾰족한 마루였습니다.
+        /// 그런데 마른 땅이 되려면 마루가 해수면 <b>위로</b> 올라와야 하고, 그 조건은
+        /// 꼭대기 부근에서만 성립합니다 — 실제로 재어 보니 여울 폭의 20%,
+        /// 월드로는 <b>2.5미터</b>였습니다. 타일 한 칸이 2미터이므로 사실상 한 줄입니다.
+        ///
+        /// 앵커는 점이라 그 한 줄로도 건넙니다. <b>부대는 건너지 못합니다.</b>
+        /// 진형이 좌우로 퍼져 있어 바깥쪽 병사는 강에 발을 들이고, 거기서 걸음이 막혀
+        /// 분대가 떠난 자리에 남습니다. "다리를 건너다 물에 빠지면 멈춘다"가 그 모습입니다.
+        ///
+        /// 안쪽 <see cref="FordCoreRatio"/> 만큼을 평평한 등마루로 두면 그 구간이 통째로
+        /// 마른 땅이 되고, 바깥은 예전처럼 기울어 입구가 절벽이 되지 않습니다.
         /// </summary>
+        /// <param name="along">흐름 방향으로 얼마나 왔는지입니다. -1~1 입니다.</param>
+        /// <param name="fordCount">여울 수입니다.</param>
+        /// <returns>여울인 정도입니다. 0~1 입니다.</returns>
         private static float FordLift(float along, int fordCount)
         {
             // -1~1 을 0~1 로 옮겨 여울 간격을 계산합니다.
             float t = Mathf.Clamp01((along + 1f) * 0.5f);
+
+            float core = FordSpan * FordCoreRatio;
 
             float best = 0f;
 
@@ -153,7 +181,12 @@ namespace SRPG.Systems.Battlefield
                 // 양 끝이 아니라 구간의 가운데에 놓습니다. 가장자리 여울은 쓰이지 않습니다.
                 float center = (i + 0.5f) / fordCount;
 
-                float lift = 1f - Mathf.InverseLerp(0f, FordSpan, Mathf.Abs(t - center));
+                float distance = Mathf.Abs(t - center);
+
+                // 등마루 안은 온전히 1입니다. 바깥에서만 강바닥으로 내려갑니다.
+                float lift = distance <= core
+                    ? 1f
+                    : 1f - Mathf.InverseLerp(core, FordSpan, distance);
 
                 if (lift > best)
                 {

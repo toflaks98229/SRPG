@@ -1,4 +1,4 @@
-using SRPG.Core;
+﻿using SRPG.Core;
 using SRPG.Core.Events;
 using UnityEngine;
 using VContainer.Unity;

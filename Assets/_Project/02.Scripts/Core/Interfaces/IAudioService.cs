@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace SRPG.Core
 {
@@ -45,6 +45,24 @@ namespace SRPG.Core
 
         /// <summary>전체 음량을 정합니다.</summary>
         /// <param name="volume">0에서 1 사이의 배율입니다.</param>
+        /// <summary>
+        /// 자리에서 나는 소리의 <b>감쇠 범위</b>를 정합니다.
+        ///
+        /// <b>왜 부르는 쪽이 정하는가</b>
+        ///
+        /// 감쇠는 <b>월드 거리</b>로 잽니다. 그런데 그 거리가 얼마나 먼 것인지는
+        /// 전장의 크기와 카메라가 얼마나 물러나 있는지가 정합니다.
+        /// 매니저에 절대값을 박아 두면, 전장이 넓어지거나 카메라를 뒤로 빼는 순간
+        /// <b>화면에 보이는 싸움이 감쇠 구간 한복판에 들어갑니다</b> — 실제로 그랬습니다.
+        /// 소리는 나는데 거의 들리지 않고, 그 증상은 "소리가 안 난다"와 구별되지 않습니다.
+        ///
+        /// 이 프로젝트가 <c>_DepthFade</c> · <c>_OpenSeaDepth</c> · <c>_WaveShoreFade</c> 에서
+        /// 이미 세 번 내린 판단과 같습니다 — <b>절대 길이가 아니라 이 판에 대한 비율</b>이어야 합니다.
+        /// </summary>
+        /// <param name="minDistance">이 거리 안에서는 최대 음량입니다. 화면에 보이는 것이 여기 들어와야 합니다.</param>
+        /// <param name="maxDistance">이 거리를 넘으면 들리지 않습니다.</param>
+        void SetSfxDistances(float minDistance, float maxDistance);
+
         void SetMasterVolume(float volume);
 
         /// <summary>배경음 음량을 정합니다. 흐르고 있는 곡에 즉시 반영됩니다.</summary>

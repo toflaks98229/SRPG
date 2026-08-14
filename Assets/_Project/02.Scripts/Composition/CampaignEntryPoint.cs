@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using SRPG.Core;
 using SRPG.Core.Events;
 using SRPG.Gameplay.Campaign;
@@ -99,6 +99,7 @@ namespace SRPG.Composition
         public void Start()
         {
             _eventBus.Subscribe<BattleConcludedEvent>(OnBattleConcluded);
+            _eventBus.Subscribe<BattleDismissedEvent>(OnBattleDismissed);
 
             BuildHud();
 
@@ -113,6 +114,7 @@ namespace SRPG.Composition
         public void Dispose()
         {
             _eventBus.Unsubscribe<BattleConcludedEvent>(OnBattleConcluded);
+            _eventBus.Unsubscribe<BattleDismissedEvent>(OnBattleDismissed);
         }
 
         /// <summary>
@@ -184,10 +186,26 @@ namespace SRPG.Composition
                 Debug.Log("[Campaign] 부대를 모두 잃어 캠페인이 끝났습니다.");
             }
 
+            // 여기서 씬을 갈아 끼우지 않습니다.
+            //
+            // 성적은 지금 반영해야 맞습니다 — 전투는 이미 끝났고, 늦출 이유가 없습니다.
+            // 그러나 <b>전장을 떠나는 것</b>은 다른 일입니다. 판정이 나자마자 넘어가면
+            // 전과를 볼 틈이 없습니다. 예전에 그랬고, 화면이 그냥 바뀌었습니다.
+            //
+            // 떠날 때는 전장이 알려 줍니다(BattleDismissedEvent).
+            // 얼마나 기다릴지는 화면이 무엇을 보여 주느냐에 달렸고, 그것은 캠페인이 알 일이 아닙니다.
+        }
+
+        /// <summary>
+        /// 사람이 전과를 다 보고 전장을 떠나겠다고 했을 때 월드맵으로 돌립니다.
+        /// </summary>
+        /// <param name="message">떠나겠다는 소식입니다. 실린 내용은 없습니다.</param>
+        private void OnBattleDismissed(BattleDismissedEvent message)
+        {
             _gameState.ChangeState(GameState.WorldMap);
             _hud?.SetVisible(true);
 
-            // 비동기로 넘깁니다. 지금은 전투가 결말을 알리는 도중이라,
+            // 비동기로 넘깁니다. 지금은 전투가 소식을 돌리는 도중이라,
             // 여기서 씬을 즉시 갈아 끼우면 알림을 아직 다 돌리지 못한 채로 발신자가 파괴됩니다.
             SceneManager.LoadSceneAsync(_scenes.WorldMap, LoadSceneMode.Single);
         }

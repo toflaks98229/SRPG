@@ -119,9 +119,14 @@ namespace SRPG.Systems.Battlefield
             var heightmap = BattlefieldHeightmap.Create(spec, profile, CellSize);
             var grid = new IslandGrid(spec.Width, spec.Depth, CellSize, heightStep) { Seed = seed };
 
-            // 터레인은 격자 원점에서 시작해 같은 넓이를 덮습니다.
-            // 원점을 어긋나게 두면 유닛이 보이는 지면과 다른 높이에 섭니다.
-            var origin = new Vector3(grid.Origin.x, -heightmap.SeaLevel, grid.Origin.z);
+            // 터레인은 격자보다 <b>넓습니다.</b> 놀이터 바깥으로 앞바다 바닥이 뻗어 있어서,
+            // 지형의 구석은 격자의 구석보다 <see cref="BattlefieldHeightmap.PlayOffset"/> 만큼
+            // 바깥에 있습니다. 이 어긋남을 빼먹으면 지형이 격자에 대해 통째로 밀려,
+            // 유닛이 보이는 지면과 다른 높이에 섭니다.
+            var origin = new Vector3(
+                grid.Origin.x - heightmap.PlayOffset,
+                -heightmap.SeaLevel,
+                grid.Origin.z - heightmap.PlayOffset);
 
             // 타일 높이를 지형에서 읽어 오게 합니다.
             // 이 연결이 없으면 타일이 고도 단계로 계산한 값을 쓰고, 지형과 어긋납니다.

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using SRPG.Common;
 using UnityEngine;
 
@@ -124,6 +124,9 @@ namespace SRPG.Data
         private UnitTuning _unit = new UnitTuning();
 
         [SerializeField]
+        private CommanderTuning _commander = new CommanderTuning();
+
+        [SerializeField]
         private EnemyTuning _enemy = new EnemyTuning();
 
         [SerializeField]
@@ -161,6 +164,9 @@ namespace SRPG.Data
         public UnitTuning Unit => _unit;
 
         /// <summary>적 분대가 서고 움직이는 방식입니다.</summary>
+        /// <summary>지휘관이 쓰러질 뻔했을 때의 규칙입니다.</summary>
+        public CommanderTuning Commander => _commander;
+
         public EnemyTuning Enemy => _enemy;
 
         /// <summary>적의 판단입니다.</summary>
@@ -343,6 +349,31 @@ namespace SRPG.Data
             [Min(0.1f)]
             [Tooltip("타임스케일이 목표값으로 수렴하는 속도입니다. 급격한 전환의 이질감을 줄입니다.")]
             public float SlowMotionTransitionSpeed = 8f;
+
+            /// <summary>지휘관을 잃은 순간 시간을 붙잡는 길이입니다. 스케일되지 않은 시간입니다.</summary>
+            [Range(0f, 1.5f)]
+            [Tooltip("지휘관을 잃은 순간 시간을 붙잡는 길이(초)입니다. 0이면 걸지 않습니다.")]
+            public float LossHitStopSeconds = 0.35f;
+
+            /// <summary>그 동안의 배율입니다. 0에 가까울수록 완전 정지에 가깝습니다.</summary>
+            [Range(0.01f, 1f)]
+            [Tooltip("지휘관을 잃은 순간의 타임스케일입니다.")]
+            public float LossHitStopScale = 0.05f;
+
+            /// <summary>
+            /// 지휘관이 부상으로 버텼을 때 붙잡는 길이입니다.
+            ///
+            /// <b>잃은 순간보다 짧아야 합니다.</b> 부상은 한 전투에 여러 번 일어날 수 있어서,
+            /// 같은 길이로 두면 판이 계속 끊기고 <b>정작 잃는 순간이 특별해 보이지 않습니다.</b>
+            /// </summary>
+            [Range(0f, 1f)]
+            [Tooltip("지휘관이 부상으로 버텼을 때 시간을 붙잡는 길이(초)입니다.")]
+            public float WoundHitStopSeconds = 0.12f;
+
+            /// <summary>그 동안의 배율입니다.</summary>
+            [Range(0.01f, 1f)]
+            [Tooltip("지휘관 부상 순간의 타임스케일입니다.")]
+            public float WoundHitStopScale = 0.25f;
         }
 
         /// <summary>
@@ -456,6 +487,69 @@ namespace SRPG.Data
         /// 침략자는 방어자보다 성기게 서야 합니다. 그 대비가 사라지면
         /// 양측이 같은 규율로 싸우는 것처럼 보이고, 이 게임이 말하려는 <b>질서 대 혼돈</b>이 흐려집니다.
         /// </summary>
+        /// <summary>
+        /// 지휘관이 치명상을 입었을 때 무슨 일이 일어나는지입니다.
+        ///
+        /// <b>왜 즉사가 아닌가</b>
+        ///
+        /// 지휘관의 죽음은 이 게임에서 <b>유일하게 되돌릴 수 없는 손실</b>입니다.
+        /// 그런데 병사 하나와 같은 방식으로, 즉 날아온 화살 하나에 즉시 쓰러지면
+        /// 그 손실이 <b>플레이어의 판단이 아니라 사고</b>가 됩니다.
+        /// 잃을 때 "내가 무리했다"가 아니라 "운이 나빴다"가 되면 로그라이트의 긴장이 서지 않습니다.
+        ///
+        /// 그래서 둘로 나눕니다 — <b>호위가 남아 있으면 쓰러지지 않고</b>, 그마저 무너진 뒤에야
+        /// 확률이 개입합니다. 분대가 온전한데 지휘관만 잃는 일은 일어나지 않습니다.
+        /// </summary>
+        [Serializable]
+        public sealed class CommanderTuning
+        {
+            /// <summary>
+            /// 지휘관이 위험해지기까지 <b>호위가 얼마나 쓰러져야</b> 하는지입니다. 배치 인원에 대한 비율입니다.
+            ///
+            /// 이것이 안전장치입니다. 이만큼 잃기 전에는 지휘관이 <b>어떤 타격에도 쓰러지지 않습니다</b>.
+            /// 분대가 멀쩡한데 지휘관만 사라지는 일이 없어야, 잃는 순간이
+            /// "저 분대는 이미 무너지고 있었다"로 읽힙니다.
+            /// </summary>
+            [Range(0f, 1f)]
+            [Tooltip("지휘관이 위험해지기까지 호위가 쓰러져야 하는 비율입니다. 1이면 마지막 한 명까지 지켜 줍니다.")]
+            public float FallenEscortRatio = 0.6f;
+
+            /// <summary>
+            /// 호위가 무너진 뒤, 치명상 한 번이 실제로 <b>죽음</b>이 될 확률입니다. 나머지는 부상입니다.
+            ///
+            /// 낮출수록 지휘관이 오래 버팁니다. 다만 <see cref="MaxWounds"/> 가 상한을 쥐고 있어
+            /// 아무리 낮춰도 무한히 살아남지는 않습니다.
+            /// </summary>
+            [Range(0f, 1f)]
+            [Tooltip("호위가 무너진 뒤 치명상이 죽음이 될 확률입니다. 나머지는 부상으로 넘어갑니다.")]
+            public float FallChance = 0.35f;
+
+            /// <summary>
+            /// 견딜 수 있는 부상의 수입니다. 이만큼 부상한 뒤의 치명상은 <b>판정 없이</b> 죽음입니다.
+            ///
+            /// <b>상한이 없으면 확률이 무의미해집니다.</b> 운이 좋은 지휘관은 영영 죽지 않고,
+            /// 그러면 영구 손실이라는 규칙 자체가 사라집니다.
+            /// </summary>
+            [Range(0, 5)]
+            [Tooltip("견딜 수 있는 부상 수입니다. 이를 넘기면 다음 치명상은 판정 없이 죽음입니다.")]
+            public int MaxWounds = 2;
+
+            /// <summary>
+            /// 부상에서 일어날 때 되찾는 체력입니다. 최대 체력에 대한 비율입니다.
+            ///
+            /// <b>부상마다 줄어듭니다.</b> 첫 부상은 이 비율만큼, 두 번째는 그 절반입니다.
+            /// 그래야 살아남을수록 위태로워지고, 물러날지 버틸지를 다시 판단하게 됩니다.
+            /// </summary>
+            [Range(0.05f, 1f)]
+            [Tooltip("부상에서 일어날 때 되찾는 체력 비율입니다. 부상이 쌓일수록 줄어듭니다.")]
+            public float WoundRecoveryRatio = 0.35f;
+
+            /// <summary>부상 직후 움직이지 못하는 시간입니다. 쓰러졌다 일어나는 틈입니다.</summary>
+            [Range(0f, 3f)]
+            [Tooltip("부상 직후의 경직 시간입니다.")]
+            public float WoundStaggerSeconds = 0.8f;
+        }
+
         [Serializable]
         public sealed class EnemyTuning
         {

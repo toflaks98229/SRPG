@@ -28,6 +28,11 @@ namespace SRPG.Systems.Time
         /// <summary>보간 중인 현재 타임스케일입니다.</summary>
         private float _currentScale = 1f;
 
+        /// <summary>히트스톱이 남은 시간입니다. 0보다 크면 배율이 그 값에 붙잡혀 있습니다.</summary>
+        private float _hitStopTimer;
+        /// <summary>히트스톱 동안 유지할 배율입니다.</summary>
+        private float _hitStopScale = 1f;
+
         // ====================================================================================================
         // 2. Properties
         // ====================================================================================================
@@ -69,13 +74,53 @@ namespace SRPG.Systems.Time
         /// <param name="unscaledDeltaTime">스케일되지 않은 지난 시간입니다.</param>
         public void Tick(float unscaledDeltaTime)
         {
-            float target = _slowMotionRequested ? _slowMotionScale : 1f;
-            _currentScale = Mathf.MoveTowards(_currentScale, target, _transitionSpeed * unscaledDeltaTime);
+            if (_hitStopTimer > 0f)
+            {
+                _hitStopTimer -= unscaledDeltaTime;
+
+                // 히트스톱은 <b>보간하지 않습니다.</b> 부딪힌 순간 곧바로 붙잡혀야 충격으로 읽힙니다.
+                // 부드럽게 들어가면 그냥 느려지는 것이고, 그것은 이미 슬로우모션이 하는 일입니다.
+                _currentScale = _hitStopScale;
+            }
+            else
+            {
+                float target = _slowMotionRequested ? _slowMotionScale : 1f;
+                _currentScale = Mathf.MoveTowards(_currentScale, target, _transitionSpeed * unscaledDeltaTime);
+            }
 
             UnityEngine.Time.timeScale = _currentScale;
 
             // 물리 스텝도 함께 줄여야 슬로우모션 중 물리 갱신이 성기게 보이지 않습니다.
             UnityEngine.Time.fixedDeltaTime = 0.02f * _currentScale;
+        }
+
+        /// <summary>
+        /// 잠깐 시간을 붙잡습니다. 무게 있는 사건이 지나갔음을 몸으로 알리는 장치입니다.
+        ///
+        /// <b>왜 슬로우모션으로는 안 되는가</b>
+        ///
+        /// 슬로우모션은 <b>플레이어가 요청하는</b> 상태이고, 명령을 고르는 동안 계속 걸려 있습니다.
+        /// 그 위에 사건을 얹으면 구분이 되지 않습니다 — 이미 느린데 조금 더 느려질 뿐입니다.
+        /// 히트스톱은 요청과 무관하게 <b>끼어들어</b> 배율을 붙잡았다가 놓습니다.
+        ///
+        /// <b>놓을 때는 보간으로 돌아갑니다.</b> 붙잡을 때만 즉시이고, 풀릴 때는
+        /// <see cref="Tick"/> 의 평소 보간이 이어받습니다. 그래서 "탁 멈췄다 스르르 풀린다"가 됩니다.
+        ///
+        /// 이미 걸려 있는 히트스톱보다 짧은 요청은 무시합니다. 여럿이 겹칠 때
+        /// 나중 것이 앞의 것을 잘라 먹으면, <b>더 큰 사건이 작은 사건에 지워집니다</b> —
+        /// 지휘관이 쓰러지는 순간 옆에서 병사가 맞으면 그렇게 됩니다.
+        /// </summary>
+        /// <param name="seconds">붙잡을 시간입니다. 스케일되지 않은 시간 기준입니다.</param>
+        /// <param name="scale">붙잡는 동안의 배율입니다. 0에 가까울수록 완전 정지에 가깝습니다.</param>
+        public void HitStop(float seconds, float scale)
+        {
+            if (seconds <= 0f || seconds <= _hitStopTimer)
+            {
+                return;
+            }
+
+            _hitStopTimer = seconds;
+            _hitStopScale = Mathf.Clamp(scale, 0.01f, 1f);
         }
 
         /// <summary>
@@ -85,6 +130,7 @@ namespace SRPG.Systems.Time
         public void Reset()
         {
             _slowMotionRequested = false;
+            _hitStopTimer = 0f;
             _currentScale = 1f;
             UnityEngine.Time.timeScale = 1f;
             UnityEngine.Time.fixedDeltaTime = 0.02f;

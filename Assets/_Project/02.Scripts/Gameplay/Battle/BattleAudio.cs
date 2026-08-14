@@ -1,4 +1,4 @@
-using SRPG.Common;
+﻿using SRPG.Common;
 using SRPG.Core;
 using SRPG.Data;
 using UnityEngine;

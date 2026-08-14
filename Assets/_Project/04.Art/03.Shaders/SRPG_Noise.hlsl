@@ -1,4 +1,4 @@
-#ifndef SRPG_NOISE_INCLUDED
+﻿#ifndef SRPG_NOISE_INCLUDED
 #define SRPG_NOISE_INCLUDED
 
 // 물과 풀이 함께 쓰는 절차적 노이즈입니다.
@@ -22,39 +22,88 @@ float Hash21(float2 p)
     return frac(p.x * p.y);
 }
 
-float ValueNoise(float2 p)
+// 값과 <b>기울기</b>를 함께 냅니다. x = 값, yz = 기울기.
+//
+// <b>왜 기울기를 함께 내는가</b>
+//
+// 물의 잔결은 노이즈를 색에 더하는 것이 아니라 <b>노멀을 기울이는</b> 데 씁니다.
+// 그러려면 기울기가 필요한데, 유한 차분으로 구하면 표본이 서너 배로 늘어납니다.
+// 값 노이즈의 도함수는 <b>이미 손에 든 네 모서리 값에서 곧바로</b> 나오므로 거의 공짜입니다.
+//
+// <b>왜 5차 보간인가</b>
+//
+// 예전에는 3차(<c>smoothstep</c>)를 썼습니다. 값은 매끄럽지만 <b>기울기가 셀 경계에서 꺾입니다.</b>
+// 색으로만 쓸 때는 눈에 띄지 않았는데, 기울기를 노멀에 먹이고 그것을 다시
+// 날카로운 반사광(<c>pow(..., 220)</c>)에 통과시키면 그 꺾임이 <b>축에 정렬된 격자</b>로 드러납니다.
+// 실제로 그렇게 보였습니다 — 먼바다가 촘촘한 타일처럼 깔렸습니다.
+// 5차는 도함수까지 이어지므로 경계가 사라집니다.
+float3 ValueNoiseD(float2 p)
 {
     float2 cell = floor(p);
     float2 f    = frac(p);
 
-    // 부드럽게 잇습니다. 선형 보간만 쓰면 격자 모서리가 그대로 보입니다.
-    float2 u = f * f * (3.0 - 2.0 * f);
+    // 5차 보간과 그 도함수입니다.
+    float2 u  = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+    float2 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
 
     float a = Hash21(cell);
     float b = Hash21(cell + float2(1, 0));
     float c = Hash21(cell + float2(0, 1));
     float d = Hash21(cell + float2(1, 1));
 
-    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+    // 겹선형 보간을 다항식으로 펼쳐 두면 값과 도함수가 같은 계수를 나눠 씁니다.
+    float k1 = b - a;
+    float k2 = c - a;
+    float k3 = a - b - c + d;
+
+    float value = a + k1 * u.x + k2 * u.y + k3 * u.x * u.y;
+
+    float2 gradient = du * float2(k1 + k3 * u.y,
+                                  k2 + k3 * u.x);
+
+    return float3(value, gradient);
+}
+
+float ValueNoise(float2 p)
+{
+    return ValueNoiseD(p).x;
 }
 
 // 옥타브마다 <b>회전</b>시켜 겹칩니다.
 // 배율만 키우면 옥타브들이 같은 축에 정렬돼 결국 격자가 다시 드러납니다.
-float Fbm(float2 p)
+//
+// 기울기도 함께 누적합니다. 옥타브마다 좌표를 돌렸으므로,
+// 그 옥타브의 기울기는 <b>돌아간 좌표계의 것</b>입니다.
+// 원래 좌표계로 되돌리려면 지금까지 곱해 온 회전을 그대로 다시 곱해 줘야 합니다(연쇄 법칙).
+// 이것을 빠뜨리면 기울기가 옥타브마다 다른 방향을 가리켜, 노멀이 엉뚱하게 흔들립니다.
+float3 FbmD(float2 p)
 {
     const float2x2 rot = float2x2(1.6, 1.2, -1.2, 1.6);
 
-    float sum = 0.0;
-    float amp = 0.5;
+    float2x2 accumulated = float2x2(1, 0, 0, 1);
+
+    float  sum      = 0.0;
+    float2 gradient = 0.0;
+    float  amp      = 0.5;
 
     for (int i = 0; i < 3; i++)
     {
-        sum += ValueNoise(p) * amp;
-        p    = mul(rot, p);
-        amp *= 0.5;
+        float3 n = ValueNoiseD(p);
+
+        sum      += n.x * amp;
+        gradient += mul(n.yz, accumulated) * amp;
+
+        p           = mul(rot, p);
+        accumulated = mul(accumulated, rot);
+        amp        *= 0.5;
     }
 
-    return sum;
+    return float3(sum, gradient);
+}
+
+float Fbm(float2 p)
+{
+    return FbmD(p).x;
 }
 
 // 방향 벡터를 각도(도)만큼 돌립니다.

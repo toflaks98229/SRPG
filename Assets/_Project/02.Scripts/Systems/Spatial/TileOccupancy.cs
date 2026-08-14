@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Systems.Grid;

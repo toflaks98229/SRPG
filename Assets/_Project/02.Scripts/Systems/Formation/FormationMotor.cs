@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Systems.Grid;
 using UnityEngine;
@@ -31,8 +31,14 @@ namespace SRPG.Systems.Formation
         // 2. Fields
         // ====================================================================================================
 
-        /// <summary>앵커가 따라갈 경유점입니다. 호출부 버퍼를 그대로 들지 않도록 복사해 둡니다.</summary>
-        private readonly List<GridCoord> _path = new List<GridCoord>(64);
+        /// <summary>
+        /// 앵커가 따라갈 경유점입니다. 호출부 버퍼를 그대로 들지 않도록 복사해 둡니다.
+        ///
+        /// <b>칸이 아니라 월드 좌표입니다.</b> 길이 격자에서 나오지 않기 때문입니다 —
+        /// 구워진 길의 모퉁이는 칸 한복판에 떨어지지 않고, 칸으로 반올림하면
+        /// 애써 돌아가도록 잡은 경로가 다시 벽 쪽으로 밀립니다.
+        /// </summary>
+        private readonly List<Vector3> _path = new List<Vector3>(64);
         /// <summary>지금 향하고 있는 경유점의 순번입니다.</summary>
         private int _index;
 
@@ -74,10 +80,14 @@ namespace SRPG.Systems.Formation
 
         /// <summary>
         /// 따라갈 경로를 설정합니다. 내용을 복사하므로 호출부는 버퍼를 계속 재사용해도 됩니다.
+        ///
+        /// <b>경로는 월드 좌표, 목적지는 칸입니다.</b> 어긋난 것이 아니라 쓰임이 다릅니다 —
+        /// 걸어갈 길은 지형을 따라야 하고(그래서 월드), 한 칸에 한 분대라는 규칙은
+        /// 칸으로 세야 합니다(그래서 격자). 점유·배치는 여전히 격자가 맡습니다.
         /// </summary>
         /// <param name="path">출발지에서 목적지 순으로 정렬된 경로입니다.</param>
         /// <param name="destination">확정된 목적지 좌표입니다.</param>
-        public void SetPath(IReadOnlyList<GridCoord> path, GridCoord destination)
+        public void SetPath(IReadOnlyList<Vector3> path, GridCoord destination)
         {
             _path.Clear();
             _index = 0;
@@ -118,7 +128,7 @@ namespace SRPG.Systems.Formation
                 return;
             }
 
-            Vector3 waypoint = grid.CoordToWorld(_path[_index]);
+            Vector3 waypoint = _path[_index];
 
             Vector3 flatAnchor = new Vector3(Anchor.x, 0f, Anchor.z);
             Vector3 flatWaypoint = new Vector3(waypoint.x, 0f, waypoint.z);

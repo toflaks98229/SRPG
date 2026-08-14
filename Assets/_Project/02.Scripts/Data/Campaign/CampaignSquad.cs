@@ -1,3 +1,4 @@
+﻿using System.Collections.Generic;
 using SRPG.Common;
 using UnityEngine;
 
@@ -68,6 +69,21 @@ namespace SRPG.Data
         public int BattlesSurvived;
 
         /// <summary>
+        /// 지금까지 쌓은 공적입니다. 이것이 문턱을 넘을 때 승급합니다.
+        ///
+        /// 깎이지 않습니다 — 이유는 <see cref="CampaignProgression.ResolveRank"/> 에 적어 두었습니다.
+        /// </summary>
+        public float Merit;
+
+        /// <summary>
+        /// 승급할 때 고른 특전입니다.
+        ///
+        /// <b>장비는 여기 없습니다.</b> 무기와 방패는 사서 드는 것이고 그쪽은 상점의 축입니다
+        /// (<see cref="SquadPerks"/>).
+        /// </summary>
+        public List<SquadPerkKind> Perks = new List<SquadPerkKind>();
+
+        /// <summary>
         /// 이 분대가 무너졌는지 여부입니다.
         ///
         /// <b>인원 0과 같은 말이 아닙니다.</b>
@@ -100,6 +116,10 @@ namespace SRPG.Data
                 Rank = Mathf.Clamp(Rank, CombatConstants.MinRank, CombatConstants.MaxRank),
                 Proficiency = Proficiency,
                 DisplayName = ResolveName(),
+
+                // 특전은 배율로 눌러 보냅니다. 전장은 "어떤 특전인가"를 알 이유가 없고,
+                // 알게 두면 전투 코드에 특전별 분기가 생깁니다.
+                Perks = SquadPerks.Combine(Perks),
             };
         }
 

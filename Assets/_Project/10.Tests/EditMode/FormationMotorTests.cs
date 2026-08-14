@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Data;
@@ -27,6 +27,28 @@ namespace SRPG.Tests
         private static IslandGrid CreateIsland(int seed = 20260807)
         {
             return TestIsland.Create(seed);
+        }
+
+        /// <summary>
+        /// 칸 경로를 월드 경로로 옮깁니다.
+        ///
+        /// 모터는 이제 칸이 아니라 월드 좌표를 따라갑니다 — 길이 격자에서 나오지 않기 때문입니다.
+        /// 예전에는 <c>Advance</c> 안에서 이 변환을 했고, 지금은 넣는 쪽이 합니다.
+        /// 변환 자체가 같으므로 아래 검사들이 보는 움직임도 그대로입니다.
+        /// </summary>
+        /// <param name="grid">좌표를 옮길 기준 지형입니다.</param>
+        /// <param name="path">옮길 칸 경로입니다.</param>
+        /// <returns>월드 좌표 경로입니다.</returns>
+        private static List<Vector3> ToWorld(IslandGrid grid, List<GridCoord> path)
+        {
+            var world = new List<Vector3>(path.Count);
+
+            for (int i = 0; i < path.Count; i++)
+            {
+                world.Add(grid.CoordToWorld(path[i]));
+            }
+
+            return world;
         }
 
         /// <summary>서로 이어진 통행 가능 타일 경로를 만듭니다.</summary>
@@ -116,7 +138,7 @@ namespace SRPG.Tests
 
             var motor = new FormationMotor();
             motor.Teleport(grid.CoordToWorld(start), start);
-            motor.SetPath(path, path[path.Count - 1]);
+            motor.SetPath(ToWorld(grid, path), path[path.Count - 1]);
 
             Assert.IsFalse(motor.HasArrived);
             Assert.AreEqual(path.Count, motor.RemainingWaypoints);
@@ -132,7 +154,7 @@ namespace SRPG.Tests
 
             var motor = new FormationMotor();
             motor.Teleport(grid.CoordToWorld(start), start);
-            motor.SetPath(path, path[path.Count - 1]);
+            motor.SetPath(ToWorld(grid, path), path[path.Count - 1]);
 
             Vector3 goal = grid.CoordToWorld(path[path.Count - 1]);
             float before = Vector3.Distance(motor.Anchor, goal);
@@ -156,7 +178,7 @@ namespace SRPG.Tests
 
             var motor = new FormationMotor();
             motor.Teleport(grid.CoordToWorld(start), start);
-            motor.SetPath(path, path[path.Count - 1]);
+            motor.SetPath(ToWorld(grid, path), path[path.Count - 1]);
 
             // 넉넉히 돌립니다. 경로 길이보다 훨씬 많은 걸음을 줍니다.
             for (int i = 0; i < 2000 && !motor.HasArrived; i++)
@@ -177,7 +199,7 @@ namespace SRPG.Tests
 
             var motor = new FormationMotor();
             motor.Teleport(grid.CoordToWorld(start), start);
-            motor.SetPath(path, path[path.Count - 1]);
+            motor.SetPath(ToWorld(grid, path), path[path.Count - 1]);
 
             for (int i = 0; i < 2000 && !motor.HasArrived; i++)
             {
@@ -203,7 +225,7 @@ namespace SRPG.Tests
 
             var motor = new FormationMotor();
             motor.Teleport(grid.CoordToWorld(start), start);
-            motor.SetPath(path, path[path.Count - 1]);
+            motor.SetPath(ToWorld(grid, path), path[path.Count - 1]);
 
             motor.Advance(0.05f, 3f, grid);
 
@@ -229,7 +251,7 @@ namespace SRPG.Tests
 
             var motor = new FormationMotor();
             motor.Teleport(grid.CoordToWorld(start), start);
-            motor.SetPath(path, path[path.Count - 1]);
+            motor.SetPath(ToWorld(grid, path), path[path.Count - 1]);
 
             int expected = motor.RemainingWaypoints;
 
@@ -245,7 +267,7 @@ namespace SRPG.Tests
             var grid = CreateIsland();
             var motor = new FormationMotor();
 
-            Assert.DoesNotThrow(() => motor.SetPath(null, GridCoord.Invalid));
+            Assert.DoesNotThrow(() => motor.SetPath((List<Vector3>)null, GridCoord.Invalid));
             Assert.DoesNotThrow(() => motor.Advance(0f, 3f, grid));
             Assert.DoesNotThrow(() => motor.Advance(0.1f, 3f, null));
         }

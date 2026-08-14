@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4b9caad52ac536641afa86bc61dd579e, type: 3}
   m_Name: BattleAudio_Default
   m_EditorClassIdentifier: SRPG.Data::SRPG.Data.BattleAudioBank
-  Slash: {fileID: 0}
-  Pierce: {fileID: 0}
-  Blunt: {fileID: 0}
+  Slash: {fileID: 8300000, guid: c91cd353fc282a943aa3f696d2bb8396, type: 3}
+  Pierce: {fileID: 8300000, guid: 7cf72cc1f2606f64ba91d59bae6e3d99, type: 3}
+  Blunt: {fileID: 8300000, guid: 2f7a9a5139458b8409480c2c23fb7f2d, type: 3}
   BowRelease: {fileID: 0}
-  Death: {fileID: 0}
+  Death: {fileID: 8300000, guid: c5ccb3c70cf3a67449b59dd38dd41e6d, type: 3}
   HitVolume: 0.5
   ShotVolume: 0.35
   DeathVolume: 0.55

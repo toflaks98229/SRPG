@@ -1,4 +1,4 @@
-using SRPG.Common;
+﻿using SRPG.Common;
 using SRPG.Gameplay.Units;
 using UnityEngine;
 
@@ -125,6 +125,11 @@ namespace SRPG.Gameplay.Weapons
         /// 화살 자신은 이 값을 쓰지 않고 <see cref="DamageInfo"/>에 실어 피격자에게 넘깁니다.
         /// 방패의 상방 판정 기준선이 여기서 파생되므로, 발사각을 바꾸면 기준도 함께 따라옵니다.
         /// 예전에는 이 기준이 화살 쪽 상수로 박혀 있어, 발사각만 바꾸면 조용히 어긋났습니다.
+        /// </param>
+        /// <param name="damageType">
+        /// 이 화살이 입히는 피해의 종류입니다. 갑옷 상성이 여기서 갈립니다.
+        /// 기본값이 <see cref="DamageType.Pierce"/> 인 것은 화살이 꿰뚫는 무기이기 때문입니다 —
+        /// 중갑에 강하고 무갑에 약한 그 상성이 궁수의 성격입니다.
         /// </param>
         public void Launch(
             Unit shooter,

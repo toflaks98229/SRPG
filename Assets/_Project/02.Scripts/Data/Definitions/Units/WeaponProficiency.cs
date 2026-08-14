@@ -1,4 +1,4 @@
-using SRPG.Common;
+﻿using SRPG.Common;
 using UnityEngine;
 
 namespace SRPG.Data

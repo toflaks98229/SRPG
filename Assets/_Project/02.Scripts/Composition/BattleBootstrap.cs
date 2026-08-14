@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using SRPG.Common;
 using SRPG.Core;
 using SRPG.Core.Events;
@@ -238,7 +238,7 @@ namespace SRPG.Composition
             var time = new TacticalTimeController(tuning.Time.SlowMotionScale, tuning.Time.SlowMotionTransitionSpeed);
             builder.RegisterInstance(time);
 
-            var audio = BuildAudio();
+            var audio = BuildAudio(plan.Grid);
             builder.RegisterInstance(audio).As<IBattleAudio>();
 
             // 컨텍스트는 역할별 인터페이스로 함께 등록합니다.
@@ -364,23 +364,171 @@ namespace SRPG.Composition
         /// 물을 수 있는 것은 이미 조립을 마친 부모뿐입니다.
         /// 주문서를 꺼내는 <see cref="TakeCampaignOrders"/> 와 같은 자리, 같은 이유입니다.
         ///
-        /// <b>위층이 없어도 됩니다.</b> 전투 씬만 열어 보는 편집 중의 실행과 자동 검사가 그렇습니다.
-        /// 그때는 창구가 비고, <see cref="BattleAudio"/> 가 아무것도 하지 않습니다 —
-        /// 소리가 안 나는 것은 그 경로에서 결함이 아닙니다.
+        /// <b>위층이 없어도 소리는 납니다.</b>
+        ///
+        /// 예전에는 위층을 못 찾으면 그대로 무음이었습니다. 그런데 그 경로는 두 가지를
+        /// 한 덩어리로 묶고 있었습니다 — 전투 씬만 열어 본 정상적인 실행과,
+        /// <b>배선이 끊긴 고장</b>입니다. 증상이 같아서 구별되지 않았고,
+        /// 실제로 후자였던 것을 전자로 넘겨 왔습니다.
+        ///
+        /// 그래서 이제 위층이 없으면 씬에서 매니저를 직접 찾고, 그것도 없으면 하나 세웁니다.
+        /// 이 프로젝트가 에셋에 대해 지켜 온 규칙과 같습니다 —
+        /// <b>연결이 비어 있어도 재생 버튼만으로 게임이 보여야 합니다.</b> 소리도 예외로 두지 않습니다.
+        /// 끊긴 배선은 <see cref="ReportAudio"/> 가 따로 알립니다.
         /// </summary>
+        /// <param name="grid">이번 판의 지형입니다. 소리의 감쇠 범위를 여기서 유도합니다.</param>
         /// <returns>이번 판의 소리 창구입니다. 절대 null이 아닙니다.</returns>
-        private IBattleAudio BuildAudio()
+        private IBattleAudio BuildAudio(IslandGrid grid)
         {
-            IAudioService service = null;
+            IAudioService service = ResolveAudioService(out string route);
 
-            if (Parent != null && Parent.Container != null)
-            {
-                Parent.Container.TryResolve(out service);
-            }
+            var bank = _setup != null ? _setup.AudioBank : null;
+
+            ApplySfxDistances(service, bank, grid);
+            ReportAudio(service, bank, grid, route);
 
             // 뱅크가 없거나 어느 칸이 비어 있으면 합성음이 그 자리를 메웁니다.
             // 그 판단은 BattleAudio 안에 있습니다 — 여기서 또 하면 규칙이 두 곳으로 갈라집니다.
-            return new BattleAudio(service, _setup != null ? _setup.AudioBank : null);
+            return new BattleAudio(service, bank);
+        }
+
+        /// <summary>
+        /// 소리를 낼 창구를 구합니다. <b>어느 경로로 구했는지도 함께 돌려줍니다.</b>
+        ///
+        /// <b>왜 경로를 밖으로 내보내는가</b>
+        ///
+        /// 세 갈래는 전부 성공하지만 뜻이 다릅니다. 위층에서 받았으면 정상이고,
+        /// 씬에서 주웠거나 직접 세웠으면 <b>배선이 끊긴 채로 소리만 나고 있는 것</b>입니다.
+        /// 소리가 나기 시작하면 아무도 다시 보지 않으므로, 여기서 갈라 두지 않으면
+        /// 끊긴 배선이 영영 그대로 남습니다.
+        /// </summary>
+        /// <param name="route">창구를 어디서 구했는지입니다. 로그에 그대로 실립니다.</param>
+        /// <returns>쓸 수 있는 창구입니다. 절대 null이 아닙니다.</returns>
+        private IAudioService ResolveAudioService(out string route)
+        {
+            string blocked;
+
+            if (Parent == null)
+            {
+                blocked = "위층 스코프가 없습니다";
+            }
+            else if (Parent.Container == null)
+            {
+                blocked = $"위층({Parent.GetType().Name})의 컨테이너가 아직 조립되지 않았습니다";
+            }
+            else if (!Parent.Container.TryResolve<IAudioService>(out var registered) || registered == null)
+            {
+                blocked = $"위층({Parent.GetType().Name})에 IAudioService 가 등록되어 있지 않습니다";
+            }
+            else
+            {
+                route = null;
+
+                return registered;
+            }
+
+            // 위층이 등록해 주지 않았어도 매니저 자체는 씬에 있을 수 있습니다.
+            // 실제로 무음이었던 판이 이 경우였습니다 — 창구만 못 찾았을 뿐 소리 낼 것은 다 있었습니다.
+            var existing = FindAnyObjectByType<AudioManager>(FindObjectsInactive.Include);
+
+            if (existing != null)
+            {
+                route = $"{blocked}. 씬의 {existing.name} 을 직접 씁니다";
+
+                return existing;
+            }
+
+            // 그마저 없으면 세웁니다. 매니저는 소스를 스스로 만들어 풀에 담으므로
+            // 프리팹도, 미리 놓아 둔 오브젝트도 필요하지 않습니다.
+            var host = new GameObject(FallbackAudioName);
+            host.transform.SetParent(transform, worldPositionStays: false);
+
+            route = $"{blocked}. 씬에도 매니저가 없어 새로 세웁니다";
+
+            return host.AddComponent<AudioManager>();
+        }
+
+        /// <summary>위층이 없을 때 세우는 소리 오브젝트의 이름입니다.</summary>
+        private const string FallbackAudioName = "BattleAudioFallback";
+
+        /// <summary>
+        /// 이번 판의 소리 배선을 한 줄로 남깁니다.
+        ///
+        /// <b>왜 로그를 남기는가</b>
+        ///
+        /// 소리와 얽힌 실패는 <b>전부 조용합니다.</b> 창구를 못 찾아도, 뱅크가 비어 있어도,
+        /// 감쇠가 전장을 덮지 못해도 예외 하나 나지 않습니다.
+        /// 그래서 "안 들린다"에서 출발하면 어디를 봐야 할지 단서가 없습니다.
+        ///
+        /// 이제는 창구를 못 찾아도 소리가 나므로 <b>고장이 더 잘 숨습니다.</b>
+        /// 들리기 시작하면 아무도 다시 보지 않습니다. 폴백으로 구했다는 사실을
+        /// 여기서 경고로 남기지 않으면 끊긴 배선이 그대로 굳습니다.
+        ///
+        /// <b>정상일 때는 아무 말도 하지 않습니다.</b> 판마다 한 줄씩 쌓이면
+        /// 콘솔이 흘러가 정작 봐야 할 것을 밀어냅니다. 순서 자체는
+        /// <c>ScopeExecutionOrderTests</c> 가 지키므로 눈으로 확인할 필요가 없습니다.
+        /// </summary>
+        /// <param name="service">쓰게 될 창구입니다.</param>
+        /// <param name="bank">쓰이는 뱅크입니다. null이면 합성음만 납니다.</param>
+        /// <param name="grid">이번 판의 지형입니다.</param>
+        /// <param name="route">폴백으로 구했으면 그 경로, 정상이면 null입니다.</param>
+        private static void ReportAudio(IAudioService service, BattleAudioBank bank, IslandGrid grid, string route)
+        {
+            if (route == null)
+            {
+                return;
+            }
+
+            string source = bank != null ? bank.name : "합성음";
+            float extent = grid != null ? Mathf.Max(grid.Width, grid.Depth) * grid.CellSize : 0f;
+
+            float full = bank != null ? bank.SfxFullVolumeRatio : DefaultFullVolumeRatio;
+            float silence = bank != null ? bank.SfxSilenceRatio : DefaultSilenceRatio;
+
+            Debug.LogWarning(
+                $"[Battle] 소리 — 창구 {service.GetType().Name}, 뱅크 {source}, " +
+                $"전장 {extent:F0}m, 감쇠 {extent * full:F0}~{extent * silence:F0}m\n" +
+                $"폴백으로 구했습니다 — {route}.\n" +
+                "소리는 나지만 배선은 끊긴 상태입니다. " +
+                "전투 씬만 열었다면 정상이고, 아니라면 위층 스코프의 조립 순서를 확인하십시오.");
+        }
+
+        /// <summary>뱅크가 없을 때 쓸 최대 음량 반경입니다. 전장 한 변에 대한 비율입니다.</summary>
+        private const float DefaultFullVolumeRatio = 0.3f;
+
+        /// <summary>뱅크가 없을 때 쓸 무음 거리입니다. 전장 한 변에 대한 비율입니다.</summary>
+        private const float DefaultSilenceRatio = 1.5f;
+
+        /// <summary>
+        /// 소리의 감쇠 범위를 <b>이 전장의 크기에서</b> 유도해 창구에 알려 줍니다.
+        ///
+        /// <b>왜 절대값으로 두면 안 되는가</b>
+        ///
+        /// 매니저의 기본값은 "3미터 안은 최대 음량, 60미터 밖은 무음"이었습니다.
+        /// 그런데 듣는 귀는 카메라에 붙어 있었고, 카메라는 직교 투영이라 초점에서
+        /// 60미터 물러나 있습니다 — <b>전장 전체가 무음 반경 밖</b>이었습니다.
+        /// 소리가 작았던 것이 아니라 아예 0이었고, 증상은 "배선이 안 됐다"와 구별되지 않았습니다.
+        ///
+        /// 귀는 이제 초점에 섭니다(<c>BattleCameraRig</c>). 그래서 여기서 정하는 거리는
+        /// <b>전장에서의 실제 거리</b>로 읽힙니다. 전장 한 변에 비례시키면
+        /// 넓은 전장에서도 보이는 것이 들립니다.
+        /// </summary>
+        /// <param name="service">알려 줄 창구입니다. null이면 아무것도 하지 않습니다.</param>
+        /// <param name="bank">비율이 담긴 뱅크입니다. null이면 코드 기본값을 씁니다.</param>
+        /// <param name="grid">이번 판의 지형입니다.</param>
+        private static void ApplySfxDistances(IAudioService service, BattleAudioBank bank, IslandGrid grid)
+        {
+            if (service == null || grid == null)
+            {
+                return;
+            }
+
+            float extent = Mathf.Max(grid.Width, grid.Depth) * grid.CellSize;
+
+            float full = bank != null ? bank.SfxFullVolumeRatio : DefaultFullVolumeRatio;
+            float silence = bank != null ? bank.SfxSilenceRatio : DefaultSilenceRatio;
+
+            service.SetSfxDistances(extent * full, extent * silence);
         }
 
         /// <summary>

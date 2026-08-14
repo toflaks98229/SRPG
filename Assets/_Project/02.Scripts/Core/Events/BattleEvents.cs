@@ -1,4 +1,4 @@
-using SRPG.Data;
+﻿using SRPG.Data;
 
 namespace SRPG.Core.Events
 {
@@ -27,5 +27,25 @@ namespace SRPG.Core.Events
         {
             Result = result;
         }
+    }
+
+    /// <summary>
+    /// 사람이 전과를 다 읽고 전장을 떠나겠다고 알린 소식입니다.
+    ///
+    /// <b>왜 결말과 따로 두는가</b>
+    ///
+    /// 결말이 정해지는 순간과 사람이 그것을 <b>다 본</b> 순간은 다릅니다.
+    /// 예전에는 이 둘이 하나였습니다 — 판정이 나자마자 캠페인이 씬을 갈아 끼워서,
+    /// 무엇을 얻고 무엇을 잃었는지 볼 틈이 없었습니다.
+    ///
+    /// 그렇다고 캠페인 쪽에 대기 시간을 두면 안 됩니다. 얼마나 기다릴지는
+    /// 화면이 무엇을 보여 주느냐에 달렸고, 그것은 캠페인이 알 일이 아닙니다.
+    /// 떠날 때가 되었다고 <b>전장이 말하게</b> 두면 양쪽 다 상대를 몰라도 됩니다.
+    ///
+    /// 성적은 <see cref="BattleConcludedEvent"/> 가 이미 날랐습니다.
+    /// 이 소식에는 실을 것이 없습니다 — 오직 시점만이 내용입니다.
+    /// </summary>
+    public readonly struct BattleDismissedEvent
+    {
     }
 }

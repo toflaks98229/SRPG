@@ -1,3 +1,4 @@
+﻿using SRPG.Systems.Pathfinding;
 using UnityEngine;
 
 namespace SRPG.Systems.Grid
@@ -95,6 +96,25 @@ namespace SRPG.Systems.Grid
                 return desired;
             }
 
+            // <b>설 수 없는 자리에 이미 서 있으면 빠져나갈 길을 열어 줍니다.</b>
+            //
+            // 아래의 미끄러짐은 <b>딛고 선 자리가 온전하다</b>는 전제 위에 있습니다.
+            // 물 위에 서 있으면 X도 Z도 물이라 두 축이 모두 막히고, 그러면 제자리가 답으로 나옵니다.
+            // 한 번 그렇게 되면 <b>영영 그 자리에 굳습니다</b> — 스스로는 절대 못 나옵니다.
+            //
+            // 실제로 그렇게 되는 길이 있습니다.
+            //   · 분대가 물가에 서면서 진형 슬롯이 물 위에 놓이는 경우
+            //     (<c>Squad.Initialize</c> 는 첫 배치에서 슬롯을 뭍으로 당기지 않습니다)
+            //   · 좁은 여울을 건너다 흐트러진 병사가 강에 발을 들이는 경우
+            //
+            // 증상은 오류가 아니라 "저 병사만 안 따라온다"로만 보입니다.
+            // 물가로 되돌리는 것은 익사 규칙과 다투지 않습니다 — 익사는 <b>넉백으로 밀려날 때</b>
+            // <see cref="TryStep"/> 가 먼저 판정하고, 여기까지 오지 않습니다.
+            if (!TryStand(grid, from, out _))
+            {
+                return Escape(grid, from, desired);
+            }
+
             Vector3 result = from;
 
             // X축만 시도합니다. 세로 벽을 따라 미끄러지는 경우입니다.
@@ -113,6 +133,55 @@ namespace SRPG.Systems.Grid
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// 설 수 없는 자리에 갇힌 병사를 가장 가까운 뭍으로 한 걸음 옮깁니다.
+        ///
+        /// <b>가려던 방향을 따르지 않습니다.</b>
+        /// 갇힌 병사가 향하는 곳은 대개 강 건너입니다. 그쪽으로 밀어 봐야 다시 물이라
+        /// 아무 데도 가지 못합니다. 나가는 방향은 <b>뭍이 어디인가</b>가 정해야 합니다.
+        ///
+        /// 걸음의 크기는 원래 가려던 만큼입니다. 여기서 따로 정하면 이 경로에서만
+        /// 이동 속도가 달라져, 물에 빠진 병사가 갑자기 빨라지거나 느려집니다.
+        /// </summary>
+        /// <param name="grid">지형입니다.</param>
+        /// <param name="from">지금 갇혀 있는 자리입니다.</param>
+        /// <param name="desired">이번 프레임에 가려던 자리입니다. 걸음의 크기만 씁니다.</param>
+        /// <returns>뭍 쪽으로 한 걸음 옮긴 자리입니다. 나갈 뭍이 없으면 제자리입니다.</returns>
+        private static Vector3 Escape(IslandGrid grid, Vector3 from, Vector3 desired)
+        {
+            var refuge = grid.FindNearestWalkable(from);
+
+            if (refuge == null)
+            {
+                return from;
+            }
+
+            Vector3 target = grid.CoordToWorld(refuge.Coord);
+
+            Vector3 toward = target - from;
+            toward.y = 0f;
+
+            float distance = toward.magnitude;
+
+            if (distance <= 1e-4f)
+            {
+                return from;
+            }
+
+            // 남은 거리보다 크게 내딛지 않습니다. 넘어서면 뭍을 지나쳐 반대편 물로 나갑니다.
+            float step = Mathf.Min(Vector3.Distance(new Vector3(from.x, 0f, from.z),
+                                                    new Vector3(desired.x, 0f, desired.z)),
+                                   distance);
+
+            Vector3 next = from + toward / distance * step;
+
+            // 도착한 자리가 뭍이면 발 높이를 맞춥니다.
+            // 아직 물 위라면 다음 프레임에 다시 이 길로 들어와 조금씩 나옵니다.
+            next.y = TryStand(grid, next, out float height) ? height : from.y;
+
+            return next;
         }
 
         /// <summary>

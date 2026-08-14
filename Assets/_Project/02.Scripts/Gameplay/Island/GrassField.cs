@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using SRPG.Data;
 using SRPG.Gameplay.Visual;
 using SRPG.Systems.Battlefield;
@@ -14,7 +14,7 @@ namespace SRPG.Gameplay.Island
     ///
     /// 풀잎 하나를 오브젝트로 만들면 수만 개의 트랜스폼과 렌더러가 생깁니다.
     /// 계층 갱신만으로 프레임이 무너지고, 배칭도 나오지 않습니다.
-    /// 여기서는 <b>뿌리 위치 행렬만</b> 들고 있다가 <see cref="Graphics.RenderMeshInstanced"/>로 넘깁니다.
+    /// 여기서는 <b>뿌리 위치 행렬만</b> 들고 있다가 <c>Graphics.RenderMeshInstanced</c> 로 넘깁니다.
     /// 색도 흔들림도 눌림도 셰이더가 월드 좌표에서 직접 계산하므로 넘길 것이 그것뿐입니다.
     ///
     /// <b>어디에 무엇이 자라는지가 곧 게임 규칙입니다</b>
@@ -431,8 +431,13 @@ namespace SRPG.Gameplay.Island
         {
             var heightmap = battlefield.Heightmap;
 
-            Vector3 origin = battlefield.Origin;
-            float worldSize = heightmap.WorldSize;
+            // 뿌리는 범위는 지형 전체가 아니라 <b>싸울 수 있는 땅</b>입니다.
+            // 지형에는 앞바다 바닥이 붙어 있어 넓이가 넉 배인데, 그쪽은 전부 물속이라
+            // 뿌린 것을 도로 버리게 됩니다. 높이는 여전히 지형 원점 기준으로 읽습니다.
+            Vector3 origin = battlefield.PlayOrigin;
+            float worldSize = heightmap.PlayWorldSize;
+
+            Vector3 terrainOrigin = battlefield.Origin;
 
             float seaLevel = battlefield.SeaLevel;
             float climbLimit = battlefield.ClimbLimitDegrees;
@@ -463,7 +468,7 @@ namespace SRPG.Gameplay.Island
                     float worldX = origin.x + (gx + 0.5f + jitterX) * spacing;
                     float worldZ = origin.z + (gz + 0.5f + jitterZ) * spacing;
 
-                    float groundY = heightmap.SampleHeight(worldX, worldZ, origin);
+                    float groundY = heightmap.SampleHeight(worldX, worldZ, terrainOrigin);
 
                     // 물속에는 심지 않습니다.
                     if (groundY < seaLevel + WaterMargin)

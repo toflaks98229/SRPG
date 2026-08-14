@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
@@ -75,19 +75,37 @@ namespace SRPG.Gameplay.Deployment
         public float TimeUntilEnemyReinforcement => _enemyPool != null ? _enemyPool.TimeUntilNext : 0f;
 
         // ====================================================================================================
-        // 3. Unity Lifecycle
+        // 3. Tick
         // ====================================================================================================
 
-        private void Update()
+        /// <summary>
+        /// 대기열의 시계를 흘리고, 자리가 났으면 지원군을 올려보냅니다.
+        ///
+        /// <b>왜 진입점이 부르는가</b>
+        ///
+        /// 이 전개기는 <see cref="ISquadRoster.CountLivingSquads"/> 로
+        /// "지금 몇 부대가 서 있는가"를 읽습니다. 그런데 분대는 자기 차례에 무너지면서
+        /// 그 명부에서 스스로 빠집니다. 둘이 각자 <c>Update</c> 를 들고 있으면
+        /// <b>읽는 시점이 빠지기 전인지 후인지 정해지지 않습니다.</b>
+        /// 같은 프레임에 무너진 자리를 즉시 메우기도 하고 한 프레임 늦기도 하는데,
+        /// 어느 쪽이든 오류는 나지 않고 "가끔 지원군이 한 박자 늦는다"로만 보입니다.
+        ///
+        /// 지금은 조립 계층의 <c>BattleEntryPoint</c> 가 <b>분대보다 먼저</b> 부릅니다.
+        /// 읽는 수는 언제나 <b>지난 프레임까지 확정된 것</b>이고, 이번 프레임에 올라온
+        /// 지원군은 세워진 그 프레임부터 함께 돕니다.
+        /// </summary>
+        /// <param name="deltaTime">
+        /// 지난 시간입니다. <b>슬로우모션이 반영된 스케일 시간</b>이라
+        /// 시간이 느려지면 지원군의 시계도 함께 느려집니다.
+        /// 시뮬레이션 전체가 같은 배율로 흐르므로 명령 입력이 전황을 벌어 주지는 않습니다 —
+        /// 벌리는 것은 <b>플레이어의 실제 판단 시간</b>뿐입니다.
+        /// </param>
+        public void Tick(float deltaTime)
         {
             if (_context == null)
             {
                 return;
             }
-
-            // 스케일된 시간으로 진행합니다. 슬로우모션 중에도 지원군이 그대로 밀려오면
-            // 명령 입력이 곧 시간 벌기가 되어 버립니다.
-            float deltaTime = UnityEngine.Time.deltaTime;
 
             _playerPool.Tick(deltaTime);
             _enemyPool.Tick(deltaTime);

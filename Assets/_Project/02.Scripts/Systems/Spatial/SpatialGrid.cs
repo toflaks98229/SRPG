@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace SRPG.Systems.Spatial
@@ -22,7 +22,9 @@ namespace SRPG.Systems.Spatial
     ///
     /// <b>한 프레임 스냅샷입니다</b>
     ///
-    /// <see cref="Rebuild"/> 시점의 위치로 색인합니다. 그 뒤 대상이 움직여도 색인은 따라가지 않습니다.
+    /// <see cref="Insert"/> 시점의 위치로 색인합니다. 그 뒤 대상이 움직여도 색인은 따라가지 않습니다.
+    /// 다시 만드는 일(<see cref="Clear"/> 뒤 전원 <see cref="Insert"/>)은 <b>이 클래스가 하지 않습니다</b> —
+    /// 무엇을 색인할지 아는 것은 명부를 든 쪽이고, 여기는 넣어 준 것만 담습니다.
     /// 초당 60프레임에서 유닛이 최대로 움직여야 6cm 남짓이라, AI 판단과 조향에는 영향이 없습니다.
     /// 매 프레임 다시 만드는 비용이 O(대상 수)라 그래도 됩니다.
     ///

@@ -144,6 +144,77 @@ SOFTWARE.
 
 ---
 
+## Unity First Person Melee — 검 타격음
+
+- 출처: <https://github.com/BigAndCrispy/Unity-First-Person-Melee>
+- 라이선스: **CC0 1.0 Universal** (퍼블릭 도메인 헌정)
+
+| 파일 | 원본 |
+| --- | --- |
+| `06.Sound/SFX/SFX_Slash.mp3` | `Assets/Audio/Sword_Hit.mp3` |
+
+- 변경 사항: **파일 이름을 배선 규약에 맞춰 바꾸었습니다.** 소리 자체는 손대지 않았습니다.
+
+`BattleAudio_Default` 뱅크의 `Slash` 칸에 들어가 검이 벨 때 나던 합성음을 대신합니다.
+
+**연결은 손이 아니라 도구가 합니다** — `SRPG → 배선 → ⑪`. 뱅크는 구워지는 에셋이라
+손으로 꽂아 두면 다시 구울 때 조용히 사라지고, 그 증상은 "어느 날부터 소리가 안 난다"로만
+나타납니다. 그래서 파일 이름(`SFX_<칸 이름>`)이 곧 배선이고, 이름을 바꾼 이유가 그것입니다.
+
+CC0 는 표기 의무가 없습니다. 그래도 적는 이유는 이 문서의 다른 항목과 같습니다 —
+**어느 자산이 어디서 왔는지 나중에 되짚을 수 있게** 하기 위해서입니다.
+
+### 왜 이것을 골랐는가
+
+저장소 README 가 사운드를 **저작자 본인이 만들었다**고 밝히고 있고(`made by me`),
+`LICENSE` 에 CC0 1.0 전문이 들어 있으며, **파일이 저장소 안에 있습니다.**
+셋이 함께 성립하는 것이 이 프로젝트가 자산을 들이는 최소 조건입니다.
+
+---
+
+## Kenney Asset Pack — RPG 사운드
+
+- 출처: <https://github.com/iwenzhou/kenney> (`Audio (295 files)/RPG sounds (50 sounds)/`)
+- 원저작자: **Kenney Vleugels** (<https://kenney.nl>)
+- 라이선스: **CC0 1.0 Universal** (저장소 `LICENSE.md` 에 전문)
+
+| 파일 | 원본 | 들어간 칸 |
+| --- | --- | --- |
+| `06.Sound/SFX/SFX_Pierce.ogg` | `knifeSlice2.ogg` | 자돌 — 창·화살 |
+| `06.Sound/SFX/SFX_Blunt.ogg` | `chop.ogg` | 타격 — 둔기 |
+| `06.Sound/SFX/SFX_Death.ogg` | `dropLeather.ogg` | 병사가 쓰러질 때 |
+
+- 변경 사항: **파일 이름을 배선 규약에 맞춰 바꾸었습니다.** 소리 자체는 손대지 않았습니다.
+
+### 왜 이 셋을 골랐는가
+
+이름으로 고른 것입니다. **소리를 직접 듣고 고르지 않았습니다** — 다음에 손볼 때 알아야 할 사실이라 적어 둡니다.
+
+- `knifeSlice2` — 짧고 날카롭게 가르는 소리라 찌르기에 가장 가깝다고 보았습니다
+- `chop` — 무겁게 내리치는 소리라 둔기에 맞다고 보았습니다
+- `dropLeather` — 가죽 갑옷을 입은 몸이 쓰러지는 소리로 읽었습니다
+
+**맞지 않으면 같은 이름으로 다른 파일을 놓고 ⑪을 다시 돌리면 됩니다.** 배선을 이름 규약으로 둔 것이
+그래서입니다 — 소리를 바꾸는 데 코드도 에셋 편집도 필요하지 않습니다.
+
+### `BowRelease` 는 아직 합성음입니다
+
+Kenney 의 RPG·UI·Digital 어느 팩에도 **활 소리가 없습니다.** Digital 폴더에 발사음이 있지만
+SF 레이저라 중세 전장에 맞지 않습니다. 맞지 않는 소리를 억지로 넣는 것보다 합성음이 낫다고 보았습니다.
+
+`SRPG → 배선 → ⑪` 이 콘솔에 뱅크 상태를 찍으므로, 이 칸이 비어 있다는 사실은 계속 눈에 보입니다.
+
+### 검토했으나 들이지 않은 것들
+
+| 저장소 | 라이선스 | 들이지 않은 이유 |
+| --- | --- | --- |
+| [PanderMusubi/sound-effects-library-weapons](https://github.com/PanderMusubi/sound-effects-library-weapons) | CC0 (Still North Media) | 저장소에는 **샘플 두 개뿐**이고 본체는 MediaFire 에 있습니다. 저장소 밖의 파일은 나중에 무엇으로 바뀌었는지 확인할 방법이 없습니다 |
+| [JimLynchCodes/Game-Sound-Effects](https://github.com/JimLynchCodes/Game-Sound-Effects) | **없음** | `LICENSE` 파일이 없습니다. 조건을 모르는 자산은 쓸 수 없습니다 |
+| [lavenderdotpet/CC0-Public-Domain-Sounds](https://github.com/lavenderdotpet/CC0-Public-Domain-Sounds) | 모음집 | 여러 출처를 모은 것이라 파일마다 원저작자가 다릅니다. 모은 사람이 **자기 것이 아닌 파일까지** 퍼블릭 도메인으로 내놓을 권한은 없습니다 — 위 Roystan 항목에서 이미 같은 판단을 했습니다 |
+| [Calinou/kenney-ui-audio](https://github.com/Calinou/kenney-ui-audio) | CC0 (Kenney Vleugels) | **조건은 깨끗합니다.** 다만 UI 클릭·스위치 50종이라 전투에 쓸 것이 없습니다. 승급 화면 같은 UI 소리가 필요해지면 이쪽이 첫 후보입니다 |
+
+---
+
 ## 참고한 셰이더 — 값과 기법
 
 파일을 가져오지 않았고 텍스처도 쓰지 않았습니다. **수치와 기법만 참고**했으며,

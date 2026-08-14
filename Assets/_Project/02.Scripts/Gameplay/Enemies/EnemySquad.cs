@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
@@ -8,6 +8,7 @@ using SRPG.Gameplay.Units;
 using SRPG.Systems.AI;
 using SRPG.Systems.Formation;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace SRPG.Gameplay.Enemies
 {
@@ -57,13 +58,31 @@ namespace SRPG.Gameplay.Enemies
 
         /// <summary>이번 진형의 슬롯 위치입니다.</summary>
         private readonly List<Vector3> _slots = new List<Vector3>(8);
-        /// <summary>앵커가 따라갈 경로입니다.</summary>
-        private readonly List<GridCoord> _path = new List<GridCoord>(64);
+
+        /// <summary>앵커가 따라갈 모퉁이입니다. 길이 격자에서 나오지 않으므로 월드 좌표입니다.</summary>
+        private readonly List<Vector3> _route = new List<Vector3>(64);
+
+        /// <summary>
+        /// 길을 계산할 때 쓰는 자리입니다. 매번 만들면 판마다 쓰레기가 쌓입니다.
+        ///
+        /// <b>여기서 만들지 않습니다.</b> 유니티는 MonoBehaviour 의 필드 초기화 시점에
+        /// <c>NavMeshPath</c> 를 만드는 것을 막습니다. 처음 쓸 때 만듭니다.
+        /// </summary>
+        private NavMeshPath _scratch;
+
         /// <summary>이번 판단에서 평가할 목표 후보입니다.</summary>
         private readonly List<GoalCandidate> _candidates = new List<GoalCandidate>(16);
 
         /// <summary>목표 후보를 모을 때 쓰는 적 부대 중심 버퍼입니다. 매 판단마다 다시 채웁니다.</summary>
         private readonly List<Vector3> _anchorBuffer = new List<Vector3>(8);
+
+        /// <summary>
+        /// 돌격 중 흐트러진 자리를 뭍으로 당길 때 쓰는 한 칸짜리 버퍼입니다.
+        ///
+        /// <see cref="FormationSolver.ClampToWalkable"/> 가 목록을 받으므로 담을 그릇이 필요합니다.
+        /// 병사마다 새 목록을 만들면 프레임마다 인원수만큼 쓰레기가 생깁니다.
+        /// </summary>
+        private readonly List<Vector3> _scatterBuffer = new List<Vector3> { Vector3.zero };
 
         /// <summary>앵커 전진입니다. 아군 분대와 공유하는 순수 로직입니다.</summary>
         private readonly FormationMotor _motor = new FormationMotor();
@@ -102,10 +121,23 @@ namespace SRPG.Gameplay.Enemies
         public bool IsDisbanded { get; private set; }
 
         // ====================================================================================================
-        // 4. Unity Lifecycle
+        // 4. Tick
         // ====================================================================================================
 
-        private void Update()
+        /// <summary>
+        /// 이 분대의 한 프레임입니다.
+        ///
+        /// <b>아군 분대와 같은 자리에서 같은 방식으로 불립니다</b>
+        ///
+        /// 양측의 규칙이 대칭이므로 돌려지는 방식도 대칭이어야 합니다.
+        /// 한쪽만 <c>Update</c> 로 남겨 두면 "적은 왜 반응이 한 박자 빠른가" 같은 것이
+        /// 규칙이 아니라 실행 순서의 부산물로 생깁니다.
+        /// 순서는 조립 계층의 <c>BattleEntryPoint</c> 가 정합니다 —
+        /// <b>아군이 먼저 돕니다.</b> 여기의 <see cref="Replan"/> 이 아군 분대의 앵커를 읽으므로,
+        /// 그 순서라야 적이 <b>이번 프레임의</b> 자리를 보고 판단합니다.
+        /// </summary>
+        /// <param name="deltaTime">지난 시간입니다. 슬로우모션이 반영된 스케일 시간입니다.</param>
+        public void Tick(float deltaTime)
         {
             if (IsDisbanded || _context == null)
             {
@@ -120,8 +152,6 @@ namespace SRPG.Gameplay.Enemies
                 return;
             }
 
-            float deltaTime = UnityEngine.Time.deltaTime;
-
             _replanTimer -= deltaTime;
             if (_replanTimer <= 0f)
             {
@@ -130,7 +160,7 @@ namespace SRPG.Gameplay.Enemies
             }
 
             _motor.Advance(deltaTime, _anchorSpeed, _context.Grid);
-            AssignUnitTargets();
+            AssignUnitTargets(deltaTime);
 
             // 자리를 정한 <b>다음에</b> 병사를 돌립니다. 아군 분대와 같은 순서입니다 —
             // 양측이 같은 장부(SquadMembers)를 쓰는 이유가 이런 순서까지 함께 가져가기 위해서입니다.
@@ -140,6 +170,15 @@ namespace SRPG.Gameplay.Enemies
         // ====================================================================================================
         // 5. Public Methods
         // ====================================================================================================
+
+        /// <summary>이 분대가 이번 판에 명중시킨 타격 수입니다.</summary>
+        public int HitsLanded { get; private set; }
+
+        /// <inheritdoc />
+        public void ReportHitLanded()
+        {
+            HitsLanded++;
+        }
 
         /// <summary>
         /// 분대를 만들고 전개 지점에 병력을 세웁니다.
@@ -157,15 +196,7 @@ namespace SRPG.Gameplay.Enemies
         /// <param name="soldierCount">병사 수입니다.</param>
         /// <param name="unitFactory">유닛을 만드는 함수입니다.</param>
         /// <param name="rank">분대 숙련도입니다.</param>
-        /// <summary>이 분대가 이번 판에 명중시킨 타격 수입니다.</summary>
-        public int HitsLanded { get; private set; }
-
-        /// <inheritdoc />
-        public void ReportHitLanded()
-        {
-            HitsLanded++;
-        }
-
+        /// <param name="proficiency">무기 계열별 숙련도입니다. 비우면 미숙 상태로 섭니다.</param>
         public void Initialize(
             IEnemySquadContext context,
             UnitDefinition definition,
@@ -333,14 +364,14 @@ namespace SRPG.Gameplay.Enemies
                 return;
             }
 
-            if (!_context.Pathfinder.TryFindSmoothedPathSnapped(startCoord, destination, _path, out var resolved))
+            if (!SquadRoute.TryPlan(_context, ref _scratch, startCoord, destination, _route, out var resolved))
             {
                 return;
             }
 
             _context.Occupancy.Claim(resolved, this);
 
-            _motor.SetPath(_path, resolved);
+            _motor.SetPath(_route, resolved);
             _currentGoalScore = score;
         }
 
@@ -363,7 +394,8 @@ namespace SRPG.Gameplay.Enemies
         /// 그렇다고 진형을 통째로 뺄 수는 없습니다. 응집이 없으면 하나씩 도착해 방어가 너무 쉬워집니다.
         /// <b>뭉치되 줄 서지 않게</b> — 간격을 넓히고 각자에게 고정된 어긋남을 줍니다.
         /// </summary>
-        private void AssignUnitTargets()
+        /// <param name="deltaTime">지난 시간입니다. 슬롯 재배정 주기를 세는 데 씁니다.</param>
+        private void AssignUnitTargets(float deltaTime)
         {
             int count = _members.Count;
             if (count == 0)
@@ -386,7 +418,19 @@ namespace SRPG.Gameplay.Enemies
 
                     // 앵커 한 점으로 몰리면 서로 밀어내느라 뭉개집니다.
                     // 각자 조금씩 다른 지점을 향하게 해 자연스러운 무리로 흘러가게 합니다.
-                    unit.SetSlotTarget(_motor.Anchor + ScatterFor(unit, tuning.Enemy.ChargeScatter));
+                    //
+                    // <b>흐트러뜨린 자리를 뭍으로 당깁니다.</b>
+                    //
+                    // 흩어짐은 앵커 둘레 어디로든 갑니다. 넓은 평지에서는 그것이 곧 자연스러움이지만,
+                    // <b>좁은 여울에서는 병사를 강으로 겨누게 됩니다.</b> 그러면 걸음이 물가에서 막히고
+                    // 분대는 앵커를 따라 떠나가, 그 병사만 강가에 남습니다.
+                    //
+                    // 자리를 잡은 뒤에는 이미 당기고 있었습니다(<see cref="FormationSolver.ClampToWalkable"/>).
+                    // 정작 <b>건너는 동안</b>이 빠져 있었는데, 좁은 길을 지나는 것이 바로 그때입니다.
+                    _scatterBuffer[0] = _motor.Anchor + ScatterFor(unit, tuning.Enemy.ChargeScatter);
+                    FormationSolver.ClampToWalkable(_context.Grid, _motor.Anchor, _scatterBuffer);
+
+                    unit.SetSlotTarget(_scatterBuffer[0]);
                 }
 
                 return;
@@ -400,7 +444,7 @@ namespace SRPG.Gameplay.Enemies
 
             // 가까운 병사에게 자리를 줍니다. 순서대로 나눠 주면 대열을 가로질러 걸어갑니다.
             _members.ReassignSlots(
-                _slots, tuning.Squad.AssignmentInterval, UnityEngine.Time.deltaTime, _motor.Anchor);
+                _slots, tuning.Squad.AssignmentInterval, deltaTime, _motor.Anchor);
 
             for (int i = 0; i < count; i++)
             {

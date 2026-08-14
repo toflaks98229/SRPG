@@ -277,8 +277,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0834d710aefe42f43a638403fbec3735, type: 3}
   m_Name: 
   m_EditorClassIdentifier: SRPG.Core::SRPG.Core.Managers.AudioManager
-  _bgmGroup: {fileID: 0}
-  _sfxGroup: {fileID: 0}
+  _bgmGroup: {fileID: 215851263064827837, guid: 21bd00921e4cf664aa1b9b3e2b8de945, type: 2}
+  _sfxGroup: {fileID: -4748406372352791876, guid: 21bd00921e4cf664aa1b9b3e2b8de945, type: 2}
   _initialPoolSize: 24
   _maxVoices: 64
   _sfxMinDistance: 3
@@ -331,7 +331,7 @@ MonoBehaviour:
     TypeName: 
   autoRun: 1
   autoInjectGameObjects: []
-  _worldMap: {fileID: 0}
+  _worldMap: {fileID: 11400000, guid: 6cd1c97289e0a2548903d92c18822ccf, type: 2}
   _setup: {fileID: 11400000, guid: 61774aa8a9a0ed84782744fccfd8153b, type: 2}
   _startingSquadCount: 3
   _soldiersPerSquad: 5

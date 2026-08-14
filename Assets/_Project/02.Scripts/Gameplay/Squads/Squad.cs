@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using SRPG.Common;
 using SRPG.Data;
@@ -7,6 +7,7 @@ using SRPG.Gameplay.Units;
 using SRPG.Systems.Combat;
 using SRPG.Systems.Formation;
 using UnityEngine;
+using UnityEngine.AI;
 
 namespace SRPG.Gameplay.Squads
 {
@@ -36,8 +37,18 @@ namespace SRPG.Gameplay.Squads
         /// <summary>병사 명부와 슬롯 배정입니다. 적 분대와 <b>같은 장부</b>를 씁니다.</summary>
         private readonly SquadMembers _members = new SquadMembers(12);
 
-        /// <summary>앵커가 따라갈 경로입니다.</summary>
-        private readonly List<GridCoord> _path = new List<GridCoord>(64);
+        /// <summary>앵커가 따라갈 모퉁이입니다. 길이 격자에서 나오지 않으므로 월드 좌표입니다.</summary>
+        private readonly List<Vector3> _route = new List<Vector3>(64);
+
+        /// <summary>
+        /// 길을 계산할 때 쓰는 자리입니다. 매번 만들면 판마다 쓰레기가 쌓입니다.
+        ///
+        /// <b>여기서 만들지 않습니다.</b> 유니티는 MonoBehaviour 의 필드 초기화 시점에
+        /// <c>NavMeshPath</c> 를 만드는 것을 막습니다 — 직렬화가 끝나기 전이라
+        /// 네이티브 쪽이 아직 준비되지 않았기 때문입니다. 처음 쓸 때 만듭니다.
+        /// </summary>
+        private NavMeshPath _scratch;
+
         /// <summary>이번 진형의 슬롯 위치입니다.</summary>
         private readonly List<Vector3> _slots = new List<Vector3>(12);
 
@@ -69,6 +80,17 @@ namespace SRPG.Gameplay.Squads
         private Unit _commander;
         /// <summary>앵커가 전진하는 속도입니다. 병사 이동 속도에서 유도합니다.</summary>
         private float _anchorSpeed = 3f;
+
+        /// <summary>이 분대가 고른 특전이 거는 배율입니다. 소속 병사 전원이 같은 값을 받습니다.</summary>
+        private UnitModifiers _perks = UnitModifiers.Identity;
+
+        /// <summary>
+        /// 처음 데리고 나온 호위 수입니다. 지휘관은 빠져 있습니다.
+        ///
+        /// 지휘관의 안전장치가 "얼마나 잃었는가"를 재는 기준입니다.
+        /// 현재 인원으로 재면 잃을수록 기준도 함께 줄어 <b>영영 조건이 차지 않습니다</b>.
+        /// </summary>
+        private int _escortsDeployed;
 
         // ====================================================================================================
         // 3. Properties
@@ -123,18 +145,46 @@ namespace SRPG.Gameplay.Squads
         /// <summary>지휘관 사망으로 분대가 소멸했을 때 발생합니다.</summary>
         public event Action<Squad> SquadDestroyed;
 
+        /// <summary>
+        /// 지휘관이 쓰러질 뻔했다가 버텼을 때 발생합니다.
+        ///
+        /// 병사의 것을 그대로 흘려 줍니다 — 바깥은 병사가 아니라 <b>분대</b>를 알고 있으므로,
+        /// "누가 다쳤는가"가 아니라 "어느 분대가 흔들렸는가"로 받아야 합니다.
+        /// </summary>
+        public event Action<Squad> CommanderWounded;
+
         // ====================================================================================================
-        // 5. Unity Lifecycle
+        // 5. Tick
         // ====================================================================================================
 
-        private void Update()
+        /// <summary>
+        /// 이 분대의 한 프레임입니다.
+        ///
+        /// <b>유니티가 아니라 진입점이 부릅니다</b>
+        ///
+        /// 예전에는 이것이 <c>Update</c> 였습니다. 그러면 분대·전개기·선택 컨트롤러가
+        /// 각자 자기 <c>Update</c> 를 들고 <b>서로를 관측하는데</b>, 그 상대 순서는
+        /// 유니티가 정해 주지 않습니다. 전개기가 "지금 몇 부대가 서 있는가"를 읽는 시점이
+        /// 무너진 분대가 명부에서 빠지기 <b>전</b>인지 <b>후</b>인지 알 수 없었습니다.
+        /// 증상은 "가끔 지원군이 한 박자 늦는다"로만 나타나므로 원인을 찾을 방법이 없습니다.
+        ///
+        /// 이것은 이 분대가 병사에게 이미 내린 판단(<see cref="SquadMembers.Tick"/>)을
+        /// 한 층 위에 그대로 적용한 것입니다. 순서는 조립 계층의 <c>BattleEntryPoint</c> 가
+        /// 정하고, 그 자리에 <b>왜 그 순서인지</b>가 적혀 있습니다.
+        /// (그쪽을 <c>cref</c> 로 걸지 않는 것은 <b>이 어셈블리가 조립 계층을 모르기 때문</b>입니다 —
+        /// 의존이 한 방향으로만 흐른다는 사실이 주석에도 그대로 적용됩니다.)
+        ///
+        /// <b>시간을 받아서 씁니다.</b> 예전에는 여기서 한 번, 슬롯 재배정에서 또 한 번
+        /// <c>Time.deltaTime</c> 을 각자 읽었습니다. 값이 같아 아무 일도 없었지만,
+        /// 한 프레임의 길이를 두 곳이 각자 정하는 모양이었습니다.
+        /// </summary>
+        /// <param name="deltaTime">지난 시간입니다. 슬로우모션이 반영된 스케일 시간입니다.</param>
+        public void Tick(float deltaTime)
         {
             if (State == SquadState.Destroyed || _context == null)
             {
                 return;
             }
-
-            float deltaTime = UnityEngine.Time.deltaTime;
 
             _members.PruneDead();
 
@@ -144,10 +194,15 @@ namespace SRPG.Gameplay.Squads
                 return;
             }
 
+            // 지휘관이 치명상을 견딜지는 <b>남은 호위</b>가 정합니다.
+            // 되묻는 길이 없으므로 여기서 밀어 넣습니다. 인원은 프레임마다 바뀔 수 있고,
+            // 판정은 맞는 그 순간에 일어나므로 최신 값이어야 합니다.
+            _commander.SetEscortStrength(_members.Count - 1, _escortsDeployed);
+
             _facingScanTimer -= deltaTime;
 
             AdvanceAnchor(deltaTime);
-            AssignUnitTargets();
+            AssignUnitTargets(deltaTime);
 
             // 자리를 정한 <b>다음에</b> 병사를 돌립니다. 이 순서가 규칙입니다 —
             // 반대로 돌면 병사가 한 프레임 늦은 자리를 향해 걷습니다.
@@ -183,12 +238,17 @@ namespace SRPG.Gameplay.Squads
             string displayName,
             Func<UnitDefinition, Team, bool, Vector3, Unit> unitFactory,
             int rank = CombatConstants.MinRank,
-            WeaponProficiency proficiency = default)
+            WeaponProficiency proficiency = default,
+            UnitModifiers? perks = null)
         {
             _context = context;
             DisplayName = displayName;
             Rank = Mathf.Clamp(rank, CombatConstants.MinRank, CombatConstants.MaxRank);
             Proficiency = proficiency;
+
+            // 구조체의 기본값은 전부 0이라 그대로 곱하면 병사의 체력이 0이 됩니다.
+            // 비워 둘 수 있어야 하므로 nullable 로 받고 여기서 한 번만 확정합니다.
+            _perks = perks ?? UnitModifiers.Identity;
 
             _motor.Teleport(context.Grid.CoordToWorld(spawnCoord), spawnCoord);
             _anchorSpeed = definition.MoveSpeed * context.Tuning.Squad.AnchorSpeedFactor;
@@ -219,7 +279,7 @@ namespace SRPG.Gameplay.Squads
                 }
 
                 unit.transform.SetParent(transform, true);
-                unit.SetTraining(Rank, Proficiency);
+                unit.SetTraining(Rank, Proficiency, _perks);
                 unit.AttachTally(this);
                 unit.Died += OnUnitDied;
                 _members.Add(unit);
@@ -227,8 +287,13 @@ namespace SRPG.Gameplay.Squads
                 if (isCommander)
                 {
                     _commander = unit;
+                    unit.Wounded += OnCommanderWounded;
                 }
             }
+
+            // 처음 데리고 나온 호위 수입니다. 지휘관을 뺀 값이라 분대가 줄어도 바뀌지 않습니다 —
+            // 안전장치가 <b>얼마나 잃었는가</b>를 재려면 기준이 고정되어 있어야 합니다.
+            _escortsDeployed = Mathf.Max(0, _members.Count - 1);
 
             State = SquadState.Idle;
         }
@@ -268,7 +333,7 @@ namespace SRPG.Gameplay.Squads
                 return false;
             }
 
-            if (!_context.Pathfinder.TryFindSmoothedPathSnapped(startCoord, destination, _path, out var resolved))
+            if (!SquadRoute.TryPlan(_context, ref _scratch, startCoord, destination, _route, out var resolved))
             {
                 return false;
             }
@@ -277,7 +342,7 @@ namespace SRPG.Gameplay.Squads
             if (resolved != destination && _context.Occupancy.IsBlockedFor(resolved, this))
             {
                 if (!_context.Occupancy.TryResolveDestination(resolved, this, _context.Grid, out resolved) ||
-                    !_context.Pathfinder.TryFindSmoothedPath(startCoord, resolved, _path))
+                    !SquadRoute.TryPlan(_context, ref _scratch, startCoord, resolved, _route, out _))
                 {
                     return false;
                 }
@@ -285,7 +350,7 @@ namespace SRPG.Gameplay.Squads
 
             _context.Occupancy.Claim(resolved, this);
 
-            _motor.SetPath(_path, resolved);
+            _motor.SetPath(_route, resolved);
             State = SquadState.Moving;
             return true;
         }
@@ -334,7 +399,7 @@ namespace SRPG.Gameplay.Squads
 
             for (int i = 0; i < _members.Count; i++)
             {
-                _members[i]?.SetTraining(Rank, Proficiency);
+                _members[i]?.SetTraining(Rank, Proficiency, _perks);
             }
         }
 
@@ -345,9 +410,17 @@ namespace SRPG.Gameplay.Squads
         private void OnUnitDied(Unit unit)
         {
             unit.Died -= OnUnitDied;
+            unit.Wounded -= OnCommanderWounded;
 
             // 지휘관 사망은 다음 Update에서 분대 소멸로 처리합니다.
             // 이벤트 콜백 안에서 다른 유닛을 파괴하면 순회 중 컬렉션이 변하는 문제가 생깁니다.
+        }
+
+        /// <summary>지휘관이 버텨 냈다는 소식을 분대의 것으로 바꿔 흘려 줍니다.</summary>
+        /// <param name="unit">버텨 낸 지휘관입니다.</param>
+        private void OnCommanderWounded(Unit unit)
+        {
+            CommanderWounded?.Invoke(this);
         }
 
         /// <summary>
@@ -412,7 +485,8 @@ namespace SRPG.Gameplay.Squads
         /// 도착한 뒤에야 슬롯을 배정합니다. 이때 지휘관은 항상 중심입니다.
         /// 진형의 모양은 병과가 정합니다. 창은 횡대, 검과 활은 동심원입니다.
         /// </summary>
-        private void AssignUnitTargets()
+        /// <param name="deltaTime">지난 시간입니다. 슬롯 재배정 주기를 세는 데 씁니다.</param>
+        private void AssignUnitTargets(float deltaTime)
         {
             int count = _members.Count;
             if (count == 0)
@@ -458,7 +532,7 @@ namespace SRPG.Gameplay.Squads
             _members.ReassignSlots(
                 _slots,
                 _context.Tuning.Squad.AssignmentInterval,
-                UnityEngine.Time.deltaTime,
+                deltaTime,
                 _motor.Anchor);
 
             for (int i = 0; i < count; i++)

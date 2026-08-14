@@ -1,4 +1,4 @@
-using SRPG.Common;
+﻿using SRPG.Common;
 using UnityEngine;
 
 namespace SRPG.Data
@@ -59,11 +59,22 @@ namespace SRPG.Data
         [Tooltip("보정치의 상한입니다. 수치를 잘못 적은 무기가 터무니없는 성장을 얻는 것을 막습니다.")]
         public float MaxExperienceScale = 6f;
 
-        [Header("단련도")]
-        [Range(1, 12)]
-        [Tooltip("랭크 한 단계를 올리는 데 필요한 생존 전투 수입니다.\n" +
-                 "숙련도와 달리 전과를 보지 않습니다 — 단련은 '살아남아 본 횟수'입니다.")]
-        public int BattlesPerRank = 3;
+        [Header("단련도 — 승급은 성과가 정합니다")]
+        [Range(1f, 40f)]
+        [Tooltip("랭크 한 단계를 올리는 데 필요한 공적입니다.")]
+        public float MeritPerRank = 6f;
+
+        [Range(0f, 2f)]
+        [Tooltip("명중 한 번이 주는 공적입니다. 무기별 기대 명중 수로 보정됩니다.")]
+        public float MeritPerHit = 0.12f;
+
+        [Range(0f, 5f)]
+        [Tooltip("살아 돌아온 것만으로 받는 공적입니다. 겨우 버틴 판도 0이 되지는 않습니다.")]
+        public float MeritForSurviving = 0.5f;
+
+        [Range(0f, 5f)]
+        [Tooltip("부대를 온전히 지켜 냈을 때 받는 공적입니다. 생존 비율에 비례합니다.")]
+        public float MeritForIntact = 1.5f;
 
         // ====================================================================================================
         // 2. Public Methods
@@ -99,7 +110,48 @@ namespace SRPG.Data
 
             squad.Proficiency = squad.Proficiency.Gain(squad.Definition.Style, gain);
 
-            squad.Rank = ResolveRank(squad.BattlesSurvived);
+            squad.Merit += ScoreMerit(squad.Definition, report);
+            squad.Rank = ResolveRank(squad.Merit);
+        }
+
+        /// <summary>
+        /// 이번 전투가 이 분대에게 남긴 <b>공적</b>입니다.
+        ///
+        /// <b>단련은 이제 전과를 봅니다</b>
+        ///
+        /// 예전에는 살아 돌아온 <b>횟수</b>만 셌습니다. "단련은 얼마나 겪었는가"라는 뜻이었고,
+        /// 잘 싸웠는지는 숙련도가 따로 쟀습니다. 그런데 그러면 승급이 <b>시간이 지나면 오는 것</b>이라
+        /// 판마다의 결과가 성장에 닿지 않습니다. 뒤에 붙는 특전 선택도 그저 몇 판마다 오는 배급이 됩니다.
+        ///
+        /// 지금은 공적이 문턱을 넘을 때 승급합니다. 잘 싸운 판은 두 판 몫이 되고,
+        /// 겨우 버틴 판은 반 판 몫입니다.
+        ///
+        /// <b>무기 공정성 보정은 그대로 가져갑니다</b>
+        ///
+        /// 명중 수를 날것으로 쓰면 자주 때리는 무기가 저절로 빨리 승급합니다
+        /// (<see cref="GetExperienceScale"/> 가 숙련도에서 이미 겪은 문제입니다).
+        /// 여기서 같은 보정을 빠뜨리면 그 결함이 <b>승급 쪽으로 자리만 옮겨</b> 되살아납니다.
+        ///
+        /// <b>온전함도 셉니다.</b> 명중만 보면 병사를 갈아 넣고 이기는 쪽이 빨리 자랍니다.
+        /// 얼마나 지켜 냈는가가 함께 걸려야 "이기는 것"과 "온전히 이기는 것"이 갈립니다.
+        /// </summary>
+        /// <param name="definition">이 분대의 병과입니다.</param>
+        /// <param name="report">이 분대에 대한 전황 보고입니다.</param>
+        /// <returns>이번 전투의 공적입니다. 0 아래로 내려가지 않습니다.</returns>
+        public float ScoreMerit(UnitDefinition definition, SquadReport report)
+        {
+            // 1. 싸운 몫 — 무기별 기대 명중 수로 나눠 같은 시간이면 비슷하게 쌓이게 합니다.
+            float fought = Mathf.Max(0, report.HitsLanded)
+                           * MeritPerHit
+                           * GetExperienceScale(definition);
+
+            // 2. 지켜 낸 몫 — 배치 인원 대비 생존 비율입니다.
+            //    배치 인원을 모르면(옛 보고서) 온전히 돌아온 것으로 봅니다.
+            float intact = report.Deployed > 0
+                ? Mathf.Clamp01(report.Survivors / (float)report.Deployed)
+                : 1f;
+
+            return Mathf.Max(0f, fought + intact * MeritForIntact + MeritForSurviving);
         }
 
         /// <summary>
@@ -179,13 +231,17 @@ namespace SRPG.Data
         }
 
         /// <summary>
-        /// 살아남은 전투 수에 해당하는 단련도를 구합니다.
+        /// 쌓인 공적에 해당하는 단련도를 구합니다.
+        ///
+        /// <b>공적은 줄지 않습니다.</b> 못 싸운 판은 적게 쌓일 뿐 깎이지 않습니다.
+        /// 깎으면 한 번 실수한 부대가 영영 뒤처지고, 플레이어는 <b>지는 판을 피하려고</b>
+        /// 위험한 곳에 부대를 보내지 않게 됩니다 — 그건 이 게임이 바라는 판단이 아닙니다.
         /// </summary>
-        /// <param name="battlesSurvived">이 분대가 살아 돌아온 전투 수입니다.</param>
+        /// <param name="merit">이 분대가 쌓은 공적입니다.</param>
         /// <returns>허용 범위 안의 단련도입니다.</returns>
-        public int ResolveRank(int battlesSurvived)
+        public int ResolveRank(float merit)
         {
-            int steps = battlesSurvived / Mathf.Max(1, BattlesPerRank);
+            int steps = Mathf.FloorToInt(Mathf.Max(0f, merit) / Mathf.Max(0.01f, MeritPerRank));
 
             return Mathf.Clamp(
                 CombatConstants.MinRank + steps,

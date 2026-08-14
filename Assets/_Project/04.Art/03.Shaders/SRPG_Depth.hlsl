@@ -1,4 +1,4 @@
-#ifndef SRPG_DEPTH_INCLUDED
+﻿#ifndef SRPG_DEPTH_INCLUDED
 #define SRPG_DEPTH_INCLUDED
 
 // ====================================================================================================

@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using SRPG.Common;
 using SRPG.Systems.Grid;
 using SRPG.Systems.Pathfinding;
@@ -484,6 +484,110 @@ namespace SRPG.Tests
             Assert.IsFalse(
                 GroundMotion.TryStand(grid, Center(grid, 3, 3), out _),
                 "지형 높이가 있다고 해서 절벽에 설 수는 없습니다.");
+        }
+
+        // ====================================================================================================
+        // 6. 갇힌 병사가 빠져나온다
+        //
+        // 물 위에 서 있으면 X도 Z도 물이라 두 축이 모두 막힙니다. 미끄러짐은 딛고 선 자리가
+        // 온전하다는 전제 위에 있어서, 그대로 두면 제자리가 답으로 나오고 <b>영영 굳습니다.</b>
+        // 증상은 오류가 아니라 "저 병사만 안 따라온다"로만 보입니다.
+        // ====================================================================================================
+
+        /// <summary>
+        /// 물 위에 갇힌 병사가 뭍으로 나옵니다.
+        ///
+        /// 좁은 여울을 건너다 흐트러진 병사와, 물가에 선 분대의 진형 슬롯이 이 경로로 옵니다.
+        ///
+        /// <b>한 걸음에 나오지 않습니다.</b>
+        /// 걸음의 크기는 원래 가려던 만큼이고, 물 타일은 그보다 넓습니다.
+        /// 한 번에 빼내면 이 경로에서만 이동 속도가 달라져 병사가 순간이동하는 것처럼 보입니다.
+        /// 그래서 여러 걸음에 걸쳐 <b>실제로 나오는지</b>를 봅니다 — 제자리에서 떠는 것도 여기서 걸립니다.
+        /// </summary>
+        [Test]
+        public void 물_위에_갇히면_뭍으로_빠져나온다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            // 한가운데 웅덩이. 4,4 에 갇힌 상태를 만듭니다.
+            MakeWater(grid, 4, 4);
+
+            Vector3 position = Center(grid, 4, 4);
+
+            const float StepLength = 0.5f;
+            const int MaxSteps = 40;
+
+            int steps = 0;
+
+            while (steps < MaxSteps && !GroundMotion.TryStand(grid, position, out _))
+            {
+                // 가려던 곳도 물입니다 — 강 건너를 향하는 상황입니다.
+                Vector3 desired = position + new Vector3(StepLength, 0f, 0f);
+
+                Vector3 next = GroundMotion.Resolve(grid, position, desired);
+
+                Assert.AreNotEqual(
+                    new Vector2(position.x, position.z),
+                    new Vector2(next.x, next.z),
+                    $"{steps}번째 걸음에서 제자리에 굳었습니다.");
+
+                position = next;
+                steps++;
+            }
+
+            Assert.IsTrue(
+                GroundMotion.TryStand(grid, position, out _),
+                $"{MaxSteps}걸음을 걷고도 물에서 나오지 못했습니다. ({position})");
+        }
+
+        /// <summary>
+        /// 빠져나오는 걸음이 원래 걸음보다 커지지 않습니다.
+        ///
+        /// 여기서 걸음 크기를 따로 정하면 이 경로에서만 이동 속도가 달라집니다 —
+        /// 물에 빠진 병사가 갑자기 순간이동하는 것처럼 보입니다.
+        /// </summary>
+        [Test]
+        public void 빠져나오는_걸음이_원래_걸음을_넘지_않는다()
+        {
+            var grid = BuildOpenField(9, 9);
+
+            MakeWater(grid, 4, 4);
+
+            Vector3 stuck = Center(grid, 4, 4);
+
+            const float StepLength = 0.3f;
+            Vector3 desired = stuck + new Vector3(StepLength, 0f, 0f);
+
+            Vector3 next = GroundMotion.Resolve(grid, stuck, desired);
+
+            float moved = Vector2.Distance(
+                new Vector2(stuck.x, stuck.z),
+                new Vector2(next.x, next.z));
+
+            Assert.LessOrEqual(
+                moved,
+                StepLength + 1e-3f,
+                $"한 걸음에 {moved:F2} 를 갔습니다. 원래 걸음은 {StepLength} 입니다.");
+        }
+
+        /// <summary>
+        /// 나갈 뭍이 아예 없으면 제자리에 둡니다. 여기서 터지면 안 됩니다.
+        /// </summary>
+        [Test]
+        public void 나갈_뭍이_없으면_제자리에_둔다()
+        {
+            var grid = new IslandGrid(5, 5, Cell, 0.9f);
+
+            // 통행 가능한 타일을 하나도 만들지 않습니다. 전부 물인 격자입니다.
+            Vector3 stuck = Center(grid, 2, 2);
+
+            Assert.DoesNotThrow(() =>
+            {
+                Vector3 next = GroundMotion.Resolve(grid, stuck, stuck + new Vector3(0.5f, 0f, 0f));
+
+                Assert.AreEqual(stuck.x, next.x, 1e-3f);
+                Assert.AreEqual(stuck.z, next.z, 1e-3f);
+            });
         }
     }
 }

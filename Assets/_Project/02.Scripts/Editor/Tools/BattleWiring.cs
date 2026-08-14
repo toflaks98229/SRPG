@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using SRPG.Data;
 using SRPG.Gameplay.CameraControl;
@@ -54,6 +54,42 @@ namespace SRPG.Editor.Tools
 
         /// <summary>하늘 프로필 에셋의 경로입니다. 구름 그늘이 여기서 옵니다.</summary>
         private const string SkyProfilePath = ConfigDirectory + "/SkyProfile_Default.asset";
+
+        /// <summary>소리 파일을 찾는 폴더입니다. 프로젝트 밖과 패키지는 보지 않습니다.</summary>
+        private static readonly string[] SoundSearchFolders = { "Assets/_Project/06.Sound" };
+
+        /// <summary>뱅크의 칸 하나와, 그 칸에 들어갈 파일 이름입니다.</summary>
+        private readonly struct AudioSlot
+        {
+            /// <summary>뱅크의 필드 이름입니다.</summary>
+            public readonly string Field;
+
+            /// <summary>그 칸에 들어갈 소리의 파일 이름입니다. 확장자는 뺍니다.</summary>
+            public readonly string FileName;
+
+            /// <param name="field">뱅크의 필드 이름입니다.</param>
+            /// <param name="fileName">그 칸에 들어갈 파일 이름입니다.</param>
+            public AudioSlot(string field, string fileName)
+            {
+                Field = field;
+                FileName = fileName;
+            }
+        }
+
+        /// <summary>
+        /// 뱅크의 칸과 파일 이름의 짝입니다.
+        ///
+        /// <b>이 표가 배선 규약입니다.</b> 소리를 넣으려면 여기 적힌 이름으로 파일을 놓고 ⑪을 돌립니다.
+        /// 뱅크에 칸을 늘리면 이 표에도 한 줄을 더해야 합니다 — 빠뜨리면 그 칸은 영영 합성음입니다.
+        /// </summary>
+        private static readonly AudioSlot[] AudioSlots =
+        {
+            new AudioSlot("Slash", "SFX_Slash"),
+            new AudioSlot("Pierce", "SFX_Pierce"),
+            new AudioSlot("Blunt", "SFX_Blunt"),
+            new AudioSlot("BowRelease", "SFX_Bow"),
+            new AudioSlot("Death", "SFX_Death"),
+        };
 
         /// <summary>빌드에 반드시 들어가야 하는 셰이더입니다.</summary>
         private static readonly string[] RequiredShaders =
@@ -728,6 +764,8 @@ namespace SRPG.Editor.Tools
                 }
             }
 
+            int clips = WireAudioClips(bank);
+
             var setup = AssetDatabase.LoadAssetAtPath<BattleSetup>(PrototypeAssetBuilder.BattleSetupPath);
             bool wiredBank = false;
 
@@ -748,7 +786,130 @@ namespace SRPG.Editor.Tools
 
             Debug.Log(
                 $"[BattleWiring] ⑪ 격자를 피처 {features}개와 열린 씬의 카메라 {cameras}개에 꽂았습니다. " +
-                (wiredBank ? "사운드 뱅크도 연결했습니다." : "사운드 뱅크는 이미 연결되어 있거나 구성 에셋이 없습니다."));
+                (wiredBank ? "사운드 뱅크도 연결했습니다. " : "사운드 뱅크는 이미 연결되어 있거나 구성 에셋이 없습니다. ") +
+                $"소리 파일 {clips}개를 뱅크에 꽂았습니다.");
+
+            ReportAudioBank(bank);
+        }
+
+        /// <summary>
+        /// <c>06.Sound/SFX</c> 의 소리 파일을 뱅크의 <b>같은 이름 칸</b>에 꽂습니다.
+        ///
+        /// <b>왜 도구가 해야 하는가</b>
+        ///
+        /// 뱅크는 <see cref="PrototypeAssetBuilder"/> 가 굽는 에셋입니다. 손으로 클립을 꽂아 두면
+        /// 다음에 에셋을 다시 구울 때 <b>조용히 사라집니다</b> — 그리고 그 증상은
+        /// "어느 날부터 소리가 안 난다"로만 나타납니다. 이 프로젝트가 §7.1에서 겪은,
+        /// 참조가 끊겨도 폴백이 있어 성공과 실패가 구분되지 않는 그 종류입니다.
+        ///
+        /// 배선이 도구에 있으면 다시 구운 뒤 ⑪을 한 번 돌리는 것으로 복구됩니다.
+        ///
+        /// <b>파일 이름이 곧 배선입니다</b>
+        ///
+        /// <c>SFX_Slash</c> · <c>SFX_Pierce</c> · <c>SFX_Blunt</c> · <c>SFX_Bow</c> · <c>SFX_Death</c>.
+        /// 이름표를 따로 두는 대신 파일 이름을 규약으로 삼으면, 소리를 넣는 일이
+        /// <b>파일을 떨어뜨리고 ⑪을 돌리는 것</b>이 됩니다. 어느 칸에 들어갈지는 이름이 말합니다.
+        ///
+        /// <b>이미 꽂힌 칸은 건드리지 않습니다.</b> 사람이 인스펙터에서 골라 넣은 것을
+        /// 도구가 덮으면, 도구를 돌릴 때마다 그 선택이 사라집니다.
+        /// </summary>
+        /// <param name="bank">클립을 꽂을 뱅크입니다.</param>
+        /// <returns>이번에 꽂은 클립 수입니다.</returns>
+        private static int WireAudioClips(BattleAudioBank bank)
+        {
+            if (bank == null)
+            {
+                return 0;
+            }
+
+            var serialized = new SerializedObject(bank);
+
+            int wired = 0;
+
+            foreach (var slot in AudioSlots)
+            {
+                var property = serialized.FindProperty(slot.Field);
+
+                // 이미 꽂혀 있으면 그대로 둡니다.
+                if (property == null || property.objectReferenceValue != null)
+                {
+                    continue;
+                }
+
+                var clip = FindAudioClip(slot.FileName);
+
+                if (clip == null)
+                {
+                    continue;
+                }
+
+                property.objectReferenceValue = clip;
+                wired++;
+            }
+
+            if (wired > 0)
+            {
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(bank);
+            }
+
+            return wired;
+        }
+
+        /// <summary>
+        /// 어느 칸이 실제 소리이고 어느 칸이 합성음인지 콘솔에 적습니다.
+        ///
+        /// <b>이것이 없으면 "왜 소리가 안 바뀌지"에 답할 수 없습니다.</b>
+        /// 빈 칸은 합성음이 메우므로 소리는 <b>납니다</b> — 그래서 배선이 됐는지 안 됐는지가
+        /// 귀로 구분되지 않습니다. 눈으로 볼 수 있어야 합니다.
+        /// </summary>
+        /// <param name="bank">들여다볼 뱅크입니다.</param>
+        private static void ReportAudioBank(BattleAudioBank bank)
+        {
+            if (bank == null)
+            {
+                return;
+            }
+
+            var serialized = new SerializedObject(bank);
+            var report = new System.Text.StringBuilder(256);
+
+            report.Append("[BattleWiring] 사운드 뱅크 상태 — ");
+
+            foreach (var slot in AudioSlots)
+            {
+                var property = serialized.FindProperty(slot.Field);
+                var clip = property != null ? property.objectReferenceValue as AudioClip : null;
+
+                report.Append(slot.Field).Append(':')
+                      .Append(clip != null ? clip.name : "합성음")
+                      .Append("  ");
+            }
+
+            Debug.Log(report.ToString());
+        }
+
+        /// <summary>
+        /// <c>06.Sound</c> 아래에서 그 이름의 소리를 찾습니다. 확장자는 가리지 않습니다.
+        /// </summary>
+        /// <param name="fileName">확장자를 뺀 파일 이름입니다.</param>
+        /// <returns>찾은 클립입니다. 없으면 null입니다.</returns>
+        private static AudioClip FindAudioClip(string fileName)
+        {
+            foreach (string guid in AssetDatabase.FindAssets($"t:AudioClip {fileName}", SoundSearchFolders))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+
+                // 검색은 부분 일치라 이름이 정확히 같은 것만 받습니다.
+                if (System.IO.Path.GetFileNameWithoutExtension(path) != fileName)
+                {
+                    continue;
+                }
+
+                return AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+            }
+
+            return null;
         }
 
         /// <summary>

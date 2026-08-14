@@ -1,4 +1,4 @@
-using SRPG.Data;
+﻿using SRPG.Data;
 
 namespace SRPG.Systems.Battle
 {
